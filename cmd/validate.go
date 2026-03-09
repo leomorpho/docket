@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/leoaudibert/docket/internal/store/local"
 	"github.com/spf13/cobra"
@@ -17,7 +16,7 @@ var validateCmd = &cobra.Command{
 	Use:   "validate [TKT-NNN]",
 	Short: "Validate ticket schema and dependencies",
 	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		s := local.New(repo)
 		ctx := context.Background()
 
@@ -25,14 +24,13 @@ var validateCmd = &cobra.Command{
 			id := args[0]
 			errs, warns, err := s.ValidateFile(id)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
+				return fmt.Errorf("reading ticket: %w", err)
 			}
 
 			if format == "json" {
 				printJSON(cmd, map[string]interface{}{
-					"valid":   len(errs) == 0,
-					"errors":  errs,
+					"valid":    len(errs) == 0,
+					"errors":   errs,
 					"warnings": warns,
 				})
 			} else {
@@ -43,7 +41,7 @@ var validateCmd = &cobra.Command{
 							fmt.Fprintf(cmd.OutOrStdout(), "  ! warning: %s: %s\n", w.Field, w.Message)
 						}
 					}
-					os.Exit(0)
+					return nil
 				} else {
 					fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
 					for _, e := range errs {
@@ -54,14 +52,13 @@ var validateCmd = &cobra.Command{
 							fmt.Fprintf(cmd.OutOrStdout(), "  ! warning: %s: %s\n", w.Field, w.Message)
 						}
 					}
-					os.Exit(1)
+					return fmt.Errorf("validation failed for %s", id)
 				}
 			}
 		} else {
 			allErrs, allWarns, err := s.ValidateAll(ctx)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
+				return fmt.Errorf("validating all tickets: %w", err)
 			}
 
 			if format == "json" {
@@ -77,7 +74,7 @@ var validateCmd = &cobra.Command{
 				// For now, let's just show the errors if any.
 				if invalidCount == 0 {
 					fmt.Fprintln(cmd.OutOrStdout(), "All tickets valid.")
-					os.Exit(0)
+					return nil
 				} else {
 					for id, errs := range allErrs {
 						fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
@@ -86,10 +83,11 @@ var validateCmd = &cobra.Command{
 						}
 					}
 					fmt.Fprintf(cmd.OutOrStdout(), "\nFound %d invalid tickets.\n", invalidCount)
-					os.Exit(1)
+					return fmt.Errorf("validation failed for %d tickets", invalidCount)
 				}
 			}
 		}
+		return nil
 	},
 }
 

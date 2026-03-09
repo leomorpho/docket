@@ -14,7 +14,7 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize docket in a repository",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		cfgPath := ticket.ConfigPath(repo)
 		if _, err := os.Stat(cfgPath); err == nil {
 			if format == "json" {
@@ -22,22 +22,20 @@ var initCmd = &cobra.Command{
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "docket already initialized in %s\n", filepath.Dir(cfgPath))
 			}
-			return
+			return nil
 		}
 
 		// 1. Create directories
 		docketDir := filepath.Dir(cfgPath)
 		ticketsDir := filepath.Join(docketDir, "tickets")
 		if err := os.MkdirAll(ticketsDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating directories: %v\n", err)
-			os.Exit(2)
+			return fmt.Errorf("creating directories: %w", err)
 		}
 
 		// 2. Write config
 		cfg := ticket.DefaultConfig()
 		if err := ticket.SaveConfig(repo, cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
-			os.Exit(2)
+			return fmt.Errorf("saving config: %w", err)
 		}
 
 		// 3. Update gitignore
@@ -46,20 +44,17 @@ var initCmd = &cobra.Command{
 
 		data, err := os.ReadFile(gitignorePath)
 		if err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error reading .gitignore: %v\n", err)
-			os.Exit(2)
+			return fmt.Errorf("reading .gitignore: %w", err)
 		}
 
 		if !strings.Contains(string(data), ".docket/index.db") {
 			f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error opening .gitignore: %v\n", err)
-				os.Exit(2)
+				return fmt.Errorf("opening .gitignore: %w", err)
 			}
 			if _, err := f.WriteString(ignoreContent); err != nil {
 				f.Close()
-				fmt.Fprintf(os.Stderr, "Error writing to .gitignore: %v\n", err)
-				os.Exit(2)
+				return fmt.Errorf("writing to .gitignore: %w", err)
 			}
 			f.Close()
 		}
@@ -73,6 +68,7 @@ var initCmd = &cobra.Command{
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket create --title \"My first ticket\"")
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket board")
 		}
+		return nil
 	},
 }
 

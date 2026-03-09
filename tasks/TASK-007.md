@@ -1,7 +1,7 @@
 # TASK-007: `docket create` command
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-006
@@ -41,11 +41,11 @@ Created TKT-001: Add auth middleware
 `cmd/create.go`
 
 ## Acceptance criteria
-- [ ] Creates `.docket/tickets/TKT-001.md` with valid markdown + frontmatter
-- [ ] Running again creates `TKT-002`
-- [ ] `--title` missing → prints usage, exits 1
-- [ ] `--state invalid` → prints error, exits 1
-- [ ] `--desc -` reads description from stdin
-- [ ] `DOCKET_ACTOR=agent:claude-sonnet-4-6` sets `created_by` correctly
-- [ ] `--format json` outputs the new ticket as JSON
-- [ ] `go test ./cmd/...` passes
+- [x] Creates `.docket/tickets/TKT-001.md` with valid markdown + frontmatter
+- [x] Running again creates `TKT-002`
+- [x] `--title` missing → prints usage, exits 1
+- [x] `--state invalid` → prints error, exits 1
+- [x] `--desc -` reads description from stdin
+- [x] `DOCKET_ACTOR=agent:claude-sonnet-4-6` sets `created_by` correctly
+- [x] `--format json` outputs the new ticket as JSON
+- [x] `go test ./cmd/...` passes
