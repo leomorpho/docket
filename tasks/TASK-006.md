@@ -1,7 +1,7 @@
 # TASK-006: `docket init` command
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-005
@@ -46,10 +46,10 @@ Next steps:
 `cmd/init.go`
 
 ## Acceptance criteria
-- [ ] Running in empty dir creates `.docket/config.json` with counter=0
-- [ ] Running twice prints "already initialized", exits 0, does not overwrite config
-- [ ] `.gitignore` gets the three docket lines appended
-- [ ] Running twice does not duplicate `.gitignore` lines
-- [ ] Works on a dir with no existing `.gitignore` (creates it)
-- [ ] `--format json` outputs valid JSON
-- [ ] `go test ./cmd/...` passes using `t.TempDir()`
+- [x] Running in empty dir creates `.docket/config.json` with counter=0
+- [x] Running twice prints "already initialized", exits 0, does not overwrite config
+- [x] `.gitignore` gets the three docket lines appended
+- [x] Running twice does not duplicate `.gitignore` lines
+- [x] Works on a dir with no existing `.gitignore` (creates it)
+- [x] `--format json` outputs valid JSON
+- [x] `go test ./cmd/...` passes using `t.TempDir()`

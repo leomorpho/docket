@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -31,28 +30,28 @@ var validateCmd = &cobra.Command{
 			}
 
 			if format == "json" {
-				printJSON(map[string]interface{}{
+				printJSON(cmd, map[string]interface{}{
 					"valid":   len(errs) == 0,
 					"errors":  errs,
 					"warnings": warns,
 				})
 			} else {
 				if len(errs) == 0 {
-					fmt.Printf("✓ %s valid\n", id)
+					fmt.Fprintf(cmd.OutOrStdout(), "✓ %s valid\n", id)
 					if showWarns && len(warns) > 0 {
 						for _, w := range warns {
-							fmt.Printf("  ! warning: %s: %s\n", w.Field, w.Message)
+							fmt.Fprintf(cmd.OutOrStdout(), "  ! warning: %s: %s\n", w.Field, w.Message)
 						}
 					}
 					os.Exit(0)
 				} else {
-					fmt.Printf("✗ %s invalid:\n", id)
+					fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
 					for _, e := range errs {
-						fmt.Printf("  - %s: %s\n", e.Field, e.Message)
+						fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, e.Message)
 					}
 					if showWarns && len(warns) > 0 {
 						for _, w := range warns {
-							fmt.Printf("  ! warning: %s: %s\n", w.Field, w.Message)
+							fmt.Fprintf(cmd.OutOrStdout(), "  ! warning: %s: %s\n", w.Field, w.Message)
 						}
 					}
 					os.Exit(1)
@@ -68,7 +67,7 @@ var validateCmd = &cobra.Command{
 			if format == "json" {
 				// This is a bit complex for JSON because we don't have a list of all IDs easily here
 				// But we can just report what we found
-				printJSON(map[string]interface{}{
+				printJSON(cmd, map[string]interface{}{
 					"errors":   allErrs,
 					"warnings": allWarns,
 				})
@@ -77,26 +76,21 @@ var validateCmd = &cobra.Command{
 				// We'll need a way to list all IDs to show "✓" for valid ones.
 				// For now, let's just show the errors if any.
 				if invalidCount == 0 {
-					fmt.Println("All tickets valid.")
+					fmt.Fprintln(cmd.OutOrStdout(), "All tickets valid.")
 					os.Exit(0)
 				} else {
 					for id, errs := range allErrs {
-						fmt.Printf("✗ %s invalid:\n", id)
+						fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
 						for _, e := range errs {
-							fmt.Printf("  - %s: %s\n", e.Field, e.Message)
+							fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, e.Message)
 						}
 					}
-					fmt.Printf("\nFound %d invalid tickets.\n", invalidCount)
+					fmt.Fprintf(cmd.OutOrStdout(), "\nFound %d invalid tickets.\n", invalidCount)
 					os.Exit(1)
 				}
 			}
 		}
 	},
-}
-
-func printJSON(v interface{}) {
-	data, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Println(string(data))
 }
 
 func init() {
