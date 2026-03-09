@@ -54,7 +54,7 @@ TASK-001 (scaffolding)
 | [TASK-007](./TASK-007.md) | `docket create` command | TASK-006 | [x] |
 | [TASK-008](./TASK-008.md) | `docket list` command | TASK-006 | [x] |
 | [TASK-009](./TASK-009.md) | `docket show` command | TASK-006 | [x] |
-| [TASK-010](./TASK-010.md) | `docket update` command | TASK-006 | [ ] |
+| [TASK-010](./TASK-010.md) | `docket update` command | TASK-006 | [x] |
 | [TASK-011](./TASK-011.md) | `docket comment` command | TASK-006 | [ ] |
 | [TASK-012](./TASK-012.md) | SQLite index cache | TASK-011 | [ ] |
 | [TASK-013](./TASK-013.md) | `docket board` bubbletea TUI | TASK-012 | [ ] |
