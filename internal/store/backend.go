@@ -28,6 +28,9 @@ type Backend interface {
 	// GetTicket returns a single ticket by ID. Returns nil, nil if not found.
 	GetTicket(ctx context.Context, id string) (*ticket.Ticket, error)
 
+	// GetRaw returns the raw content of a ticket by ID. Returns "", nil if not found.
+	GetRaw(ctx context.Context, id string) (string, error)
+
 	// ListTickets returns tickets matching the filter, sorted by priority then created_at.
 	ListTickets(ctx context.Context, f Filter) ([]*ticket.Ticket, error)
 

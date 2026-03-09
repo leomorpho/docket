@@ -68,16 +68,24 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 }
 
 func (s *Store) GetTicket(ctx context.Context, id string) (*ticket.Ticket, error) {
+	data, err := s.GetRaw(ctx, id)
+	if err != nil || data == "" {
+		return nil, err
+	}
+
+	return parse(data)
+}
+
+func (s *Store) GetRaw(ctx context.Context, id string) (string, error) {
 	path := s.ticketPath(id)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return "", nil
 		}
-		return nil, err
+		return "", err
 	}
-
-	return parse(string(data))
+	return string(data), nil
 }
 
 func (s *Store) ListTickets(ctx context.Context, f store.Filter) ([]*ticket.Ticket, error) {
