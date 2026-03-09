@@ -1,0 +1,3 @@
+docket
+.docket/index.db
+.docket/tickets/*/sessions/
