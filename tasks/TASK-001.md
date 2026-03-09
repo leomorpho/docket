@@ -1,7 +1,7 @@
 # TASK-001: Project scaffolding
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## What this is
 Set up the Go project structure for `docket`. Wire the entry point, cobra CLI root, and
@@ -59,11 +59,11 @@ go get github.com/spf13/cobra@latest
 ```
 
 ## Acceptance criteria
-- [ ] `go build .` produces a `docket` binary without errors
-- [ ] `./docket --help` prints usage with the correct binary name and description
-- [ ] `./docket --format json --help` parses the global flag without error
-- [ ] `go test ./...` passes (no tests yet, just must not fail to run)
-- [ ] Directory structure: `main.go`, `cmd/root.go`, `Makefile`
+- [x] `go build .` produces a `docket` binary without errors
+- [x] `./docket --help` prints usage with the correct binary name and description
+- [x] `./docket --format json --help` parses the global flag without error
+- [x] `go test ./...` passes (no tests yet, just must not fail to run)
+- [x] Directory structure: `main.go`, `cmd/root.go`, `Makefile`
 
 ## Notes for LLM
 - Do not add any subcommands yet — those are TASK-007 through TASK-021

@@ -45,7 +45,7 @@ TASK-001 (scaffolding)
 
 | Task | Title | Depends on | Status |
 |------|-------|------------|--------|
-| [TASK-001](./TASK-001.md) | Project scaffolding | — | [ ] |
+| [TASK-001](./TASK-001.md) | Project scaffolding | — | [x] |
 | [TASK-002](./TASK-002.md) | Core data types | TASK-001 | [ ] |
 | [TASK-003](./TASK-003.md) | Sequential ID generation | TASK-002 | [ ] |
 | [TASK-004](./TASK-004.md) | Markdown store (read/write/parse) | TASK-003 | [ ] |
