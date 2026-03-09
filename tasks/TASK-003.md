@@ -1,7 +1,7 @@
 # TASK-003: Sequential ID generation
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-002
@@ -115,13 +115,13 @@ func NextID(repoRoot string) (id string, seq int, err error) {
 ```
 
 ## Acceptance criteria
-- [ ] `FormatID(1)` returns `"TKT-001"`
-- [ ] `FormatID(42)` returns `"TKT-042"`
-- [ ] `FormatID(1000)` returns `"TKT-1000"` (no panic, no truncation)
-- [ ] `NextID` on missing config.json returns a clear "run `docket init`" error
-- [ ] `NextID` called twice increments counter from 1 to 2
-- [ ] `LoadConfig`/`SaveConfig` round-trip preserves all fields including `backends`
-- [ ] `go test ./internal/ticket/...` passes using `t.TempDir()`
+- [x] `FormatID(1)` returns `"TKT-001"`
+- [x] `FormatID(42)` returns `"TKT-042"`
+- [x] `FormatID(1000)` returns `"TKT-1000"` (no panic, no truncation)
+- [x] `NextID` on missing config.json returns a clear "run `docket init`" error
+- [x] `NextID` called twice increments counter from 1 to 2
+- [x] `LoadConfig`/`SaveConfig` round-trip preserves all fields including `backends`
+- [x] `go test ./internal/ticket/...` passes using `t.TempDir()`
 
 ## Notes for LLM
 - Tests must use `t.TempDir()` — never write to the real `.docket/`
