@@ -1,7 +1,7 @@
 # TASK-004: Backend interface + local markdown store
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-003
@@ -176,15 +176,15 @@ go get gopkg.in/yaml.v3
 ```
 
 ## Acceptance criteria
-- [ ] `CreateTicket` writes a valid markdown file at the correct path
-- [ ] `GetTicket` on a missing ID returns `nil, nil`
-- [ ] `GetTicket` after `CreateTicket` returns the same data (round-trip)
-- [ ] `UpdateTicket` preserves existing comments
-- [ ] `AddComment` appends to the `## Comments` section without touching other content
-- [ ] `ListTickets` with `Filter{States: []State{StateInProgress}}` returns only in-progress tickets
-- [ ] `ListTickets` sorts by priority ascending, then created_at ascending
-- [ ] `LinkCommit` adds the SHA to `linked_commits` in frontmatter
-- [ ] `go test ./internal/store/local/...` passes using `t.TempDir()`
+- [x] `CreateTicket` writes a valid markdown file at the correct path
+- [x] `GetTicket` on a missing ID returns `nil, nil`
+- [x] `GetTicket` after `CreateTicket` returns the same data (round-trip)
+- [x] `UpdateTicket` preserves existing comments
+- [x] `AddComment` appends to the `## Comments` section without touching other content
+- [x] `ListTickets` with `Filter{States: []State{StateInProgress}}` returns only in-progress tickets
+- [x] `ListTickets` sorts by priority ascending, then created_at ascending
+- [x] `LinkCommit` adds the SHA to `linked_commits` in frontmatter
+- [x] `go test ./internal/store/local/...` passes using `t.TempDir()`
 
 ## Notes for LLM
 - Do NOT implement validation logic here — that is TASK-005
