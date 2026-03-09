@@ -1,7 +1,7 @@
 # TASK-005: Schema validator (`docket validate`)
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-004
@@ -108,15 +108,15 @@ Exit codes:
 - `2`: internal error (file unreadable, etc.)
 
 ## Acceptance criteria
-- [ ] `docket validate TKT-001` on a valid file exits 0
-- [ ] `docket validate TKT-001` on a file with wrong state exits 1 with clear message
-- [ ] `docket validate TKT-001` where ID in file doesn't match filename exits 1
-- [ ] `docket validate TKT-001` where `blocked_by` references a non-existent ticket exits 1
-- [ ] `docket validate` with no args validates all tickets and reports per-ticket results
-- [ ] Cycle detection: A blocks B blocks A → exits 1 with cycle description
-- [ ] `--format json` outputs the correct JSON structure
-- [ ] `--warn` flag shows warnings in addition to errors
-- [ ] `go test ./internal/store/local/...` and `./cmd/...` pass
+- [x] `docket validate TKT-001` on a valid file exits 0
+- [x] `docket validate TKT-001` on a file with wrong state exits 1 with clear message
+- [x] `docket validate TKT-001` where ID in file doesn't match filename exits 1
+- [x] `docket validate TKT-001` where `blocked_by` references a non-existent ticket exits 1
+- [x] `docket validate` with no args validates all tickets and reports per-ticket results
+- [x] Cycle detection: A blocks B blocks A → exits 1 with cycle description
+- [x] `--format json` outputs the correct JSON structure
+- [x] `--warn` flag shows warnings in addition to errors
+- [x] `go test ./internal/store/local/...` and `./cmd/...` pass
 
 ## Notes for LLM
 - This command is called by the pre-commit hook — it must be fast (no network calls)

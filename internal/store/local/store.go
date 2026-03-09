@@ -199,7 +199,3 @@ func (s *Store) LinkCommit(ctx context.Context, id string, sha string) error {
 func (s *Store) NextID(ctx context.Context) (id string, seq int, err error) {
 	return ticket.NextID(s.RepoRoot)
 }
-
-func (s *Store) Validate(ctx context.Context, id string) ([]store.ValidationError, error) {
-	return nil, nil // Stub for TASK-005
-}

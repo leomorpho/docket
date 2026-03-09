@@ -49,7 +49,7 @@ TASK-001 (scaffolding)
 | [TASK-002](./TASK-002.md) | Core data types | TASK-001 | [x] |
 | [TASK-003](./TASK-003.md) | Sequential ID generation | TASK-002 | [x] |
 | [TASK-004](./TASK-004.md) | Markdown store (read/write/parse) | TASK-003 | [x] |
-| [TASK-005](./TASK-005.md) | Schema validator (`docket validate`) | TASK-004 | [ ] |
+| [TASK-005](./TASK-005.md) | Schema validator (`docket validate`) | TASK-004 | [x] |
 | [TASK-006](./TASK-006.md) | `docket init` command | TASK-005 | [ ] |
 | [TASK-007](./TASK-007.md) | `docket create` command | TASK-006 | [ ] |
 | [TASK-008](./TASK-008.md) | `docket list` command | TASK-006 | [ ] |
