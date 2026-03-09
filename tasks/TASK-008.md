@@ -1,7 +1,7 @@
 # TASK-008: `docket list` command
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-006
@@ -49,10 +49,10 @@ TKT-005   backlog      P2   Auth refactor                  feature
 `cmd/list.go`
 
 ## Acceptance criteria
-- [ ] Default shows only open tickets (not done/archived)
-- [ ] `--state done` shows only done tickets
-- [ ] `--unblocked` excludes tickets with non-empty `blocked_by`
-- [ ] `--format context` outputs one compact line per ticket
-- [ ] `--format json` outputs valid JSON array
-- [ ] Sorted by priority then created_at
-- [ ] `go test ./cmd/...` passes
+- [x] Default shows only open tickets (not done/archived)
+- [x] `--state done` shows only done tickets
+- [x] `--unblocked` excludes tickets with non-empty `blocked_by`
+- [x] `--format context` outputs one compact line per ticket
+- [x] `--format json` outputs valid JSON array
+- [x] Sorted by priority then created_at
+- [x] `go test ./cmd/...` passes

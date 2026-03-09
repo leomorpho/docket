@@ -41,25 +41,25 @@ type AcceptanceCriterion struct {
 
 type Ticket struct {
 	// Frontmatter fields
-	ID            string    `yaml:"id"`
-	Seq           int       `yaml:"seq"`
-	State         State     `yaml:"state"`
-	Priority      int       `yaml:"priority"`
-	Labels        []string  `yaml:"labels,omitempty"`
-	BlockedBy     []string  `yaml:"blocked_by,omitempty"`
-	Blocks        []string  `yaml:"blocks,omitempty"`
-	LinkedCommits []string  `yaml:"linked_commits,omitempty"`
-	CreatedAt     time.Time `yaml:"created_at"`
-	UpdatedAt     time.Time `yaml:"updated_at"`
-	CreatedBy     string    `yaml:"created_by"`
+	ID            string    `yaml:"id" json:"id"`
+	Seq           int       `yaml:"seq" json:"seq"`
+	State         State     `yaml:"state" json:"state"`
+	Priority      int       `yaml:"priority" json:"priority"`
+	Labels        []string  `yaml:"labels,omitempty" json:"labels,omitempty"`
+	BlockedBy     []string  `yaml:"blocked_by,omitempty" json:"blocked_by,omitempty"`
+	Blocks        []string  `yaml:"blocks,omitempty" json:"blocks,omitempty"`
+	LinkedCommits []string  `yaml:"linked_commits,omitempty" json:"linked_commits,omitempty"`
+	CreatedAt     time.Time `yaml:"created_at" json:"created_at"`
+	UpdatedAt     time.Time `yaml:"updated_at" json:"updated_at"`
+	CreatedBy     string    `yaml:"created_by" json:"created_by"`
 
 	// Parsed from markdown body
-	Title       string
-	Description string
-	Plan        []PlanStep
-	AC          []AcceptanceCriterion
-	Comments    []Comment
-	Handoff     string
+	Title       string                `json:"title"`
+	Description string                `json:"description,omitempty"`
+	Plan        []PlanStep            `json:"plan,omitempty"`
+	AC          []AcceptanceCriterion `json:"ac,omitempty"`
+	Comments    []Comment             `json:"comments,omitempty"`
+	Handoff     string                `json:"handoff,omitempty"`
 }
 
 type Comment struct {
