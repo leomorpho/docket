@@ -1,7 +1,7 @@
 # TASK-002: Core data types
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-001
@@ -142,15 +142,15 @@ func ValidateTransition(from, to State) error {
 ```
 
 ## Acceptance criteria
-- [ ] All structs compile with no errors
-- [ ] `IsBlocked()` returns true only when `BlockedBy` is non-empty
-- [ ] `ACComplete()` returns false when any AC has `Done: false`
-- [ ] `ACComplete()` returns true when slice is empty
-- [ ] `ValidateTransition(StateBacklog, StateTodo)` returns nil
-- [ ] `ValidateTransition(StateBacklog, StateDone)` returns error
-- [ ] `IsValidState("in-progress")` returns true
-- [ ] `IsValidState("blocked")` returns false — blocked is computed, not a state
-- [ ] `go test ./internal/ticket/...` passes
+- [x] All structs compile with no errors
+- [x] `IsBlocked()` returns true only when `BlockedBy` is non-empty
+- [x] `ACComplete()` returns false when any AC has `Done: false`
+- [x] `ACComplete()` returns true when slice is empty
+- [x] `ValidateTransition(StateBacklog, StateTodo)` returns nil
+- [x] `ValidateTransition(StateBacklog, StateDone)` returns error
+- [x] `IsValidState("in-progress")` returns true
+- [x] `IsValidState("blocked")` returns false — blocked is computed, not a state
+- [x] `go test ./internal/ticket/...` passes
 
 ## Notes for LLM
 - Do not add persistence here — that is TASK-004
