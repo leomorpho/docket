@@ -1,7 +1,7 @@
 # TASK-019: `docket check` — staleness and consistency
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-018
@@ -71,13 +71,13 @@ All other findings require human or LLM review.
 - `internal/check/checker.go` — runs all rules, collects findings
 
 ## Acceptance criteria
-- [ ] R001: ticket in-progress with `updated_at` > 7 days ago triggers warn
-- [ ] R006: `blocked_by` containing a done ticket triggers error
-- [ ] `--fix` on R006 removes the done blocker from `blocked_by` and exits 0
-- [ ] `--format json` outputs the JSON structure with all findings
-- [ ] Single ticket: `docket check TKT-001` runs all rules on just that ticket
-- [ ] All-clean output: "All X tickets look healthy." when no findings
-- [ ] `go test ./internal/check/...` passes with table-driven rule tests
+- [x] R001: ticket in-progress with `updated_at` > 7 days ago triggers warn
+- [x] R006: `blocked_by` containing a done ticket triggers error
+- [x] `--fix` on R006 removes the done blocker from `blocked_by` and exits 0
+- [x] `--format json` outputs the JSON structure with all findings
+- [x] Single ticket: `docket check TKT-001` runs all rules on just that ticket
+- [x] All-clean output: "All X tickets look healthy." when no findings
+- [x] `go test ./internal/check/...` passes with table-driven rule tests
 
 ## Notes for LLM
 - Rules should be functions in a slice so adding new rules is one line

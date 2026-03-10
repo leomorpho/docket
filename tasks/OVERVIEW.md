@@ -63,7 +63,7 @@ TASK-001 (scaffolding)
 | [TASK-016](./TASK-016.md) | `docket context` command | TASK-012, TASK-015 | [x] |
 | [TASK-017](./TASK-017.md) | Session management | TASK-011 | [x] |
 | [TASK-018](./TASK-018.md) | Acceptance criteria | TASK-017 | [x] |
-| [TASK-019](./TASK-019.md) | `docket check` staleness | TASK-018 | [ ] |
+| [TASK-019](./TASK-019.md) | `docket check` staleness | TASK-018 | [x] |
 | [TASK-020](./TASK-020.md) | `docket help-json` manifest | TASK-019 | [ ] |
 | [TASK-021](./TASK-021.md) | MCP server | TASK-020 | [ ] |
 | [TASK-022](./TASK-022.md) | lefthook + CLAUDE.md template | TASK-021 | [ ] |
