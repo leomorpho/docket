@@ -1,7 +1,7 @@
 # TASK-015: Inline annotation scan + refs
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-014
@@ -95,13 +95,13 @@ Calls `git.ScanAnnotations`, stores results in SQLite via `store.UpsertAnnotatio
 Queries SQLite for annotations matching a ticket ID.
 
 ## Acceptance criteria
-- [ ] `docket scan` finds `// [TKT-001]` in a Go file and stores it
-- [ ] `docket scan` ignores `.docket/`, `.git/`, `vendor/`, `node_modules/`
-- [ ] `docket refs TKT-001` shows all file:line locations
-- [ ] `docket refs TKT-999` on unknown ticket prints "No annotations found" (not an error)
-- [ ] Running `docket scan` twice doesn't duplicate entries (upsert, not insert)
-- [ ] Annotations in Python (`# [TKT-001]`), JS (`// [TKT-001]`), shell (`# [TKT-001]`) all found
-- [ ] `go test ./internal/git/...` passes
+- [x] `docket scan` finds `// [TKT-001]` in a Go file and stores it
+- [x] `docket scan` ignores `.docket/`, `.git/`, `vendor/`, `node_modules/`
+- [x] `docket refs TKT-001` shows all file:line locations
+- [x] `docket refs TKT-999` on unknown ticket prints "No annotations found" (not an error)
+- [x] Running `docket scan` twice doesn't duplicate entries (upsert, not insert)
+- [x] Annotations in Python (`# [TKT-001]`), JS (`// [TKT-001]`), shell (`# [TKT-001]`) all found
+- [x] `go test ./internal/git/...` passes
 
 ## Notes for LLM
 - Use `filepath.WalkDir` to traverse files; skip binary files (check for null bytes in first 512 bytes)

@@ -64,6 +64,7 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 		DROP TABLE IF EXISTS labels;
 		DROP TABLE IF EXISTS blocked_by;
 		DROP TABLE IF EXISTS linked_commits;
+		DROP TABLE IF EXISTS annotations;
 		DROP TABLE IF EXISTS tickets;
 
 		CREATE TABLE tickets (
@@ -95,9 +96,18 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 			sha        TEXT NOT NULL
 		);
 
+		CREATE TABLE annotations (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			ticket_id  TEXT NOT NULL,
+			file_path  TEXT NOT NULL,
+			line_num   INTEGER NOT NULL,
+			context    TEXT NOT NULL
+		);
+
 		CREATE INDEX idx_tickets_state ON tickets(state);
 		CREATE INDEX idx_tickets_priority ON tickets(priority);
 		CREATE INDEX idx_labels_ticket ON labels(ticket_id);
+		CREATE INDEX idx_annotations_ticket ON annotations(ticket_id);
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
