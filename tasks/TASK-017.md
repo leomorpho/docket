@@ -1,7 +1,7 @@
 # TASK-017: Session management
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-011 (comment command — same append pattern)
@@ -72,14 +72,14 @@ The `## Handoff` section must contain these subsections (validated by `docket va
 - `internal/store/local/sessions.go` (file copy, list, compress logic)
 
 ## Acceptance criteria
-- [ ] `docket session attach TKT-001 --file /tmp/log.jsonl` copies file to sessions dir
-- [ ] `docket session list TKT-001` lists session files with sizes
-- [ ] `docket session compress TKT-001 --summary-file /tmp/summary.md` writes to `## Handoff`
-- [ ] `docket session compress` without `--summary-file` outputs the prompt to stdout
-- [ ] Compress without `--keep` renames session to `.compressed`
-- [ ] A comment is appended to the ticket on both attach and compress
-- [ ] Sessions dir is gitignored (from TASK-006 init)
-- [ ] `go test ./cmd/...` and `./internal/store/local/...` pass
+- [x] `docket session attach TKT-001 --file /tmp/log.jsonl` copies file to sessions dir
+- [x] `docket session list TKT-001` lists session files with sizes
+- [x] `docket session compress TKT-001 --summary-file /tmp/summary.md` writes to `## Handoff`
+- [x] `docket session compress` without `--summary-file` outputs the prompt to stdout
+- [x] Compress without `--keep` renames session to `.compressed`
+- [x] A comment is appended to the ticket on both attach and compress
+- [x] Sessions dir is gitignored (from TASK-006 init)
+- [x] `go test ./cmd/...` and `./internal/store/local/...` pass
 
 ## Notes for LLM
 - Do NOT add any HTTP client or LLM API calls to this binary — stay dependency-free
