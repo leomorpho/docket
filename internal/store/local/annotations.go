@@ -57,6 +57,9 @@ func (s *Store) UpsertAnnotations(ctx context.Context, annotations []Annotation)
 }
 
 func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]Annotation, error) {
+	if err := os.MkdirAll(filepath.Dir(s.IndexPath()), 0755); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite", s.IndexPath())
 	if err != nil {
 		return nil, err
@@ -85,6 +88,9 @@ func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]
 }
 
 func (s *Store) GetAnnotationsByFile(ctx context.Context, filePath string) ([]Annotation, error) {
+	if err := os.MkdirAll(filepath.Dir(s.IndexPath()), 0755); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite", s.IndexPath())
 	if err != nil {
 		return nil, err

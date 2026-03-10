@@ -1,7 +1,7 @@
 # TASK-016: `docket context` command
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-012 (SQLite index), TASK-015 (annotation index)
@@ -81,13 +81,13 @@ ANNOTATIONS:
 `cmd/context.go`
 
 ## Acceptance criteria
-- [ ] `docket context main.go` returns ticket context from git history
-- [ ] `docket context main.go` includes inline annotations from scan index
-- [ ] Files with no ticket history print "No tickets linked to this file's history"
-- [ ] `--lines 40-50` limits blame to that line range
-- [ ] `--format context` outputs LLM-optimized compact format
-- [ ] `--format json` outputs valid JSON
-- [ ] `go test ./cmd/...` passes
+- [x] `docket context main.go` returns ticket context from git history
+- [x] `docket context main.go` includes inline annotations from scan index
+- [x] Files with no ticket history print "No tickets linked to this file's history"
+- [x] `--lines 40-50` limits blame to that line range
+- [x] `--format context` outputs LLM-optimized compact format
+- [x] `--format json` outputs valid JSON
+- [x] `go test ./cmd/...` passes
 
 ## Notes for LLM
 - This is one of the highest-value commands for LLMs — optimize the context format for token efficiency

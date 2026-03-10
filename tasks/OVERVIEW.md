@@ -60,7 +60,7 @@ TASK-001 (scaffolding)
 | [TASK-013](./TASK-013.md) | `docket board` bubbletea TUI | TASK-012 | [x] |
 | [TASK-014](./TASK-014.md) | Git blame integration | TASK-005 | [x] |
 | [TASK-015](./TASK-015.md) | Inline annotation scan + refs | TASK-014 | [x] |
-| [TASK-016](./TASK-016.md) | `docket context` command | TASK-012, TASK-015 | [ ] |
+| [TASK-016](./TASK-016.md) | `docket context` command | TASK-012, TASK-015 | [x] |
 | [TASK-017](./TASK-017.md) | Session management | TASK-011 | [ ] |
 | [TASK-018](./TASK-018.md) | Acceptance criteria | TASK-017 | [ ] |
 | [TASK-019](./TASK-019.md) | `docket check` staleness | TASK-018 | [ ] |
