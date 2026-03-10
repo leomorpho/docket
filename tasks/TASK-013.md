@@ -1,7 +1,7 @@
 # TASK-013: `docket board` — bubbletea TUI kanban
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-012 (SQLite index for fast column queries)
@@ -66,15 +66,15 @@ go get github.com/charmbracelet/lipgloss@latest
 ```
 
 ## Acceptance criteria
-- [ ] `docket board` renders columns with tickets sorted by priority
-- [ ] `→` on TKT-001 in `backlog` moves it to `todo` and updates the markdown file
-- [ ] `→` on a ticket in `done` shows error "cannot transition from done to archived via board" (or similar)
-- [ ] `↑`/`↓` reorders priority within a column and persists the change
-- [ ] `enter` opens detail view, `esc` returns to board
-- [ ] `n` prompts for title, creates ticket, adds to BACKLOG column
-- [ ] `r` refreshes ticket data from disk
-- [ ] `q` exits cleanly with no terminal state corruption
-- [ ] BLOCKED column shows tickets with non-empty `blocked_by` regardless of manual state
+- [x] `docket board` renders columns with tickets sorted by priority
+- [x] `→` on TKT-001 in `backlog` moves it to `todo` and updates the markdown file
+- [x] `→` on a ticket in `done` shows error "cannot transition from done to archived via board" (or similar)
+- [x] `↑`/`↓` reorders priority within a column and persists the change
+- [x] `enter` opens detail view, `esc` returns to board
+- [x] `n` prompts for title, creates ticket, adds to BACKLOG column
+- [x] `r` refreshes ticket data from disk
+- [x] `q` exits cleanly with no terminal state corruption
+- [x] BLOCKED column shows tickets with non-empty `blocked_by` regardless of manual state
 
 ## Notes for LLM
 - Use lipgloss for column borders, colors, and the focused ticket highlight
