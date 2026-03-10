@@ -7,7 +7,7 @@ that lives in your repo and works as a first-class tool for AI agents.
 
 ## What it does
 
-- Tracks tickets as append-only JSONL event logs inside `.docket/tickets/TKT-XXX/`
+- Tracks tickets as markdown files with YAML frontmatter at `.docket/tickets/TKT-XXX.md`
 - Gives LLMs **forward context**: ticket descriptions, acceptance criteria, handoff summaries, plans
 - Gives LLMs **backward context**: `docket blame file:line` → commit → ticket chain
 - Interactive kanban board (`docket board`) with bubbletea TUI
@@ -18,16 +18,14 @@ that lives in your repo and works as a first-class tool for AI agents.
 
 ```
 .docket/
-├── config.json          # sequential counter, workflow config — committed
+├── config.json               # sequential counter, workflow config — committed
 ├── tickets/
-│   ├── TKT-001/
-│   │   ├── events.jsonl # append-only event log — committed
-│   │   ├── handoff.md   # LLM-written handoff summary — committed
-│   │   └── sessions/    # conversation transcripts — gitignored by default
-└── index.db             # SQLite query cache — always gitignored, rebuilt on demand
+│   ├── TKT-001.md            # ticket markdown source of truth — committed
+│   └── TKT-001/sessions/     # conversation transcripts — gitignored by default
+└── index.db                  # SQLite query cache — always gitignored, rebuilt on demand
 ```
 
-State is derived by replaying events. SQLite is a cache only — never committed.
+Markdown ticket files are the source of truth. SQLite is a cache only and is never committed.
 
 ## Ticket states
 

@@ -19,18 +19,18 @@ func TestValidateFile(t *testing.T) {
 	// 1. Valid ticket
 	now := time.Now().UTC().Truncate(time.Second)
 	t1 := &ticket.Ticket{
-		ID:        "TKT-001",
-		Seq:       1,
-		Title:     "Valid Ticket",
-		State:     ticket.StateTodo,
-		Priority:  1,
-		Labels:    []string{"bug"},
-		CreatedAt: now,
-		UpdatedAt: now,
-		CreatedBy: "human:tester",
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Valid Ticket",
+		State:       ticket.StateTodo,
+		Priority:    1,
+		Labels:      []string{"bug"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:tester",
 		Description: "Has description",
-		AC: []ticket.AcceptanceCriterion{{Description: "Has AC", Done: false}},
-		Handoff: "Has handoff",
+		AC:          []ticket.AcceptanceCriterion{{Description: "Has AC", Done: false}},
+		Handoff:     "Has handoff",
 	}
 	s.CreateTicket(ctx, t1)
 
@@ -98,5 +98,49 @@ func TestDetectCycles(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cycle detected") {
 		t.Errorf("expected cycle detected message, got: %v", err)
+	}
+}
+
+func TestValidateFile_RequiresStructuredHandoffForReviewAndDone(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	t1 := &ticket.Ticket{
+		ID:          "TKT-010",
+		Seq:         10,
+		Title:       "Needs handoff",
+		State:       ticket.StateInReview,
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:tester",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		Handoff:     "partial handoff",
+	}
+	if err := s.CreateTicket(ctx, t1); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	errs, _, err := s.ValidateFile("TKT-010")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	if len(errs) == 0 {
+		t.Fatal("expected handoff structure validation errors")
+	}
+
+	t1.Handoff = "*Last updated: 2026-03-09T15:00:00Z by agent:test*\n\n**Current state:** done.\n\n**Decisions made:** decision.\n\n**Files touched:** file.\n\n**Remaining work:** none.\n\n**AC status:** complete."
+	if err := s.UpdateTicket(ctx, t1); err != nil {
+		t.Fatalf("UpdateTicket failed: %v", err)
+	}
+	errs, _, err = s.ValidateFile("TKT-010")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	if len(errs) > 0 {
+		t.Fatalf("expected no handoff structure errors, got %v", errs)
 	}
 }

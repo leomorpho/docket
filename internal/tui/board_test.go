@@ -312,3 +312,33 @@ func TestHelpers(t *testing.T) {
 		t.Fatalf("dropLastRune = %q, want %q", got, "a")
 	}
 }
+
+func TestViewVariants(t *testing.T) {
+	now := time.Now().UTC()
+	b := newFakeBackend(
+		&ticket.Ticket{ID: "TKT-001", State: ticket.StateTodo, Priority: 1, Title: "One", CreatedAt: now, UpdatedAt: now, CreatedBy: "human"},
+	)
+
+	m := NewBoardModel("/tmp", b, "human:test")
+	m.allTickets = []*ticket.Ticket{{ID: "TKT-001", State: ticket.StateTodo, Priority: 1, Title: "One", CreatedAt: now}}
+	m.rebuildColumns("")
+	m.width = 120
+
+	board := m.View()
+	if !strings.Contains(board, "TODO") {
+		t.Fatalf("board view missing TODO column:\n%s", board)
+	}
+
+	m.detailOpen = true
+	m.detailText = "detail body"
+	detail := m.View()
+	if !strings.Contains(detail, "detail body") {
+		t.Fatalf("detail view missing body:\n%s", detail)
+	}
+
+	m.detailText = ""
+	emptyDetail := m.viewDetail()
+	if !strings.Contains(emptyDetail, "No detail available") {
+		t.Fatalf("expected fallback detail text, got:\n%s", emptyDetail)
+	}
+}

@@ -17,9 +17,10 @@ var checkFix bool
 var errCheckFindings = errors.New("check findings present")
 
 var checkCmd = &cobra.Command{
-	Use:   "check [TKT-NNN]",
-	Short: "Run staleness and consistency checks",
-	Args:  cobra.MaximumNArgs(1),
+	Use:          "check [TKT-NNN]",
+	Short:        "Run staleness and consistency checks",
+	Args:         cobra.MaximumNArgs(1),
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s := local.New(repo)
 		ctx := context.Background()
@@ -83,7 +84,7 @@ func loadTicketsForCheck(ctx context.Context, s *local.Store, args []string) ([]
 		}
 		return []*ticket.Ticket{t}, nil
 	}
-	return s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.StateBacklog, ticket.StateTodo, ticket.StateInProgress, ticket.StateInReview, ticket.StateDone}})
+	return s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.StateBacklog, ticket.StateTodo, ticket.StateInProgress, ticket.StateInReview}})
 }
 
 func init() {

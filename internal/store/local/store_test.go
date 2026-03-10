@@ -16,14 +16,14 @@ func TestStoreRoundTrip(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	t1 := &ticket.Ticket{
-		ID:        "TKT-001",
-		Seq:       1,
-		Title:     "Test Ticket",
-		State:     ticket.StateTodo,
-		Priority:  1,
-		CreatedAt: now,
-		UpdatedAt: now,
-		CreatedBy: "human:tester",
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Test Ticket",
+		State:       ticket.StateTodo,
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:tester",
 		Description: "This is a test description.\nIt has multiple lines.",
 		AC: []ticket.AcceptanceCriterion{
 			{Description: "AC 1", Done: true, Evidence: "it works"},
@@ -142,5 +142,52 @@ func TestStoreFilter(t *testing.T) {
 	list, _ = s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.StateTodo}})
 	if len(list) != 1 || list[0].ID != "TKT-001" {
 		t.Errorf("State filter failed: %v", list)
+	}
+}
+
+func TestActivityBumpsUpdatedAt(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	t1 := &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Activity test",
+		State:       ticket.StateTodo,
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:tester",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}
+	if err := s.CreateTicket(ctx, t1); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	if err := s.AddComment(ctx, "TKT-001", ticket.Comment{At: time.Now().UTC(), Author: "human", Body: "note"}); err != nil {
+		t.Fatalf("AddComment failed: %v", err)
+	}
+	afterComment, err := s.GetTicket(ctx, "TKT-001")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if !afterComment.UpdatedAt.After(now) {
+		t.Fatalf("expected updated_at bump after comment: %s <= %s", afterComment.UpdatedAt, now)
+	}
+
+	beforeCommit := afterComment.UpdatedAt
+	time.Sleep(1100 * time.Millisecond)
+	if err := s.LinkCommit(ctx, "TKT-001", "abc123"); err != nil {
+		t.Fatalf("LinkCommit failed: %v", err)
+	}
+	afterCommit, err := s.GetTicket(ctx, "TKT-001")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if !afterCommit.UpdatedAt.After(beforeCommit) {
+		t.Fatalf("expected updated_at bump after link commit: %s <= %s", afterCommit.UpdatedAt, beforeCommit)
 	}
 }

@@ -112,6 +112,9 @@ func handleUpdate(ctx context.Context, s *local.Store, args map[string]interface
 		if !ticket.IsValidState(ns) {
 			return nil, fmt.Errorf("invalid state: %s", v)
 		}
+		if err := ticket.ValidateTransition(t.State, ns); err != nil {
+			return nil, err
+		}
 		t.State = ns
 	}
 	if v, ok := getString(args, "title"); ok && strings.TrimSpace(v) != "" {

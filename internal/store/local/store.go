@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/leoaudibert/docket/internal/store"
 	"github.com/leoaudibert/docket/internal/ticket"
@@ -157,6 +158,7 @@ func (s *Store) AddComment(ctx context.Context, id string, c ticket.Comment) err
 	}
 
 	t.Comments = append(t.Comments, c)
+	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 	return s.UpdateTicket(ctx, t)
 }
 
@@ -175,6 +177,7 @@ func (s *Store) LinkCommit(ctx context.Context, id string, sha string) error {
 		}
 	}
 	t.LinkedCommits = append(t.LinkedCommits, sha)
+	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 	return s.UpdateTicket(ctx, t)
 }
 

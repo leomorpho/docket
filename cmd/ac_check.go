@@ -12,9 +12,10 @@ import (
 var errACIncomplete = errors.New("acceptance criteria incomplete")
 
 var acCheckCmd = &cobra.Command{
-	Use:   "check <TKT-NNN>",
-	Short: "Check whether all acceptance criteria are complete",
-	Args:  cobra.ExactArgs(1),
+	Use:          "check <TKT-NNN>",
+	Short:        "Check whether all acceptance criteria are complete",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		s := local.New(repo)

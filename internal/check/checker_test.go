@@ -2,6 +2,7 @@ package check
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,11 +76,12 @@ func TestChecker_R001AndR008(t *testing.T) {
 func TestChecker_R006Fix(t *testing.T) {
 	now := time.Now().UTC()
 	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.StateDone, UpdatedAt: now}
-	target := &ticket.Ticket{ID: "TKT-001", State: ticket.StateTodo, BlockedBy: []string{"TKT-002"}, UpdatedAt: now}
+	target := &ticket.Ticket{ID: "TKT-001", State: ticket.StateInProgress, BlockedBy: []string{"TKT-002"}, UpdatedAt: now.Add(-8 * 24 * time.Hour)}
 	b := newFake(blocker, target)
 
 	c := NewChecker(b)
-	_, err := c.Run(context.Background(), []*ticket.Ticket{target}, true)
+	c.Now = func() time.Time { return now }
+	findings, err := c.Run(context.Background(), []*ticket.Ticket{target}, true)
 	if err != nil {
 		t.Fatalf("run with fix failed: %v", err)
 	}
@@ -87,5 +89,8 @@ func TestChecker_R006Fix(t *testing.T) {
 	updated, _ := b.GetTicket(context.Background(), "TKT-001")
 	if len(updated.BlockedBy) != 0 {
 		t.Fatalf("expected blocker removed, got %v", updated.BlockedBy)
+	}
+	if len(findings) == 0 || findings[0].Rule != "R001" || !strings.Contains(findings[0].Message, "No activity") {
+		t.Fatalf("expected R001 finding after fix, got %+v", findings)
 	}
 }

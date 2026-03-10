@@ -92,7 +92,14 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 		warns = append(warns, store.ValidationError{Field: "labels", Message: "labels is empty"})
 	}
 	if t.Handoff == "" {
+		if t.State == ticket.StateInReview || t.State == ticket.StateDone {
+			errs = append(errs, store.ValidationError{Field: "handoff", Message: "## Handoff section is required for in-review and done tickets"})
+		}
 		warns = append(warns, store.ValidationError{Field: "handoff", Message: "## Handoff section missing (recommended)"})
+	} else if t.State == ticket.StateInReview || t.State == ticket.StateDone {
+		for _, missing := range missingHandoffSections(t.Handoff) {
+			errs = append(errs, store.ValidationError{Field: "handoff", Message: fmt.Sprintf("missing required subsection: %s", missing)})
+		}
 	}
 
 	return errs, warns, nil
@@ -182,4 +189,21 @@ func (s *Store) detectCycles() error {
 	}
 
 	return nil
+}
+
+func missingHandoffSections(handoff string) []string {
+	required := []string{
+		"**Current state:**",
+		"**Decisions made:**",
+		"**Files touched:**",
+		"**Remaining work:**",
+		"**AC status:**",
+	}
+	var missing []string
+	for _, section := range required {
+		if !strings.Contains(handoff, section) {
+			missing = append(missing, section)
+		}
+	}
+	return missing
 }

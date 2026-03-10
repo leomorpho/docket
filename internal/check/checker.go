@@ -31,7 +31,14 @@ func (c *Checker) Run(ctx context.Context, tickets []*ticket.Ticket, fix bool) (
 			if fixed, err := c.fixResolvedBlockers(ctx, t); err != nil {
 				return nil, err
 			} else if fixed {
-				continue
+				// Re-load the updated ticket so remaining rules run on current state.
+				updated, err := c.Backend.GetTicket(ctx, t.ID)
+				if err != nil {
+					return nil, err
+				}
+				if updated != nil {
+					t = updated
+				}
 			}
 		}
 
@@ -76,7 +83,6 @@ func (c *Checker) fixResolvedBlockers(ctx context.Context, t *ticket.Ticket) (bo
 	}
 	copyT := *t
 	copyT.BlockedBy = filtered
-	copyT.UpdatedAt = c.Now().Truncate(time.Second)
 	if err := c.Backend.UpdateTicket(ctx, &copyT); err != nil {
 		return false, err
 	}

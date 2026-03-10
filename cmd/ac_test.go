@@ -56,6 +56,9 @@ func TestACAddCompleteCheckAndList(t *testing.T) {
 	if !strings.Contains(b.String(), "incomplete") {
 		t.Fatalf("unexpected check output: %s", b.String())
 	}
+	if strings.Contains(b.String(), "Usage:") {
+		t.Fatalf("did not expect usage output on AC gate failure:\n%s", b.String())
+	}
 
 	b.Reset()
 	format = "json"
