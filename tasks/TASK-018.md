@@ -1,7 +1,7 @@
 # TASK-018: Acceptance criteria commands
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-017
@@ -72,13 +72,13 @@ Print all AC items with their status.
 - `cmd/ac_list.go`
 
 ## Acceptance criteria (meta — for this task itself)
-- [ ] `docket ac add TKT-001 --desc "Tests pass"` appends `- [ ] Tests pass` to AC section
-- [ ] `docket ac complete TKT-001 --step 1 --evidence "go test passed"` marks step 1 done
-- [ ] `docket ac complete TKT-001 --step "Tests"` matches by substring
-- [ ] `docket ac check TKT-001` exits 0 when all AC done, exits 1 when any remain
-- [ ] `docket ac check TKT-001` with no AC items exits 0 (vacuously complete)
-- [ ] `--format json` on `ac check` outputs the JSON structure above
-- [ ] `go test ./cmd/...` passes
+- [x] `docket ac add TKT-001 --desc "Tests pass"` appends `- [ ] Tests pass` to AC section
+- [x] `docket ac complete TKT-001 --step 1 --evidence "go test passed"` marks step 1 done
+- [x] `docket ac complete TKT-001 --step "Tests"` matches by substring
+- [x] `docket ac check TKT-001` exits 0 when all AC done, exits 1 when any remain
+- [x] `docket ac check TKT-001` with no AC items exits 0 (vacuously complete)
+- [x] `--format json` on `ac check` outputs the JSON structure above
+- [x] `go test ./cmd/...` passes
 
 ## Notes for LLM
 - `ac complete` must update the markdown file in place — only the matching `- [ ]` line changes

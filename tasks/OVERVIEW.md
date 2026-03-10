@@ -62,7 +62,7 @@ TASK-001 (scaffolding)
 | [TASK-015](./TASK-015.md) | Inline annotation scan + refs | TASK-014 | [x] |
 | [TASK-016](./TASK-016.md) | `docket context` command | TASK-012, TASK-015 | [x] |
 | [TASK-017](./TASK-017.md) | Session management | TASK-011 | [x] |
-| [TASK-018](./TASK-018.md) | Acceptance criteria | TASK-017 | [ ] |
+| [TASK-018](./TASK-018.md) | Acceptance criteria | TASK-017 | [x] |
 | [TASK-019](./TASK-019.md) | `docket check` staleness | TASK-018 | [ ] |
 | [TASK-020](./TASK-020.md) | `docket help-json` manifest | TASK-019 | [ ] |
 | [TASK-021](./TASK-021.md) | MCP server | TASK-020 | [ ] |
