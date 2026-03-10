@@ -1,7 +1,7 @@
 # TASK-021: MCP server
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-020
@@ -77,13 +77,13 @@ MCP responses are always JSON. Errors returned as MCP error responses with clear
 - `cmd/serve.go` — cobra command that starts the MCP server
 
 ## Acceptance criteria
-- [ ] `docket serve --mcp` starts and reads from stdin without error
-- [ ] Sending `{"action": "list", "args": {"state": "open"}}` returns ticket list as JSON
-- [ ] Sending `{"action": "create", "args": {"title": "Test"}}` creates a ticket
-- [ ] Sending unknown action returns a JSON error (not a crash)
-- [ ] Server exits cleanly when stdin closes
-- [ ] All handlers call the same `internal/` functions as CLI commands (verify by code review — no duplication)
-- [ ] `go test ./internal/mcp/...` passes with stdin/stdout mocking
+- [x] `docket serve --mcp` starts and reads from stdin without error
+- [x] Sending `{"action": "list", "args": {"state": "open"}}` returns ticket list as JSON
+- [x] Sending `{"action": "create", "args": {"title": "Test"}}` creates a ticket
+- [x] Sending unknown action returns a JSON error (not a crash)
+- [x] Server exits cleanly when stdin closes
+- [x] All handlers call the same `internal/` functions as CLI commands (verify by code review — no duplication)
+- [x] `go test ./internal/mcp/...` passes with stdin/stdout mocking
 
 ## Notes for LLM
 - Use `bufio.Scanner` on `os.Stdin` to read one JSON object per line

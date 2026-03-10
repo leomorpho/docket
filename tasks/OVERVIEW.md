@@ -65,6 +65,6 @@ TASK-001 (scaffolding)
 | [TASK-018](./TASK-018.md) | Acceptance criteria | TASK-017 | [x] |
 | [TASK-019](./TASK-019.md) | `docket check` staleness | TASK-018 | [x] |
 | [TASK-020](./TASK-020.md) | `docket help-json` manifest | TASK-019 | [x] |
-| [TASK-021](./TASK-021.md) | MCP server | TASK-020 | [ ] |
+| [TASK-021](./TASK-021.md) | MCP server | TASK-020 | [x] |
 | [TASK-022](./TASK-022.md) | lefthook + CLAUDE.md template | TASK-021 | [ ] |
 | [TASK-023](./TASK-023.md) | Bootstrap docket to track itself | TASK-022 | [ ] |
