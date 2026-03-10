@@ -1,7 +1,7 @@
 # TASK-014: Git blame integration
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-005 (store and config available)
@@ -89,13 +89,13 @@ Parse `<file>:<line>` argument, call `git.BlameLine`, call `git.CommitTicket`,
 fetch and display ticket if found.
 
 ## Acceptance criteria
-- [ ] `docket blame main.go:1` on a committed file returns blame info
-- [ ] `docket blame main.go:1` on a file with a `Ticket:` trailer shows the ticket
-- [ ] `docket blame main.go:1` on a commit without a trailer prints "(no ticket linked)"
-- [ ] `docket blame nonexistent.go:1` exits 1 with clear error
-- [ ] `docket blame main.go:99999` (line out of range) exits 1 with clear error
-- [ ] `--format json` outputs the full JSON structure
-- [ ] `go test ./internal/git/...` passes (use a temp git repo in tests)
+- [x] `docket blame main.go:1` on a committed file returns blame info
+- [x] `docket blame main.go:1` on a file with a `Ticket:` trailer shows the ticket
+- [x] `docket blame main.go:1` on a commit without a trailer prints "(no ticket linked)"
+- [x] `docket blame nonexistent.go:1` exits 1 with clear error
+- [x] `docket blame main.go:99999` (line out of range) exits 1 with clear error
+- [x] `--format json` outputs the full JSON structure
+- [x] `go test ./internal/git/...` passes (use a temp git repo in tests)
 
 ## Notes for LLM
 - `git blame --porcelain` outputs structured data — parse the commit SHA from the first line
