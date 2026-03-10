@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeRunner struct {
@@ -165,7 +166,80 @@ func TestUVProviderEmbedInvalidJSON(t *testing.T) {
 	runner := &fakeRunner{result: CommandResult{Stdout: []byte("not-json")}}
 	provider := NewUVProvider(Config{Model: "m"}, ProviderOptions{RepoRoot: "/tmp/repo", Runner: runner})
 	_, err := provider.Embed(context.Background(), EmbedRequest{})
-	if err == nil || !strings.Contains(err.Error(), "decode bridge response") {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %v", err)
+	}
+	if providerErr.Kind != ProviderErrorInvalidJSON || !strings.Contains(err.Error(), "decode bridge response") {
 		t.Fatalf("expected decode error, got %v", err)
+	}
+}
+
+func TestUVProviderEmbedBridgeErrorResponse(t *testing.T) {
+	stdout, err := json.Marshal(EmbedResponse{
+		Model: "test-model",
+		Errors: []ResponseError{{
+			Code:    "model_load_error",
+			Message: "boom",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	runner := &fakeRunner{
+		result: CommandResult{Stdout: stdout, Stderr: []byte("traceback")},
+		err:    errors.New("exit status 1"),
+	}
+	provider := NewUVProvider(Config{Model: "m"}, ProviderOptions{RepoRoot: "/tmp/repo", Runner: runner})
+	_, err = provider.Embed(context.Background(), EmbedRequest{})
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %v", err)
+	}
+	if providerErr.Kind != ProviderErrorBridge {
+		t.Fatalf("unexpected error kind: %+v", providerErr)
+	}
+	if providerErr.Response == nil || len(providerErr.Response.Errors) != 1 {
+		t.Fatalf("missing bridge response: %+v", providerErr)
+	}
+}
+
+func TestUVProviderEmbedProcessError(t *testing.T) {
+	runner := &fakeRunner{
+		result: CommandResult{Stderr: []byte("plain stderr")},
+		err:    errors.New("exit status 1"),
+	}
+	provider := NewUVProvider(Config{Model: "m"}, ProviderOptions{RepoRoot: "/tmp/repo", Runner: runner})
+	_, err := provider.Embed(context.Background(), EmbedRequest{})
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %v", err)
+	}
+	if providerErr.Kind != ProviderErrorProcess {
+		t.Fatalf("unexpected error kind: %+v", providerErr)
+	}
+	if providerErr.Stderr != "plain stderr" {
+		t.Fatalf("unexpected stderr: %+v", providerErr)
+	}
+}
+
+type blockingRunner struct{}
+
+func (blockingRunner) Run(ctx context.Context, spec CommandSpec) (CommandResult, error) {
+	<-ctx.Done()
+	return CommandResult{}, ctx.Err()
+}
+
+func TestUVProviderEmbedTimeout(t *testing.T) {
+	provider := NewUVProvider(Config{Model: "m"}, ProviderOptions{RepoRoot: "/tmp/repo", Runner: blockingRunner{}})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	_, err := provider.Embed(ctx, EmbedRequest{})
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %v", err)
+	}
+	if providerErr.Kind != ProviderErrorTimeout {
+		t.Fatalf("unexpected error kind: %+v", providerErr)
 	}
 }

@@ -3,9 +3,16 @@ package semantic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
+)
+
+const (
+	uvStatusTimeout = 2 * time.Second
+	uvEmbedTimeout  = 2 * time.Minute
 )
 
 type UVProvider struct {
@@ -33,6 +40,9 @@ func (p *UVProvider) Name() string {
 }
 
 func (p *UVProvider) Status(ctx context.Context) (Status, error) {
+	ctx, cancel := context.WithTimeout(ctx, uvStatusTimeout)
+	defer cancel()
+
 	result, err := p.runner.Run(ctx, CommandSpec{
 		Path: "uv",
 		Args: []string{"--version"},
@@ -57,14 +67,30 @@ func (p *UVProvider) Status(ctx context.Context) (Status, error) {
 }
 
 func (p *UVProvider) Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, uvEmbedTimeout)
+	defer cancel()
+
 	result, err := p.runBridge(ctx, req)
 	if err != nil {
-		return EmbedResponse{}, err
+		return EmbedResponse{}, p.classifyBridgeError(result, err)
 	}
 
-	var response EmbedResponse
-	if err := json.Unmarshal(result.Stdout, &response); err != nil {
-		return EmbedResponse{}, fmt.Errorf("decode bridge response: %w", err)
+	response, err := decodeBridgeResponse(result.Stdout)
+	if err != nil {
+		return EmbedResponse{}, &ProviderError{
+			Kind:    ProviderErrorInvalidJSON,
+			Message: "decode bridge response",
+			Stderr:  strings.TrimSpace(string(result.Stderr)),
+			Err:     err,
+		}
+	}
+	if len(response.Errors) > 0 {
+		return EmbedResponse{}, &ProviderError{
+			Kind:     ProviderErrorBridge,
+			Message:  firstBridgeMessage(response),
+			Stderr:   strings.TrimSpace(string(result.Stderr)),
+			Response: &response,
+		}
 	}
 	return response, nil
 }
@@ -117,4 +143,57 @@ func errorDetails(err error, stderr []byte) string {
 		return strings.TrimSpace(string(stderr))
 	}
 	return err.Error()
+}
+
+func decodeBridgeResponse(stdout []byte) (EmbedResponse, error) {
+	var response EmbedResponse
+	if err := json.Unmarshal(stdout, &response); err != nil {
+		return EmbedResponse{}, err
+	}
+	return response, nil
+}
+
+func (p *UVProvider) classifyBridgeError(result CommandResult, err error) error {
+	stderr := strings.TrimSpace(string(result.Stderr))
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return &ProviderError{
+			Kind:    ProviderErrorTimeout,
+			Message: "semantic provider timed out",
+			Stderr:  stderr,
+			Err:     err,
+		}
+	}
+
+	if len(result.Stdout) > 0 {
+		response, decodeErr := decodeBridgeResponse(result.Stdout)
+		if decodeErr == nil {
+			return &ProviderError{
+				Kind:     ProviderErrorBridge,
+				Message:  firstBridgeMessage(response),
+				Stderr:   stderr,
+				Response: &response,
+				Err:      err,
+			}
+		}
+		return &ProviderError{
+			Kind:    ProviderErrorInvalidJSON,
+			Message: "decode bridge response",
+			Stderr:  stderr,
+			Err:     decodeErr,
+		}
+	}
+
+	return &ProviderError{
+		Kind:    ProviderErrorProcess,
+		Message: "semantic provider process failed",
+		Stderr:  stderr,
+		Err:     err,
+	}
+}
+
+func firstBridgeMessage(response EmbedResponse) string {
+	if len(response.Errors) == 0 {
+		return "bridge returned error response"
+	}
+	return response.Errors[0].Message
 }

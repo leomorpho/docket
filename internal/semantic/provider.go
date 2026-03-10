@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Config struct {
@@ -81,6 +82,39 @@ type ProviderOptions struct {
 }
 
 var ErrUnknownProvider = errors.New("unknown semantic provider")
+
+type ProviderErrorKind string
+
+const (
+	ProviderErrorTimeout     ProviderErrorKind = "timeout"
+	ProviderErrorInvalidJSON ProviderErrorKind = "invalid_json"
+	ProviderErrorBridge      ProviderErrorKind = "bridge_error"
+	ProviderErrorProcess     ProviderErrorKind = "process_error"
+)
+
+type ProviderError struct {
+	Kind     ProviderErrorKind
+	Message  string
+	Stderr   string
+	Response *EmbedResponse
+	Err      error
+}
+
+func (e *ProviderError) Error() string {
+	var parts []string
+	parts = append(parts, string(e.Kind))
+	if e.Message != "" {
+		parts = append(parts, e.Message)
+	}
+	if e.Stderr != "" {
+		parts = append(parts, e.Stderr)
+	}
+	return strings.Join(parts, ": ")
+}
+
+func (e *ProviderError) Unwrap() error {
+	return e.Err
+}
 
 func NewProvider(cfg Config, opts ProviderOptions) (Provider, error) {
 	switch cfg.Provider {
