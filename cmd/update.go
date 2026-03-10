@@ -14,15 +14,16 @@ import (
 )
 
 var (
-	updateState       string
-	updatePriority    int
-	updateTitle       string
-	updateLabels      string
-	updateAddLabels   []string
+	updateState        string
+	updatePriority     int
+	updateTitle        string
+	updateLabels       string
+	updateAddLabels    []string
 	updateRemoveLabels []string
-	updateBlockedBy   []string
-	updateUnblock     []string
-	updateDesc        string
+	updateBlockedBy    []string
+	updateUnblock      []string
+	updateDesc         string
+	updateHandoff      string
 )
 
 var updateCmd = &cobra.Command{
@@ -72,19 +73,25 @@ var updateCmd = &cobra.Command{
 
 		// 4. Description
 		if cmd.Flags().Changed("desc") {
-			if updateDesc == "-" {
-				data, err := io.ReadAll(os.Stdin)
-				if err != nil {
-					return fmt.Errorf("reading from stdin: %w", err)
-				}
-				t.Description = string(data)
-			} else {
-				t.Description = updateDesc
+			value, err := readUpdateValue(updateDesc)
+			if err != nil {
+				return err
 			}
+			t.Description = value
 			updatedFields = append(updatedFields, "description")
 		}
 
-		// 5. Labels (replacement)
+		// 5. Handoff
+		if cmd.Flags().Changed("handoff") {
+			value, err := readUpdateValue(updateHandoff)
+			if err != nil {
+				return err
+			}
+			t.Handoff = value
+			updatedFields = append(updatedFields, "handoff")
+		}
+
+		// 6. Labels (replacement)
 		if cmd.Flags().Changed("labels") {
 			var labelList []string
 			if updateLabels != "" {
@@ -96,7 +103,7 @@ var updateCmd = &cobra.Command{
 			updatedFields = append(updatedFields, "labels")
 		}
 
-		// 6. Add labels
+		// 7. Add labels
 		if len(updateAddLabels) > 0 {
 			for _, l := range updateAddLabels {
 				found := false
@@ -113,7 +120,7 @@ var updateCmd = &cobra.Command{
 			updatedFields = append(updatedFields, "add-label")
 		}
 
-		// 7. Remove labels
+		// 8. Remove labels
 		if len(updateRemoveLabels) > 0 {
 			var newLabels []string
 			for _, existing := range t.Labels {
@@ -132,7 +139,7 @@ var updateCmd = &cobra.Command{
 			updatedFields = append(updatedFields, "remove-label")
 		}
 
-		// 8. Blocked by (add)
+		// 9. Blocked by (add)
 		if len(updateBlockedBy) > 0 {
 			for _, b := range updateBlockedBy {
 				found := false
@@ -149,7 +156,7 @@ var updateCmd = &cobra.Command{
 			updatedFields = append(updatedFields, "blocked-by")
 		}
 
-		// 9. Unblock (remove)
+		// 10. Unblock (remove)
 		if len(updateUnblock) > 0 {
 			var newBlockedBy []string
 			for _, existing := range t.BlockedBy {
@@ -205,15 +212,28 @@ var updateCmd = &cobra.Command{
 		updateBlockedBy = nil
 		updateUnblock = nil
 		updateDesc = ""
+		updateHandoff = ""
 
 		return nil
 	},
+}
+
+func readUpdateValue(value string) (string, error) {
+	if value != "-" {
+		return value, nil
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("reading from stdin: %w", err)
+	}
+	return string(data), nil
 }
 
 func init() {
 	updateCmd.Flags().StringVar(&updateState, "state", "", "new state")
 	updateCmd.Flags().IntVar(&updatePriority, "priority", 0, "new priority")
 	updateCmd.Flags().StringVar(&updateTitle, "title", "", "new title")
+	updateCmd.Flags().StringVar(&updateHandoff, "handoff", "", "new handoff (use - for stdin)")
 	updateCmd.Flags().StringVar(&updateLabels, "labels", "", "replace all labels (csv)")
 	updateCmd.Flags().StringSliceVar(&updateAddLabels, "add-label", []string{}, "add one or more labels")
 	updateCmd.Flags().StringSliceVar(&updateRemoveLabels, "remove-label", []string{}, "remove one or more labels")
