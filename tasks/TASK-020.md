@@ -1,7 +1,7 @@
 # TASK-020: `docket help-json` — machine-readable manifest
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-019
@@ -78,12 +78,12 @@ has `Use`, `Short`, and flags already defined) and encoding them. The `examples`
 `output` shapes must be hardcoded per command — cobra doesn't know those.
 
 ## Acceptance criteria
-- [ ] `docket help-json` exits 0 and outputs valid JSON
-- [ ] Output includes all commands implemented so far
-- [ ] Each command entry has `synopsis`, `flags`, `examples`, and `output` shapes
-- [ ] `conventions` section explains commit trailers and inline annotations
-- [ ] `environment` section lists `DOCKET_ACTOR`
-- [ ] `docket help-json | jq .commands[].name` lists all command names
+- [x] `docket help-json` exits 0 and outputs valid JSON
+- [x] Output includes all commands implemented so far
+- [x] Each command entry has `synopsis`, `flags`, `examples`, and `output` shapes
+- [x] `conventions` section explains commit trailers and inline annotations
+- [x] `environment` section lists `DOCKET_ACTOR`
+- [x] `docket help-json | jq .commands[].name` lists all command names
 
 ## Notes for LLM
 - Keep this command simple — no fancy generation needed, mostly hardcoded schema
