@@ -1,7 +1,7 @@
 # TASK-022: lefthook config + CLAUDE.md template
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-021
@@ -89,13 +89,13 @@ Lines to add to a repo's `.gitignore` (also done automatically by `docket init`)
 ```
 
 ## Acceptance criteria
-- [ ] `templates/lefthook.yml` exists and is valid YAML
-- [ ] The `docket-validate` hook runs `docket validate` on staged ticket files only
-- [ ] The `docket-ac-check` hook exits 0 when commit message has no `Ticket:` trailer
-- [ ] The `docket-ac-check` hook exits 1 when linked ticket has incomplete AC
-- [ ] `templates/CLAUDE.md` exists with all required sections
-- [ ] The CLAUDE.md covers: session start, during work, before commit, finishing
-- [ ] `templates/gitignore-additions` matches what `docket init` adds
+- [x] `templates/lefthook.yml` exists and is valid YAML
+- [x] The `docket-validate` hook runs `docket validate` on staged ticket files only
+- [x] The `docket-ac-check` hook exits 0 when commit message has no `Ticket:` trailer
+- [x] The `docket-ac-check` hook exits 1 when linked ticket has incomplete AC
+- [x] `templates/CLAUDE.md` exists with all required sections
+- [x] The CLAUDE.md covers: session start, during work, before commit, finishing
+- [x] `templates/gitignore-additions` matches what `docket init` adds
 
 ## Notes for LLM
 - The lefthook `glob` on `docket-validate` means it only runs when ticket files are staged —

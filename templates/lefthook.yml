@@ -1,0 +1,14 @@
+pre-commit:
+  commands:
+    docket-validate:
+      glob: ".docket/tickets/*.md"
+      run: docket validate {staged_files}
+      fail_text: "Ticket schema validation failed. Fix errors before committing."
+
+    docket-ac-check:
+      run: |
+        TICKET=$(git log -1 --format="%B" 2>/dev/null | grep -oE 'Ticket: TKT-[0-9]+' | awk '{print $2}' || true)
+        if [ -n "$TICKET" ]; then
+          docket ac check "$TICKET"
+        fi
+      fail_text: "Acceptance criteria for linked ticket are not all complete."
