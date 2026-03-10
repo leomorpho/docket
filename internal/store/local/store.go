@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/leoaudibert/docket/internal/store"
 	"github.com/leoaudibert/docket/internal/ticket"
@@ -89,39 +87,15 @@ func (s *Store) GetRaw(ctx context.Context, id string) (string, error) {
 }
 
 func (s *Store) ListTickets(ctx context.Context, f store.Filter) ([]*ticket.Ticket, error) {
-	ticketsDir := filepath.Join(s.RepoRoot, ".docket", "tickets")
-	files, err := os.ReadDir(ticketsDir)
+	tickets, err := s.queryTickets(ctx, f)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []*ticket.Ticket{}, nil
-		}
-		return nil, err
+		return nil, fmt.Errorf("querying tickets from index: %w", err)
 	}
 
-	var results []*ticket.Ticket
-	for _, entry := range files {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
-			id := strings.TrimSuffix(entry.Name(), ".md")
-			t, err := s.GetTicket(ctx, id)
-			if err != nil {
-				continue // Skip corrupt tickets for now
-			}
-
-			if s.matches(t, f) {
-				results = append(results, t)
-			}
-		}
-	}
-
-	// Sort by priority ascending (1 is highest), then CreatedAt ascending
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].Priority != results[j].Priority {
-			return results[i].Priority < results[j].Priority
-		}
-		return results[i].CreatedAt.Before(results[j].CreatedAt)
-	})
-
-	return results, nil
+	// For any listed ticket, we might want to ensure labels/blocked_by are fully populated
+	// if they aren't in the base SELECT. But for List view, the basic fields are enough.
+	// We'll leave them as-is from the Scan.
+	return tickets, nil
 }
 
 func (s *Store) matches(t *ticket.Ticket, f store.Filter) bool {

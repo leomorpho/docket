@@ -56,7 +56,7 @@ TASK-001 (scaffolding)
 | [TASK-009](./TASK-009.md) | `docket show` command | TASK-006 | [x] |
 | [TASK-010](./TASK-010.md) | `docket update` command | TASK-006 | [x] |
 | [TASK-011](./TASK-011.md) | `docket comment` command | TASK-006 | [x] |
-| [TASK-012](./TASK-012.md) | SQLite index cache | TASK-011 | [~] |
+| [TASK-012](./TASK-012.md) | SQLite index cache | TASK-011 | [x] |
 | [TASK-013](./TASK-013.md) | `docket board` bubbletea TUI | TASK-012 | [ ] |
 | [TASK-014](./TASK-014.md) | Git blame integration | TASK-005 | [ ] |
 | [TASK-015](./TASK-015.md) | Inline annotation scan + refs | TASK-014 | [ ] |

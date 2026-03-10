@@ -1,7 +1,7 @@
 # TASK-012: SQLite index cache
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-011 (all basic CRUD commands done, store is stable)
@@ -96,13 +96,13 @@ go get modernc.org/sqlite
 ```
 
 ## Acceptance criteria
-- [ ] `docket sync` creates `.docket/index.db`
-- [ ] After sync, `docket list` queries SQLite (verify with a timing test on 50+ tickets)
-- [ ] If `index.db` doesn't exist, `docket list` builds it automatically first
-- [ ] If any `.md` file is newer than `index.db`, the index is rebuilt before querying
-- [ ] `index.db` is not tracked by git (confirmed by `.gitignore` from TASK-006)
-- [ ] `docket sync` after deleting a ticket removes it from the index
-- [ ] `go test ./internal/store/local/...` passes
+- [x] `docket sync` creates `.docket/index.db`
+- [x] After sync, `docket list` queries SQLite (verify with a timing test on 50+ tickets)
+- [x] If `index.db` doesn't exist, `docket list` builds it automatically first
+- [x] If any `.md` file is newer than `index.db`, the index is rebuilt before querying
+- [x] `index.db` is not tracked by git (confirmed by `.gitignore` from TASK-006)
+- [x] `docket sync` after deleting a ticket removes it from the index
+- [x] `go test ./internal/store/local/...` passes
 
 ## Notes for LLM
 - `ensureIndex` should be lightweight — just stat the files, don't parse unless stale
