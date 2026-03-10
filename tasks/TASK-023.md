@@ -1,7 +1,7 @@
 # TASK-023: Bootstrap docket to track itself
 
 ## Status
-`[ ]` not started
+`[x]` done
 
 ## Depends on
 TASK-022 (everything implemented and working)
@@ -40,13 +40,13 @@ done
 ```
 
 ## Acceptance criteria
-- [ ] `.docket/config.json` exists in the docket repo
-- [ ] `docket list --state open` shows no stale or incorrect tickets
-- [ ] `docket board` renders without errors
-- [ ] `docket check` shows no errors (warnings acceptable)
-- [ ] `docket validate` passes on all ticket files
-- [ ] lefthook pre-commit hooks are active and tested (make a test commit touching a ticket)
-- [ ] `CLAUDE.md` exists in repo root with docket instructions
+- [x] `.docket/config.json` exists in the docket repo
+- [x] `docket list --state open` shows no stale or incorrect tickets
+- [x] `docket board` renders without errors
+- [x] `docket check` shows no errors (warnings acceptable)
+- [x] `docket validate` passes on all ticket files
+- [x] lefthook pre-commit hooks are active and tested (make a test commit touching a ticket)
+- [x] `CLAUDE.md` exists in repo root with docket instructions
 
 ## Notes for LLM
 - This is a real repo operation, not a test — use the actual binary, not mocks
