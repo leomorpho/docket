@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Semantic embedding bridge for Docket.
-
-This initial version only validates stdin/stdout framing.
-"""
+"""Semantic embedding bridge for Docket."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+
+
+def emit(payload: dict) -> None:
+    json.dump(payload, sys.stdout)
+    sys.stdout.write("\n")
 
 
 def main() -> int:
@@ -19,7 +21,7 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError as exc:
-        json.dump(
+        emit(
             {
                 "model": args.model,
                 "errors": [
@@ -29,23 +31,51 @@ def main() -> int:
                     }
                 ],
             },
-            sys.stdout,
         )
-        sys.stdout.write("\n")
         return 1
 
     inputs = payload.get("inputs", [])
-    results = [{"chunk_id": item.get("chunk_id", ""), "vector": []} for item in inputs]
-    json.dump(
+    texts = [item.get("text", "") for item in inputs]
+
+    try:
+        from sentence_transformers import SentenceTransformer
+    except Exception as exc:  # pragma: no cover - exercised via subprocess tests
+        emit(
+            {
+                "model": args.model,
+                "errors": [{"code": "import_error", "message": str(exc)}],
+            }
+        )
+        return 1
+
+    try:
+        model = SentenceTransformer(args.model)
+        vectors = model.encode(texts)
+    except Exception as exc:  # pragma: no cover - exercised via subprocess tests
+        emit(
+            {
+                "model": args.model,
+                "errors": [{"code": "model_load_error", "message": str(exc)}],
+            }
+        )
+        return 1
+
+    results = []
+    dimension = 0
+    for item, vector in zip(inputs, vectors):
+        values = [float(value) for value in vector]
+        if values:
+            dimension = len(values)
+        results.append({"chunk_id": item.get("chunk_id", ""), "vector": values})
+
+    emit(
         {
             "model": args.model,
-            "dimension": 0,
+            "dimension": dimension,
             "results": results,
             "errors": [],
-        },
-        sys.stdout,
+        }
     )
-    sys.stdout.write("\n")
     return 0
 
 

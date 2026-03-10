@@ -40,7 +40,8 @@ func TestNewProvider_Unknown(t *testing.T) {
 }
 
 func TestUVProviderStatus(t *testing.T) {
-	provider := NewUVProvider(Config{Model: "sentence-transformers/all-MiniLM-L6-v2"}, ProviderOptions{RepoRoot: "/tmp/repo"})
+	runner := &fakeRunner{result: CommandResult{Stdout: []byte("uv 0.7.0\n")}}
+	provider := NewUVProvider(Config{Model: "sentence-transformers/all-MiniLM-L6-v2"}, ProviderOptions{RepoRoot: "/tmp/repo", Runner: runner})
 	status, err := provider.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
@@ -48,8 +49,29 @@ func TestUVProviderStatus(t *testing.T) {
 	if status.Provider != "uv" || status.Model == "" {
 		t.Fatalf("unexpected status: %+v", status)
 	}
+	if !status.Available {
+		t.Fatalf("expected available status")
+	}
+	if status.Details != "uv 0.7.0" {
+		t.Fatalf("unexpected details: %q", status.Details)
+	}
+	if runner.spec.Path != "uv" || strings.Join(runner.spec.Args, " ") != "--version" {
+		t.Fatalf("unexpected status command: %#v", runner.spec)
+	}
+}
+
+func TestUVProviderStatusUnavailable(t *testing.T) {
+	runner := &fakeRunner{err: errors.New("executable file not found")}
+	provider := NewUVProvider(Config{Model: "test-model"}, ProviderOptions{RepoRoot: "/tmp/repo", Runner: runner})
+	status, err := provider.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status failed: %v", err)
+	}
 	if status.Available {
-		t.Fatalf("expected placeholder unavailable status")
+		t.Fatalf("expected unavailable status")
+	}
+	if !strings.Contains(status.Details, "executable file not found") {
+		t.Fatalf("unexpected details: %q", status.Details)
 	}
 }
 
@@ -94,7 +116,7 @@ func TestUVProviderEmbedInvokesBridge(t *testing.T) {
 	if runner.spec.Path != "uv" {
 		t.Fatalf("expected uv path, got %q", runner.spec.Path)
 	}
-	if want := []string{"run", "--no-project", "python", "/tmp/repo/scripts/semantic_embed.py", "--model", "test-model"}; strings.Join(runner.spec.Args, "|") != strings.Join(want, "|") {
+	if want := []string{"run", "--no-project", "--with", "sentence-transformers==3.4.1", "python", "/tmp/repo/scripts/semantic_embed.py", "--model", "test-model"}; strings.Join(runner.spec.Args, "|") != strings.Join(want, "|") {
 		t.Fatalf("unexpected args: %v", runner.spec.Args)
 	}
 	if runner.spec.Dir != "/tmp/repo" {
@@ -109,6 +131,33 @@ func TestUVProviderEmbedInvokesBridge(t *testing.T) {
 		if !strings.Contains(env, needle) {
 			t.Fatalf("env missing %q", needle)
 		}
+	}
+}
+
+func TestUVProviderCommandEnvOverridesExisting(t *testing.T) {
+	t.Setenv("HF_HOME", "/old/hf")
+	t.Setenv("SENTENCE_TRANSFORMERS_HOME", "/old/sbert")
+	t.Setenv("UV_CACHE_DIR", "/old/uv")
+	provider := NewUVProvider(Config{
+		HFHome:                   "/new/hf",
+		SentenceTransformersHome: "/new/sbert",
+		UVCacheDir:               "/new/uv",
+	}, ProviderOptions{RepoRoot: "/tmp/repo"})
+	env := provider.commandEnv()
+	joined := strings.Join(env, "\n")
+	for _, pair := range []string{"HF_HOME=/new/hf", "SENTENCE_TRANSFORMERS_HOME=/new/sbert", "UV_CACHE_DIR=/new/uv"} {
+		if strings.Count(joined, pair) != 1 {
+			t.Fatalf("expected single env entry %q in %q", pair, joined)
+		}
+	}
+}
+
+func TestUVPinnedPackages(t *testing.T) {
+	if len(UVPinnedPackages) == 0 {
+		t.Fatal("expected pinned packages")
+	}
+	if UVPinnedPackages[0] != "sentence-transformers==3.4.1" {
+		t.Fatalf("unexpected package pin: %v", UVPinnedPackages)
 	}
 }
 

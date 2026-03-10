@@ -54,6 +54,21 @@ type Status struct {
 	Details   string `json:"details,omitempty"`
 }
 
+const (
+	EnvSemanticEnabled                  = "DOCKET_SEMANTIC_ENABLED"
+	EnvSemanticProvider                 = "DOCKET_SEMANTIC_PROVIDER"
+	EnvSemanticModel                    = "DOCKET_SEMANTIC_MODEL"
+	EnvSemanticHFHome                   = "DOCKET_SEMANTIC_HF_HOME"
+	EnvSemanticSentenceTransformersHome = "DOCKET_SEMANTIC_SENTENCE_TRANSFORMERS_HOME"
+	EnvSemanticUVCacheDir               = "DOCKET_SEMANTIC_UV_CACHE_DIR"
+	EnvSemanticLexicalWeight            = "DOCKET_SEMANTIC_LEXICAL_WEIGHT"
+	EnvSemanticVectorWeight             = "DOCKET_SEMANTIC_VECTOR_WEIGHT"
+)
+
+var UVPinnedPackages = []string{
+	"sentence-transformers==3.4.1",
+}
+
 type Provider interface {
 	Name() string
 	Status(context.Context) (Status, error)
