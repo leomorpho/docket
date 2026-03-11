@@ -1,3 +1,4 @@
 docket
 .docket/index.db
+.docket/semantic/
 .docket/tickets/*/sessions/
