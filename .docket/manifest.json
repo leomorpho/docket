@@ -33,12 +33,12 @@
     },
     "TKT-114": {
       "title": "Front-load CLI query instructions in CLAUDE.md",
-      "state": "in-review",
+      "state": "done",
       "priority": 2
     },
     "TKT-115": {
       "title": "Add reason-based explanation for CLI-over-files in CLAUDE.md",
-      "state": "in-review",
+      "state": "done",
       "priority": 2
     },
     "TKT-116": {
@@ -48,7 +48,7 @@
     },
     "TKT-117": {
       "title": "Add docket hook to warn on direct ticket file reads",
-      "state": "in-review",
+      "state": "done",
       "priority": 3
     }
   }
