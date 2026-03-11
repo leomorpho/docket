@@ -28,8 +28,11 @@ func TestValidateFile(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:tester",
-		Description: "Has description",
-		AC:          []ticket.AcceptanceCriterion{{Description: "Has AC", Done: false}},
+		Description: "Has description with enough words to pass the quality check so that agents can execute this ticket without asking clarifying questions",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "Has AC item one", Done: false},
+			{Description: "Has AC item two", Done: false},
+		},
 		Handoff:     "Has handoff",
 	}
 	s.CreateTicket(ctx, t1)

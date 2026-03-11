@@ -174,6 +174,66 @@ func (s *Store) DetectTamperingAll(ctx context.Context) ([]TamperChange, error) 
 	return out, nil
 }
 
+// ReconcileResult holds the outcome of reconciling a directly-edited ticket.
+type ReconcileResult struct {
+	ID       string
+	Accepted bool
+	Changes  []TamperChange
+	Errors   []store.ValidationError
+}
+
+// ReconcileTampering detects direct edits and accepts valid ones, rejects invalid ones.
+// Accepted tickets have their manifest entries updated to reflect the new values.
+// Rejected tickets are left unchanged in the manifest.
+func (s *Store) ReconcileTampering(ctx context.Context) ([]ReconcileResult, error) {
+	changes, err := s.DetectTamperingAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group changes by ticket ID
+	byID := make(map[string][]TamperChange)
+	for _, ch := range changes {
+		byID[ch.ID] = append(byID[ch.ID], ch)
+	}
+
+	var results []ReconcileResult
+	for id, ticketChanges := range byID {
+		schemaErrs, _, err := s.ValidateFile(id)
+		if err != nil {
+			// Can't validate — skip this ticket
+			continue
+		}
+
+		result := ReconcileResult{
+			ID:      id,
+			Changes: ticketChanges,
+			Errors:  schemaErrs,
+		}
+
+		if len(schemaErrs) == 0 {
+			// Schema-valid: accept the direct edit by updating the manifest
+			t, err := s.GetTicket(ctx, id)
+			if err == nil && t != nil {
+				entry := s.manifestEntryFromTicket(t)
+				if upsertErr := s.upsertManifestTicket(id, entry); upsertErr == nil {
+					result.Accepted = true
+				}
+			}
+		}
+		// If schema errors exist, leave Accepted=false and include errors
+
+		results = append(results, result)
+	}
+
+	// Sort results by ID for deterministic output
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ID < results[j].ID
+	})
+
+	return results, nil
+}
+
 func diffManifestTicket(id string, expected, actual ManifestTicket) []TamperChange {
 	var out []TamperChange
 	if expected.Title != actual.Title {

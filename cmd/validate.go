@@ -27,18 +27,27 @@ var validateCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("reading ticket: %w", err)
 			}
+			schemaValid := len(errs) == 0
 			tamper, err := s.DetectTampering(ctx, id)
 			if err == nil {
 				for _, ch := range tamper {
-					errs = append(errs, store.ValidationError{
-						Field:   "direct-edit." + ch.Field,
-						Message: fmt.Sprintf("detected manual change (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
-					})
+					if schemaValid {
+						// Schema-valid direct edit: treat as a warning, sync would accept it
+						warns = append(warns, store.ValidationError{
+							Field:   "direct-edit." + ch.Field,
+							Message: fmt.Sprintf("detected manual change (%q -> %q) — schema valid, run 'docket sync' to accept. Next time use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
+						})
+					} else {
+						errs = append(errs, store.ValidationError{
+							Field:   "direct-edit." + ch.Field,
+							Message: fmt.Sprintf("detected manual change (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
+						})
+					}
 				}
 			}
 
 			if format == "json" {
-				printJSON(cmd, map[string]interface{}{
+				printJSON(cmd, map[string]any{
 					"valid":    len(errs) == 0,
 					"errors":   errs,
 					"warnings": warns,
@@ -72,17 +81,26 @@ var validateCmd = &cobra.Command{
 			}
 			if changes, err := s.DetectTamperingAll(ctx); err == nil {
 				for _, ch := range changes {
-					allErrs[ch.ID] = append(allErrs[ch.ID], store.ValidationError{
-						Field:   "direct-edit." + ch.Field,
-						Message: fmt.Sprintf("detected manual change (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(ch.ID, ch.Field, ch.Actual)),
-					})
+					// Only treat as error if the ticket also has schema errors;
+					// if schema-valid, the edit is acceptable — warn and note sync will accept it.
+					if _, hasErrs := allErrs[ch.ID]; hasErrs {
+						allErrs[ch.ID] = append(allErrs[ch.ID], store.ValidationError{
+							Field:   "direct-edit." + ch.Field,
+							Message: fmt.Sprintf("detected manual change (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(ch.ID, ch.Field, ch.Actual)),
+						})
+					} else {
+						allWarns[ch.ID] = append(allWarns[ch.ID], store.ValidationError{
+							Field:   "direct-edit." + ch.Field,
+							Message: fmt.Sprintf("detected manual change (%q -> %q) — schema valid, run 'docket sync' to accept. Next time use: %s", ch.Expected, ch.Actual, prescriptiveCommand(ch.ID, ch.Field, ch.Actual)),
+						})
+					}
 				}
 			}
 
 			if format == "json" {
 				// This is a bit complex for JSON because we don't have a list of all IDs easily here
 				// But we can just report what we found
-				printJSON(cmd, map[string]interface{}{
+				printJSON(cmd, map[string]any{
 					"errors":   allErrs,
 					"warnings": allWarns,
 				})

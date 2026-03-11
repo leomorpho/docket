@@ -29,6 +29,13 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("--title is required")
 		}
 
+		// Quality warnings (advisory only — never block creation)
+		if desc == "" || desc == "-" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: --desc not provided. Add context so other agents can pick up this ticket without asking questions.\n  Tip: docket update TKT-NNN --desc \"...\"\n")
+		} else if len(strings.Fields(desc)) < 20 {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: description is very short. Add enough context for another agent to execute this without clarification.\n")
+		}
+
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
@@ -66,7 +73,7 @@ var createCmd = &cobra.Command{
 		// 4. Parse labels
 		var labelList []string
 		if labels != "" {
-			for _, l := range strings.Split(labels, ",") {
+			for l := range strings.SplitSeq(labels, ",") {
 				labelList = append(labelList, strings.TrimSpace(l))
 			}
 		}
@@ -97,7 +104,7 @@ var createCmd = &cobra.Command{
 
 		// 7. Output
 		if format == "json" {
-			printJSON(cmd, map[string]interface{}{
+			printJSON(cmd, map[string]any{
 				"id":       t.ID,
 				"seq":      t.Seq,
 				"title":    t.Title,
@@ -106,6 +113,7 @@ var createCmd = &cobra.Command{
 			})
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Created %s: %s\n", t.ID, t.Title)
+			fmt.Fprintf(cmd.OutOrStdout(), "  Tip: add acceptance criteria: docket ac add %s --desc \"specific testable outcome\"\n", t.ID)
 		}
 		return nil
 	},

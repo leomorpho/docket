@@ -15,14 +15,28 @@ var helpJSONCmd = &cobra.Command{
 	Use:   "help-json",
 	Short: "Print machine-readable CLI manifest",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manifest := map[string]interface{}{
+		manifest := map[string]any{
 			"binary":      "docket",
 			"version":     Version,
 			"description": rootCmd.Short,
-			"agent_instructions": "Do not edit .docket/tickets/*.md or .docket/manifest.json directly. Use docket commands only.",
-			"global_flags": map[string]interface{}{
-				"--format": map[string]interface{}{"type": "string", "values": []string{"human", "json", "context", "md"}, "default": "human"},
-				"--repo":   map[string]interface{}{"type": "string", "default": "current working directory"},
+			"agent_instructions": map[string]any{
+				"file_access": "Do not read, edit, or create .docket/tickets/*.md or .docket/manifest.json directly. Always use docket CLI commands. The CLI applies computed fields (AC status, linked files, state history) that raw files do not include.",
+				"ticket_quality": map[string]any{
+					"size":        "Keep tickets atomic — one deliverable completable in a single focused session. If a task touches more than 3 files or has multiple logical phases, split it into child tickets under a parent epic using --parent TKT-NNN.",
+					"description": "The description must explain context, constraints, and the 'why' — not just restate the title. A cheap LLM should be able to pick up the ticket and execute it without asking clarifying questions.",
+					"ac":          "Every ticket needs at least 2 acceptance criteria that are specific and testable. Add them immediately after creation: docket ac add TKT-NNN --desc 'specific observable outcome'",
+					"comments":    "Add a comment for every significant decision made during work: docket comment TKT-NNN --body 'Chose X over Y because...'",
+				},
+				"workflow": map[string]any{
+					"start":   "docket list --state open --format context",
+					"pick_up": "docket show TKT-NNN --format context",
+					"work":    "docket update TKT-NNN --state in-progress",
+					"finish":  "docket update TKT-NNN --state in-review && docket session compress TKT-NNN",
+				},
+			},
+			"global_flags": map[string]any{
+				"--format": map[string]any{"type": "string", "values": []string{"human", "json", "context", "md"}, "default": "human"},
+				"--repo":   map[string]any{"type": "string", "default": "current working directory"},
 			},
 			"commands":    buildCommandManifest(rootCmd),
 			"environment": map[string]string{"DOCKET_ACTOR": "Set actor identity, e.g. 'agent:claude-sonnet-4-6'. Falls back to git config user.name."},
@@ -38,8 +52,8 @@ var helpJSONCmd = &cobra.Command{
 	},
 }
 
-func buildCommandManifest(root *cobra.Command) []map[string]interface{} {
-	entries := []map[string]interface{}{}
+func buildCommandManifest(root *cobra.Command) []map[string]any {
+	entries := []map[string]any{}
 
 	var walk func(parentPath string, c *cobra.Command)
 	walk = func(parentPath string, c *cobra.Command) {
@@ -54,7 +68,7 @@ func buildCommandManifest(root *cobra.Command) []map[string]interface{} {
 		}
 
 		full := strings.TrimSpace(strings.Join([]string{parentPath, c.Name()}, " "))
-		entry := map[string]interface{}{
+		entry := map[string]any{
 			"name":        full,
 			"synopsis":    fmt.Sprintf("docket %s", c.Use),
 			"description": c.Short,
@@ -76,10 +90,10 @@ func buildCommandManifest(root *cobra.Command) []map[string]interface{} {
 	return entries
 }
 
-func commandFlags(c *cobra.Command) map[string]interface{} {
-	flags := map[string]interface{}{}
+func commandFlags(c *cobra.Command) map[string]any {
+	flags := map[string]any{}
 	c.Flags().VisitAll(func(f *pflag.Flag) {
-		flags["--"+f.Name] = map[string]interface{}{
+		flags["--"+f.Name] = map[string]any{
 			"type":    f.Value.Type(),
 			"default": f.DefValue,
 		}
@@ -114,8 +128,8 @@ func commandExamples(name string) []string {
 	return []string{fmt.Sprintf("docket %s", name)}
 }
 
-func commandOutputShape(name string) map[string]interface{} {
-	shapes := map[string]map[string]interface{}{
+func commandOutputShape(name string) map[string]any {
+	shapes := map[string]map[string]any{
 		"create":    {"human": "Created TKT-001: <title>", "json": map[string]string{"id": "string", "seq": "int", "title": "string", "state": "string"}},
 		"list":      {"human": "table/lines", "json": "array of tickets"},
 		"show":      {"human": "expanded ticket", "json": "ticket object", "context": "compact ticket context"},
@@ -125,7 +139,7 @@ func commandOutputShape(name string) map[string]interface{} {
 	if v, ok := shapes[name]; ok {
 		return v
 	}
-	return map[string]interface{}{"human": "command output", "json": "when --format json is supported"}
+	return map[string]any{"human": "command output", "json": "when --format json is supported"}
 }
 
 func init() {

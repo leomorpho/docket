@@ -43,12 +43,37 @@
     },
     "TKT-116": {
       "title": "Add README.md inside .docket/tickets/ as a deterrent",
-      "state": "in-review",
+      "state": "done",
       "priority": 3
     },
     "TKT-117": {
       "title": "Add docket hook to warn on direct ticket file reads",
       "state": "done",
+      "priority": 3
+    },
+    "TKT-118": {
+      "title": "Smarter direct-edit validation: accept valid, reject+educate invalid",
+      "state": "in-progress",
+      "priority": 1
+    },
+    "TKT-119": {
+      "title": "Expand help-json agent_instructions with ticket-writing guide",
+      "state": "in-progress",
+      "priority": 1
+    },
+    "TKT-120": {
+      "title": "docket create quality validation: enforce description and AC minimums",
+      "state": "in-progress",
+      "priority": 2
+    },
+    "TKT-121": {
+      "title": "docket validate quality checks: AC count, desc length, reasoning trail",
+      "state": "in-progress",
+      "priority": 2
+    },
+    "TKT-122": {
+      "title": "Version update notifications: detect and surface new docket releases",
+      "state": "in-progress",
       "priority": 3
     }
   }

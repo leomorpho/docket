@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/leoaudibert/docket/internal/store"
 	"github.com/leoaudibert/docket/internal/store/local"
@@ -27,6 +28,43 @@ var syncCmd = &cobra.Command{
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Synced index: %d tickets.\n", len(tickets))
+
+		// Reconcile any direct edits
+		results, err := s.ReconcileTampering(ctx)
+		if err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not reconcile direct edits: %v\n", err)
+			return nil
+		}
+
+		if len(results) == 0 {
+			return nil
+		}
+
+		accepted := 0
+		rejected := 0
+		for _, r := range results {
+			if r.Accepted {
+				accepted++
+				// Build a hint about what changed
+				fields := make([]string, 0, len(r.Changes))
+				for _, ch := range r.Changes {
+					fields = append(fields, ch.Field)
+				}
+				hint := prescriptiveCommand(r.ID, r.Changes[0].Field, r.Changes[0].Actual)
+				fmt.Fprintf(cmd.OutOrStdout(), "  accepted (valid): %s — direct edit detected (fields: %s). Next time use: %s\n",
+					r.ID, strings.Join(fields, ", "), hint)
+			} else {
+				rejected++
+				fmt.Fprintf(cmd.ErrOrStderr(), "  rejected (invalid): %s — direct edit has schema errors:\n", r.ID)
+				for _, e := range r.Errors {
+					fmt.Fprintf(cmd.ErrOrStderr(), "    - %s: %s\n", e.Field, e.Message)
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "  Fix with CLI instead of editing the file directly.\n")
+			}
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Reconciled %d direct edits: %d accepted, %d rejected.\n",
+			len(results), accepted, rejected)
 		return nil
 	},
 }

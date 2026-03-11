@@ -11,6 +11,11 @@ import (
 	"github.com/leoaudibert/docket/internal/ticket"
 )
 
+// wordCount returns the number of whitespace-separated words in s.
+func wordCount(s string) int {
+	return len(strings.Fields(s))
+}
+
 // Validate checks whether a ticket is schema-valid for this backend.
 func (s *Store) Validate(ctx context.Context, id string) ([]store.ValidationError, error) {
 	errs, _, err := s.ValidateFile(id)
@@ -115,6 +120,20 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 
 	if len(t.Labels) == 0 {
 		warns = append(warns, store.ValidationError{Field: "labels", Message: "labels is empty"})
+	}
+
+	// Quality warnings
+	if len(t.AC) < 2 {
+		warns = append(warns, store.ValidationError{Field: "quality.ac", Message: "fewer than 2 acceptance criteria — add specific testable outcomes with: docket ac add"})
+	}
+
+	wc := wordCount(t.Description)
+	if wc < 20 {
+		warns = append(warns, store.ValidationError{Field: "quality.desc", Message: fmt.Sprintf("description is short (%d words) — consider adding more context so agents can execute without clarification", wc)})
+	}
+
+	if t.State == "in-progress" && len(t.Comments) == 0 {
+		warns = append(warns, store.ValidationError{Field: "quality.comments", Message: "ticket is in-progress with no comments — add reasoning with: docket comment TKT-NNN --body '...'"})
 	}
 
 	return errs, warns, nil
