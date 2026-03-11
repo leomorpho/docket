@@ -2,3 +2,6 @@ docket
 .docket/index.db
 .docket/semantic/
 .docket/tickets/*/sessions/
+web/node_modules
+web/.svelte-kit
+web/build

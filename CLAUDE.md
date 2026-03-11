@@ -2,6 +2,16 @@
 
 This repo uses `docket` for ticket tracking. Read these instructions carefully.
 
+### How to read ticket data — always use the CLI
+
+| What you want | Command |
+|---|---|
+| List open tickets | `docket list --state open --format context` |
+| Read a specific ticket | `docket show TKT-NNN --format context` |
+| Find related tickets | `docket related TKT-NNN` |
+
+**Do not read `.docket/tickets/*.md` files directly.** The CLI applies computed fields — AC completion status, linked files, git-blame context, state history — that the raw markdown files do not include. Reading the files directly gives you an incomplete picture.
+
 ### At the start of every session
 1. Run `docket list --state open --format context` to see open tickets.
 2. Determine which ticket your work relates to.
@@ -36,7 +46,7 @@ This repo uses `docket` for ticket tracking. Read these instructions carefully.
   (This will prompt you to write the summary — follow the format shown)
 
 ### Rules
-- NEVER edit `.docket/tickets/*.md` files directly without running `docket validate` afterward.
+- NEVER read or edit `.docket/tickets/*.md` files directly — use `docket show` and `docket update` instead.
 - ALWAYS use `docket` commands to update ticket state — direct edits are caught by pre-commit hooks.
 - Set your actor identity: `export DOCKET_ACTOR="agent:claude-sonnet-4-6"`
 - For full command reference: `docket help-json`

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, json, re\ntry:\n    data = json.load(sys.stdin)\n    path = data.get('file_path', '')\n    if re.search(r'\\.docket/tickets/TKT-\\d+\\.md$', path):\n        tkt = re.search(r'(TKT-\\d+)\\.md$', path).group(1)\n        print(f'WARNING: Reading {path} directly. Use: docket show {tkt} --format context')\nexcept Exception:\n    pass\n\""
+          }
+        ]
+      }
+    ]
+  }
+}
