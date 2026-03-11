@@ -8,10 +8,19 @@ import (
 )
 
 var (
-	semanticProviderFactory = semantic.NewProvider
-	semanticFreshnessFn     = semantic.CheckFreshness
-	semanticIncrementalFn   = semantic.IncrementalRebuild
-	semanticFullFn          = semantic.FullRebuild
+	semanticProviderFactory                        = semantic.NewProvider
+	semanticFreshnessFn                            = semantic.CheckFreshness
+	semanticIncrementalFn                          = semantic.IncrementalRebuild
+	semanticFullFn                                 = semantic.FullRebuild
+	semanticOpenVectorStore                        = semantic.OpenVectorStore
+	semanticLexicalScorer   semantic.LexicalScorer = semantic.SimpleLexicalScorer{}
+	semanticVectorScoreFn                          = func(ctx context.Context, source *ticket.Ticket, cfg semantic.Config, provider semantic.Provider, repoRoot string, limit int) ([]semantic.VectorScore, error) {
+		store, err := semanticOpenVectorStore(repoRoot)
+		if err != nil {
+			return nil, err
+		}
+		return semantic.VectorScorer{Provider: provider, Store: store}.ScoreRelated(ctx, source, cfg, limit)
+	}
 )
 
 func loadSemanticConfig(repoRoot string) (semantic.Config, error) {

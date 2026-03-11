@@ -80,6 +80,51 @@ func TestSemanticStatusCmd(t *testing.T) {
 	}
 }
 
+func TestSemanticStatusCmdWarnings(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	cfg := ticket.DefaultConfig()
+	cfg.Semantic.Enabled = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	origFactory := semanticProviderFactory
+	origFreshness := semanticFreshnessFn
+	defer func() {
+		semanticProviderFactory = origFactory
+		semanticFreshnessFn = origFreshness
+	}()
+	semanticProviderFactory = func(cfg semantic.Config, opts semantic.ProviderOptions) (semantic.Provider, error) {
+		return &testSemanticProvider{status: semantic.Status{
+			Provider:  cfg.Provider,
+			Model:     cfg.Model,
+			Available: false,
+			Details:   "uv missing",
+		}}, nil
+	}
+	semanticFreshnessFn = func(ctx context.Context, repoRoot string, cfg semantic.Config) (semantic.Freshness, error) {
+		return semantic.Freshness{Status: semantic.FreshnessVersionMismatch, Reason: "stale"}, nil
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"semantic", "status"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(b.Bytes(), &got); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+	warnings, ok := got["warnings"].([]interface{})
+	if !ok || len(warnings) < 2 {
+		t.Fatalf("expected warnings in payload, got %v", got["warnings"])
+	}
+}
+
 func TestSemanticRebuildCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

@@ -16,6 +16,10 @@ type Config struct {
 	UVCacheDir               string
 	LexicalWeight            float64
 	VectorWeight             float64
+	TitleWeight              float64
+	DescriptionWeight        float64
+	ACWeight                 float64
+	HandoffWeight            float64
 }
 
 type Input struct {
@@ -64,6 +68,10 @@ const (
 	EnvSemanticUVCacheDir               = "DOCKET_SEMANTIC_UV_CACHE_DIR"
 	EnvSemanticLexicalWeight            = "DOCKET_SEMANTIC_LEXICAL_WEIGHT"
 	EnvSemanticVectorWeight             = "DOCKET_SEMANTIC_VECTOR_WEIGHT"
+	EnvSemanticTitleWeight              = "DOCKET_SEMANTIC_TITLE_WEIGHT"
+	EnvSemanticDescriptionWeight        = "DOCKET_SEMANTIC_DESCRIPTION_WEIGHT"
+	EnvSemanticACWeight                 = "DOCKET_SEMANTIC_AC_WEIGHT"
+	EnvSemanticHandoffWeight            = "DOCKET_SEMANTIC_HANDOFF_WEIGHT"
 )
 
 var UVPinnedPackages = []string{

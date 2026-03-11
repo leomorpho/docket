@@ -21,6 +21,9 @@ func TestDefaultConfigSemanticDefaults(t *testing.T) {
 	if cfg.Semantic.LexicalWeight != 0.35 || cfg.Semantic.VectorWeight != 0.65 {
 		t.Fatalf("unexpected weights: %+v", cfg.Semantic)
 	}
+	if cfg.Semantic.TitleWeight != 3.0 || cfg.Semantic.DescriptionWeight != 1.5 || cfg.Semantic.ACWeight != 2.0 || cfg.Semantic.HandoffWeight != 1.25 {
+		t.Fatalf("unexpected field weights: %+v", cfg.Semantic)
+	}
 }
 
 func TestLoadConfigAppliesSemanticDefaults(t *testing.T) {
@@ -53,6 +56,7 @@ func TestLoadConfigSemanticEnvOverrides(t *testing.T) {
 	cfg.Semantic.HFHome = "/config/hf"
 	cfg.Semantic.LexicalWeight = 0.2
 	cfg.Semantic.VectorWeight = 0.8
+	cfg.Semantic.TitleWeight = 4
 	if err := SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -65,6 +69,10 @@ func TestLoadConfigSemanticEnvOverrides(t *testing.T) {
 	t.Setenv("DOCKET_SEMANTIC_UV_CACHE_DIR", "/env/uv")
 	t.Setenv("DOCKET_SEMANTIC_LEXICAL_WEIGHT", "0.4")
 	t.Setenv("DOCKET_SEMANTIC_VECTOR_WEIGHT", "0.6")
+	t.Setenv("DOCKET_SEMANTIC_TITLE_WEIGHT", "5")
+	t.Setenv("DOCKET_SEMANTIC_DESCRIPTION_WEIGHT", "1.2")
+	t.Setenv("DOCKET_SEMANTIC_AC_WEIGHT", "2.4")
+	t.Setenv("DOCKET_SEMANTIC_HANDOFF_WEIGHT", "0.9")
 
 	loaded, err := LoadConfig(tmpDir)
 	if err != nil {
@@ -81,6 +89,9 @@ func TestLoadConfigSemanticEnvOverrides(t *testing.T) {
 	}
 	if loaded.Semantic.LexicalWeight != 0.4 || loaded.Semantic.VectorWeight != 0.6 {
 		t.Fatalf("unexpected weights: %+v", loaded.Semantic)
+	}
+	if loaded.Semantic.TitleWeight != 5 || loaded.Semantic.DescriptionWeight != 1.2 || loaded.Semantic.ACWeight != 2.4 || loaded.Semantic.HandoffWeight != 0.9 {
+		t.Fatalf("unexpected field weights: %+v", loaded.Semantic)
 	}
 }
 

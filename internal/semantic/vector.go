@@ -3,6 +3,7 @@ package semantic
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	chromem "github.com/philippgille/chromem-go"
 )
@@ -81,6 +82,11 @@ func (s *VectorStore) Query(ctx context.Context, embedding []float32, limit int)
 		return nil, fmt.Errorf("vector store is not initialized")
 	}
 	results, err := s.collection.QueryEmbedding(ctx, embedding, limit, nil, nil)
+	if err != nil {
+		if strings.Contains(err.Error(), "nResults must be <=") {
+			results, err = s.collection.QueryEmbedding(ctx, embedding, 1, nil, nil)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

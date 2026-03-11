@@ -14,6 +14,7 @@ type semanticStatusView struct {
 	Model      string                  `json:"model"`
 	Available  bool                    `json:"available"`
 	Details    string                  `json:"details,omitempty"`
+	Warnings   []string                `json:"warnings,omitempty"`
 	CachePaths map[string]string       `json:"cache_paths"`
 	Freshness  semantic.Freshness      `json:"freshness"`
 	Index      semanticStatusIndexView `json:"index"`
@@ -61,6 +62,7 @@ var semanticStatusCmd = &cobra.Command{
 			Model:     status.Model,
 			Available: status.Available,
 			Details:   status.Details,
+			Warnings:  semanticWarnings(status, freshness),
 			CachePaths: map[string]string{
 				"hf_home":                    cfg.HFHome,
 				"sentence_transformers_home": cfg.SentenceTransformersHome,
@@ -78,6 +80,7 @@ var semanticStatusCmd = &cobra.Command{
 		if !metadata.UpdatedAt.IsZero() {
 			view.Index.LastUpdated = metadata.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z")
 		}
+		view.Warnings = dedupeWarnings(view.Warnings)
 
 		if format == "json" {
 			printJSON(cmd, view)
@@ -89,6 +92,9 @@ var semanticStatusCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Available: %t\n", view.Available)
 		if view.Details != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "Details: %s\n", view.Details)
+		}
+		for _, warning := range view.Warnings {
+			fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s\n", warning)
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "Cache paths:")
 		keys := make([]string, 0, len(view.CachePaths))

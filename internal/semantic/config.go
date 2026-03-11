@@ -20,5 +20,9 @@ func ConfigFromTicket(cfg ticket.SemanticConfig) Config {
 		UVCacheDir:               cfg.UVCacheDir,
 		LexicalWeight:            cfg.LexicalWeight,
 		VectorWeight:             cfg.VectorWeight,
+		TitleWeight:              cfg.TitleWeight,
+		DescriptionWeight:        cfg.DescriptionWeight,
+		ACWeight:                 cfg.ACWeight,
+		HandoffWeight:            cfg.HandoffWeight,
 	}
 }

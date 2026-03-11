@@ -20,6 +20,10 @@ type SemanticConfig struct {
 	UVCacheDir               string  `json:"uv_cache_dir,omitempty"`
 	LexicalWeight            float64 `json:"lexical_weight"`
 	VectorWeight             float64 `json:"vector_weight"`
+	TitleWeight              float64 `json:"title_weight"`
+	DescriptionWeight        float64 `json:"description_weight"`
+	ACWeight                 float64 `json:"ac_weight"`
+	HandoffWeight            float64 `json:"handoff_weight"`
 }
 
 type Config struct {
@@ -55,6 +59,10 @@ func defaultSemanticConfig() SemanticConfig {
 		UVCacheDir:               filepath.Join(cacheRoot, "uv"),
 		LexicalWeight:            0.35,
 		VectorWeight:             0.65,
+		TitleWeight:              3.0,
+		DescriptionWeight:        1.5,
+		ACWeight:                 2.0,
+		HandoffWeight:            1.25,
 	}
 }
 
@@ -128,6 +136,18 @@ func (c *Config) applyDefaults() {
 	if c.Semantic.VectorWeight == 0 {
 		c.Semantic.VectorWeight = def.Semantic.VectorWeight
 	}
+	if c.Semantic.TitleWeight == 0 {
+		c.Semantic.TitleWeight = def.Semantic.TitleWeight
+	}
+	if c.Semantic.DescriptionWeight == 0 {
+		c.Semantic.DescriptionWeight = def.Semantic.DescriptionWeight
+	}
+	if c.Semantic.ACWeight == 0 {
+		c.Semantic.ACWeight = def.Semantic.ACWeight
+	}
+	if c.Semantic.HandoffWeight == 0 {
+		c.Semantic.HandoffWeight = def.Semantic.HandoffWeight
+	}
 }
 
 func (c *Config) applyEnvOverrides() error {
@@ -144,6 +164,18 @@ func (c *Config) applyEnvOverrides() error {
 		return err
 	}
 	if err := applyFloatEnv("DOCKET_SEMANTIC_VECTOR_WEIGHT", &c.Semantic.VectorWeight); err != nil {
+		return err
+	}
+	if err := applyFloatEnv("DOCKET_SEMANTIC_TITLE_WEIGHT", &c.Semantic.TitleWeight); err != nil {
+		return err
+	}
+	if err := applyFloatEnv("DOCKET_SEMANTIC_DESCRIPTION_WEIGHT", &c.Semantic.DescriptionWeight); err != nil {
+		return err
+	}
+	if err := applyFloatEnv("DOCKET_SEMANTIC_AC_WEIGHT", &c.Semantic.ACWeight); err != nil {
+		return err
+	}
+	if err := applyFloatEnv("DOCKET_SEMANTIC_HANDOFF_WEIGHT", &c.Semantic.HandoffWeight); err != nil {
 		return err
 	}
 	return nil
