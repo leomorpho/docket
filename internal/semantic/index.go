@@ -69,7 +69,7 @@ func enumerateLocalTickets(ctx context.Context, backend *local.Store) ([]*ticket
 		if err != nil {
 			return nil, err
 		}
-		if tk == nil || tk.State == ticket.StateArchived {
+		if tk == nil || tk.State == "archived" {
 			continue
 		}
 		tickets = append(tickets, tk)

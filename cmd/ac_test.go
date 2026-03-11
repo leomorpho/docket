@@ -21,7 +21,7 @@ func TestACAddCompleteCheckAndList(t *testing.T) {
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "AC", State: ticket.StateTodo, Priority: 1,
+		ID: "TKT-001", Seq: 1, Title: "AC", State: ticket.State("todo"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
 		AC: []ticket.AcceptanceCriterion{{Description: "First"}, {Description: "Tests pass"}},
 	}); err != nil {
@@ -111,7 +111,7 @@ func TestACCheck_NoItemsIsComplete(t *testing.T) {
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "No AC", State: ticket.StateTodo, Priority: 1,
+		ID: "TKT-002", Seq: 2, Title: "No AC", State: ticket.State("todo"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)

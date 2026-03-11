@@ -21,10 +21,10 @@ func TestCheckCmd_R001AndR006AndFix(t *testing.T) {
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
 	old := now.Add(-8 * 24 * time.Hour)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "Blocker", State: ticket.StateDone, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "Blocker", State: ticket.State("done"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Target", State: ticket.StateInProgress, Priority: 1, BlockedBy: []string{"TKT-002"}, CreatedAt: old, UpdatedAt: old, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Target", State: ticket.State("in-progress"), Priority: 1, BlockedBy: []string{"TKT-002"}, CreatedAt: old, UpdatedAt: old, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,10 +63,10 @@ func TestCheckCmd_JSONAndAllClean(t *testing.T) {
 
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-010", Seq: 10, Title: "Clean", State: ticket.StateTodo, Priority: 2, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-010", Seq: 10, Title: "Clean", State: ticket.State("todo"), Priority: 2, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-011", Seq: 11, Title: "Done", State: ticket.StateDone, Priority: 2, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-011", Seq: 11, Title: "Done", State: ticket.State("done"), Priority: 2, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
 		t.Fatal(err)
 	}
 

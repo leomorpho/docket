@@ -27,7 +27,7 @@ func TestUpdateCmd(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Original Title",
-		State:       ticket.StateBacklog,
+		State:       ticket.State("backlog"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -51,7 +51,7 @@ func TestUpdateCmd(t *testing.T) {
 	}
 
 	updated, _ := s.GetTicket(ctx, "TKT-001")
-	if updated.State != ticket.StateTodo {
+	if updated.State != ticket.State("todo") {
 		t.Errorf("expected state todo, got %s", updated.State)
 	}
 
@@ -111,7 +111,7 @@ func TestUpdateCmd_Handoff(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Needs Handoff",
-		State:       ticket.StateTodo,
+		State:       ticket.State("todo"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -156,7 +156,7 @@ func TestUpdateCmd_HandoffFromStdin(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Needs Stdin Handoff",
-		State:       ticket.StateTodo,
+		State:       ticket.State("todo"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,

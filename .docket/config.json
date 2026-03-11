@@ -1,14 +1,50 @@
 {
-  "counter": 99,
+  "counter": 106,
   "backend": "local",
-  "states": [
-    "backlog",
-    "todo",
-    "in-progress",
-    "in-review",
-    "done",
-    "archived"
-  ],
+  "states": {
+    "backlog": {
+      "label": "Backlog",
+      "open": true,
+      "column": 0,
+      "next": ["todo", "archived"]
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": ["in-progress", "backlog", "archived"]
+    },
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": ["in-review", "todo", "archived"]
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": ["done", "in-progress", "archived"]
+    },
+    "done": {
+      "label": "Done",
+      "open": false,
+      "column": 4,
+      "next": ["archived", "in-progress"]
+    },
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": ["backlog"]
+    },
+    "stale": {
+      "label": "Stale",
+      "open": false,
+      "column": 6,
+      "next": ["backlog", "archived"]
+    }
+  },
   "labels": [
     "bug",
     "feature",
@@ -17,5 +53,14 @@
     "llm-only",
     "human-only"
   ],
-  "commit_sessions": false
+  "commit_sessions": false,
+  "default_state": "backlog",
+  "default_priority": 10,
+  "handoff_sections": [
+    "Current state",
+    "Decisions made",
+    "Files touched",
+    "Remaining work",
+    "AC status"
+  ]
 }

@@ -53,11 +53,15 @@ var updateCmd = &cobra.Command{
 
 		// 2. State
 		if cmd.Flags().Changed("state") && updateState != "" {
-			newState := ticket.State(updateState)
-			if !ticket.IsValidState(newState) {
+			cfg, err := ticket.LoadConfig(repo)
+			if err != nil {
+				return err
+			}
+			if !cfg.IsValidState(updateState) {
 				return fmt.Errorf("%q is not a valid state", updateState)
 			}
-			if err := ticket.ValidateTransition(t.State, newState); err != nil {
+			newState := ticket.State(updateState)
+			if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)

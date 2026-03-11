@@ -48,25 +48,26 @@ func TestACComplete(t *testing.T) {
 }
 
 func TestIsValidState(t *testing.T) {
+	cfg := DefaultConfig()
 	tests := []struct {
-		state    State
+		state    string
 		expected bool
 	}{
-		{StateBacklog, true},
-		{StateTodo, true},
-		{StateInProgress, true},
-		{StateInReview, true},
-		{StateDone, true},
-		{StateArchived, true},
+		{"backlog", true},
+		{"todo", true},
+		{"in-progress", true},
+		{"in-review", true},
+		{"done", true},
+		{"archived", true},
 		{"blocked", false},
 		{"unknown", false},
 		{"", false},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.state), func(t *testing.T) {
-			if got := IsValidState(tt.state); got != tt.expected {
-				t.Errorf("IsValidState(%q) = %v, want %v", tt.state, got, tt.expected)
+		t.Run(tt.state, func(t *testing.T) {
+			if got := cfg.IsValidState(tt.state); got != tt.expected {
+				t.Errorf("cfg.IsValidState(%q) = %v, want %v", tt.state, got, tt.expected)
 			}
 		})
 	}

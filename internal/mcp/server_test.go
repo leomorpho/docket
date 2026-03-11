@@ -20,7 +20,7 @@ func TestServeMCP_ListCreateAndUnknown(t *testing.T) {
 
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-099", Seq: 99, Title: "Existing", State: ticket.StateTodo, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-099", Seq: 99, Title: "Existing", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}}}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestServeMCP_ShowUpdateCommentAndInvalidTransition(t *testing.T) {
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.StateBacklog, Priority: 1,
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("backlog"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)

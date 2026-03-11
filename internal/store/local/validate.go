@@ -20,6 +20,11 @@ func (s *Store) Validate(ctx context.Context, id string) ([]store.ValidationErro
 // ValidateFile validates a single ticket markdown file by ID.
 // Returns a list of errors (blocking) and warnings (non-blocking).
 func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []store.ValidationError, err error) {
+	cfg, cfgErr := ticket.LoadConfig(s.RepoRoot)
+	if cfgErr != nil {
+		cfg = ticket.DefaultConfig()
+	}
+
 	path := s.ticketPath(id)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -45,7 +50,7 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 
 	if t.State == "" {
 		errs = append(errs, store.ValidationError{Field: "state", Message: "required"})
-	} else if !ticket.IsValidState(t.State) {
+	} else if !cfg.IsValidState(string(t.State)) {
 		errs = append(errs, store.ValidationError{Field: "state", Message: fmt.Sprintf("%q is not a valid state", t.State)})
 	}
 
@@ -87,19 +92,23 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 		errs = append(errs, store.ValidationError{Field: "body", Message: "## Acceptance Criteria section is required"})
 	}
 
-	// 5. Warnings
-	if len(t.Labels) == 0 {
-		warns = append(warns, store.ValidationError{Field: "labels", Message: "labels is empty"})
-	}
+	// 5. Warnings — states that require a handoff are determined by which states
+	// are closed (open: false) and meaningful for review. Use "in-review" and "done"
+	// as the handoff-required states (these are fixed workflow semantics, not config-driven yet).
+	requiresHandoff := t.State == "in-review" || t.State == "done"
 	if t.Handoff == "" {
-		if t.State == ticket.StateInReview || t.State == ticket.StateDone {
+		if requiresHandoff {
 			errs = append(errs, store.ValidationError{Field: "handoff", Message: "## Handoff section is required for in-review and done tickets"})
 		}
 		warns = append(warns, store.ValidationError{Field: "handoff", Message: "## Handoff section missing (recommended)"})
-	} else if t.State == ticket.StateInReview || t.State == ticket.StateDone {
-		for _, missing := range missingHandoffSections(t.Handoff) {
+	} else if requiresHandoff {
+		for _, missing := range missingHandoffSections(cfg, t.Handoff) {
 			errs = append(errs, store.ValidationError{Field: "handoff", Message: fmt.Sprintf("missing required subsection: %s", missing)})
 		}
+	}
+
+	if len(t.Labels) == 0 {
+		warns = append(warns, store.ValidationError{Field: "labels", Message: "labels is empty"})
 	}
 
 	return errs, warns, nil
@@ -191,17 +200,13 @@ func (s *Store) detectCycles() error {
 	return nil
 }
 
-func missingHandoffSections(handoff string) []string {
-	required := []string{
-		"**Current state:**",
-		"**Decisions made:**",
-		"**Files touched:**",
-		"**Remaining work:**",
-		"**AC status:**",
-	}
+// missingHandoffSections returns which required sections are absent from the handoff text.
+// Required sections come from cfg.HandoffSections.
+func missingHandoffSections(cfg *ticket.Config, handoff string) []string {
+	lower := strings.ToLower(handoff)
 	var missing []string
-	for _, section := range required {
-		if !strings.Contains(handoff, section) {
+	for _, section := range cfg.HandoffSections {
+		if !strings.Contains(lower, strings.ToLower(section)) {
 			missing = append(missing, section)
 		}
 	}

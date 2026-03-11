@@ -24,6 +24,11 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			return err
+		}
+
 		s := local.New(repo)
 		ctx := context.Background()
 
@@ -34,28 +39,15 @@ var listCmd = &cobra.Command{
 			IncludeArchived: listIncludeArchived,
 		}
 
-		if listState != "" {
-			if listState == "open" {
-				f.States = []ticket.State{
-					ticket.StateBacklog,
-					ticket.StateTodo,
-					ticket.StateInProgress,
-					ticket.StateInReview,
-				}
-			} else {
-				st := ticket.State(listState)
-				if !ticket.IsValidState(st) {
-					return fmt.Errorf("invalid state: %s", listState)
-				}
-				f.States = []ticket.State{st}
+		if listState != "" && listState != "open" {
+			if !cfg.IsValidState(listState) {
+				return fmt.Errorf("invalid state: %s", listState)
 			}
+			f.States = []ticket.State{ticket.State(listState)}
 		} else {
-			// Default to "open"
-			f.States = []ticket.State{
-				ticket.StateBacklog,
-				ticket.StateTodo,
-				ticket.StateInProgress,
-				ticket.StateInReview,
+			// Default and "open" both use the config-defined open states.
+			for _, s := range cfg.OpenStates() {
+				f.States = append(f.States, ticket.State(s))
 			}
 		}
 
@@ -112,7 +104,7 @@ func printContext(cmd *cobra.Command, tickets []*ticket.Ticket) {
 }
 
 func init() {
-	listCmd.Flags().StringVar(&listState, "state", "open", "filter by state (open, backlog, todo, in-progress, in-review, done, archived)")
+	listCmd.Flags().StringVar(&listState, "state", "open", "filter by state ('open' = all open states from config, or a specific state name)")
 	listCmd.Flags().StringSliceVar(&listLabels, "label", []string{}, "filter by label (repeatable)")
 	listCmd.Flags().IntVar(&listMaxPriority, "priority", 0, "max priority to show")
 	listCmd.Flags().BoolVar(&listOnlyUnblocked, "unblocked", false, "exclude blocked tickets")

@@ -64,7 +64,7 @@ func (c *Checker) fixResolvedBlockers(ctx context.Context, t *ticket.Ticket) (bo
 		if blocker == nil {
 			continue
 		}
-		if blocker.State == ticket.StateDone || blocker.State == ticket.StateArchived {
+		if blocker.State == "done" || blocker.State == "archived" {
 			resolved[blockerID] = struct{}{}
 		}
 	}

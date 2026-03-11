@@ -59,7 +59,7 @@ func (f *fakeBackend) Validate(ctx context.Context, id string) ([]store.Validati
 
 func TestChecker_R001AndR008(t *testing.T) {
 	now := time.Now().UTC()
-	b := newFake(&ticket.Ticket{ID: "TKT-001", State: ticket.StateInProgress, UpdatedAt: now.Add(-8 * 24 * time.Hour)})
+	b := newFake(&ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), UpdatedAt: now.Add(-8 * 24 * time.Hour)})
 	b.validate["TKT-001"] = []store.ValidationError{{Field: "state", Message: "bad"}}
 
 	c := NewChecker(b)
@@ -75,8 +75,8 @@ func TestChecker_R001AndR008(t *testing.T) {
 
 func TestChecker_R006Fix(t *testing.T) {
 	now := time.Now().UTC()
-	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.StateDone, UpdatedAt: now}
-	target := &ticket.Ticket{ID: "TKT-001", State: ticket.StateInProgress, BlockedBy: []string{"TKT-002"}, UpdatedAt: now.Add(-8 * 24 * time.Hour)}
+	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.State("done"), UpdatedAt: now}
+	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now.Add(-8 * 24 * time.Hour)}
 	b := newFake(blocker, target)
 
 	c := NewChecker(b)

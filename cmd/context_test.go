@@ -27,7 +27,7 @@ func TestContextCmd_HumanJsonAndRange(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Ctx Ticket",
-		State:       ticket.StateInProgress,
+		State:       ticket.State("in-progress"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,

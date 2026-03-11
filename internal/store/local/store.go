@@ -100,7 +100,7 @@ func (s *Store) ListTickets(ctx context.Context, f store.Filter) ([]*ticket.Tick
 }
 
 func (s *Store) matches(t *ticket.Ticket, f store.Filter) bool {
-	if !f.IncludeArchived && t.State == ticket.StateArchived {
+	if !f.IncludeArchived && t.State == "archived" {
 		return false
 	}
 
@@ -117,7 +117,7 @@ func (s *Store) matches(t *ticket.Ticket, f store.Filter) bool {
 		}
 	} else if !f.IncludeArchived {
 		// Default: all non-archived
-		if t.State == ticket.StateArchived {
+		if t.State == "archived" {
 			return false
 		}
 	}

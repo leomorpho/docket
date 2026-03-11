@@ -42,9 +42,9 @@ func TestRelatedCmdLexicalOnly(t *testing.T) {
 	relatedLimit = 5
 
 	seedRelatedTickets(t, tmpDir,
-		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", Description: "local vector index", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", Description: "search", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", Description: "local vector index", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", Description: "search", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", State: ticket.State("todo"), Priority: 1},
 	)
 
 	b := new(bytes.Buffer)
@@ -90,8 +90,8 @@ func TestRelatedCmdAutoFallbackWarns(t *testing.T) {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	seedRelatedTicketsWithoutConfig(t, tmpDir,
-		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", State: ticket.State("todo"), Priority: 1},
 	)
 
 	origFactory := semanticProviderFactory
@@ -143,7 +143,7 @@ func TestRelatedCmdSemanticOnFailsWhenUnavailable(t *testing.T) {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	seedRelatedTicketsWithoutConfig(t, tmpDir,
-		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", State: ticket.State("todo"), Priority: 1},
 	)
 
 	origFactory := semanticProviderFactory
@@ -184,9 +184,9 @@ func TestRelatedCmdHybridUsesVectorScores(t *testing.T) {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	seedRelatedTicketsWithoutConfig(t, tmpDir,
-		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic search ranking", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic search ranking", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", State: ticket.State("todo"), Priority: 1},
 	)
 
 	origFactory := semanticProviderFactory
@@ -248,9 +248,9 @@ func TestRelatedCmdEndToEndSemanticIndexing(t *testing.T) {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	seedRelatedTicketsWithoutConfig(t, tmpDir,
-		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", Description: "local vector index", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", Description: "vector scoring", State: ticket.StateTodo, Priority: 1},
-		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", Description: "shipping docs", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", Description: "local vector index", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", Description: "vector scoring", State: ticket.State("todo"), Priority: 1},
+		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", Description: "shipping docs", State: ticket.State("todo"), Priority: 1},
 	)
 
 	origFactory := semanticProviderFactory

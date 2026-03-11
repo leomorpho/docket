@@ -4,29 +4,6 @@ import "time"
 
 type State string
 
-const (
-	StateBacklog    State = "backlog"
-	StateTodo       State = "todo"
-	StateInProgress State = "in-progress"
-	StateInReview   State = "in-review"
-	StateDone       State = "done"
-	StateArchived   State = "archived"
-)
-
-var ValidStates = []State{
-	StateBacklog, StateTodo, StateInProgress,
-	StateInReview, StateDone, StateArchived,
-}
-
-func IsValidState(s State) bool {
-	for _, v := range ValidStates {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
 type PlanStep struct {
 	Description string `yaml:"description"`
 	Status      string `yaml:"status"` // "pending" | "done"

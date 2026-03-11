@@ -192,7 +192,7 @@ func (s *Store) queryTickets(ctx context.Context, f store.Filter) ([]*ticket.Tic
 
 	if !f.IncludeArchived {
 		query += " AND state != ?"
-		args = append(args, ticket.StateArchived)
+		args = append(args, "archived")
 	}
 
 	if len(f.States) > 0 {

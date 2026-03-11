@@ -23,9 +23,9 @@ func TestListCmd(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Open Ticket", State: ticket.StateTodo, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Done Ticket", State: ticket.StateDone, Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "Archived Ticket", State: ticket.StateArchived, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Open Ticket", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Done Ticket", State: ticket.State("done"), Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "Archived Ticket", State: ticket.State("archived"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
 	// 1. Default list (shows only open, which means everything except done/archived by default config, but TASK-008 says "open = all except done/archived")
 	b := new(bytes.Buffer)

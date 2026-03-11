@@ -29,6 +29,19 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("--title is required")
 		}
 
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			return err
+		}
+
+		// Apply config defaults when flags are not explicitly set.
+		if !cmd.Flags().Changed("state") {
+			state = cfg.DefaultState
+		}
+		if !cmd.Flags().Changed("priority") {
+			priority = cfg.DefaultPriority
+		}
+
 		s := local.New(repo)
 		ctx := context.Background()
 
@@ -59,9 +72,8 @@ var createCmd = &cobra.Command{
 		}
 
 		// 5. Validate state
-		tState := ticket.State(state)
-		if !ticket.IsValidState(tState) {
-			return fmt.Errorf("%q is not a valid state. Valid states are: %v", state, ticket.ValidStates)
+		if !cfg.IsValidState(state) {
+			return fmt.Errorf("%q is not a valid state. Valid states: %s", state, strings.Join(cfg.StateNames(), ", "))
 		}
 
 		now := time.Now().UTC().Truncate(time.Second)
@@ -72,7 +84,7 @@ var createCmd = &cobra.Command{
 			Description: desc,
 			Priority:    priority,
 			Labels:      labelList,
-			State:       tState,
+			State:       ticket.State(state),
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   actor,
@@ -102,9 +114,9 @@ var createCmd = &cobra.Command{
 func init() {
 	createCmd.Flags().StringVar(&title, "title", "", "ticket title (required)")
 	createCmd.Flags().StringVar(&desc, "desc", "", "ticket description (use - for stdin)")
-	createCmd.Flags().IntVar(&priority, "priority", 10, "ticket priority")
+	createCmd.Flags().IntVar(&priority, "priority", 0, "ticket priority (default from config)")
 	createCmd.Flags().StringVar(&labels, "labels", "", "comma-separated labels")
-	createCmd.Flags().StringVar(&state, "state", "backlog", "initial state")
+	createCmd.Flags().StringVar(&state, "state", "", "initial state (default from config)")
 
 	rootCmd.AddCommand(createCmd)
 }

@@ -25,7 +25,7 @@ func TestSessionAttachListCompress(t *testing.T) {
 
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Sess", State: ticket.StateTodo, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Sess", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
 

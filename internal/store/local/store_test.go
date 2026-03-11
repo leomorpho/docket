@@ -19,7 +19,7 @@ func TestStoreRoundTrip(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Test Ticket",
-		State:       ticket.StateTodo,
+		State:       ticket.State("todo"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -93,7 +93,7 @@ func TestStoreUpdate(t *testing.T) {
 	t1 := &ticket.Ticket{
 		ID:    "TKT-001",
 		Title: "Initial Title",
-		State: ticket.StateTodo,
+		State: ticket.State("todo"),
 	}
 	s.CreateTicket(ctx, t1)
 
@@ -105,7 +105,7 @@ func TestStoreUpdate(t *testing.T) {
 
 	// Update fields
 	t1.Title = "Updated Title"
-	t1.State = ticket.StateInProgress
+	t1.State = ticket.State("in-progress")
 	if err := s.UpdateTicket(ctx, t1); err != nil {
 		t.Fatalf("UpdateTicket failed: %v", err)
 	}
@@ -125,9 +125,9 @@ func TestStoreFilter(t *testing.T) {
 	s := New(tmpDir)
 	ctx := context.Background()
 
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "T1", State: ticket.StateTodo, Priority: 2})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "T2", State: ticket.StateInProgress, Priority: 1})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "T3", State: ticket.StateArchived, Priority: 1})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "T1", State: ticket.State("todo"), Priority: 2})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "T2", State: ticket.State("in-progress"), Priority: 1})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "T3", State: ticket.State("archived"), Priority: 1})
 
 	// Default filter (no archived)
 	list, _ := s.ListTickets(ctx, store.Filter{})
@@ -139,7 +139,7 @@ func TestStoreFilter(t *testing.T) {
 	}
 
 	// State filter
-	list, _ = s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.StateTodo}})
+	list, _ = s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.State("todo")}})
 	if len(list) != 1 || list[0].ID != "TKT-001" {
 		t.Errorf("State filter failed: %v", list)
 	}
@@ -155,7 +155,7 @@ func TestActivityBumpsUpdatedAt(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Activity test",
-		State:       ticket.StateTodo,
+		State:       ticket.State("todo"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,

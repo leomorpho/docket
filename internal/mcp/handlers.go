@@ -17,15 +17,20 @@ func Dispatch(action string, args map[string]interface{}, repoRoot string) (inte
 	s := local.New(repoRoot)
 	ctx := context.Background()
 
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
 	switch action {
 	case "list":
-		return handleList(ctx, s, args)
+		return handleList(ctx, s, cfg, args)
 	case "create":
-		return handleCreate(ctx, s, args)
+		return handleCreate(ctx, s, cfg, args)
 	case "show":
 		return handleShow(ctx, s, args)
 	case "update":
-		return handleUpdate(ctx, s, args)
+		return handleUpdate(ctx, s, cfg, args)
 	case "comment":
 		return handleComment(ctx, s, args)
 	case "check":
@@ -36,23 +41,24 @@ func Dispatch(action string, args map[string]interface{}, repoRoot string) (inte
 	}
 }
 
-func handleList(ctx context.Context, s *local.Store, args map[string]interface{}) (interface{}, error) {
-	f := store.Filter{States: []ticket.State{ticket.StateBacklog, ticket.StateTodo, ticket.StateInProgress, ticket.StateInReview}}
-	if state, ok := getString(args, "state"); ok {
-		if strings.EqualFold(state, "open") {
-			// keep default
-		} else {
-			st := ticket.State(state)
-			if !ticket.IsValidState(st) {
-				return nil, fmt.Errorf("invalid state: %s", state)
-			}
-			f = store.Filter{States: []ticket.State{st}, IncludeArchived: st == ticket.StateArchived}
+func handleList(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
+	var openStates []ticket.State
+	for _, st := range cfg.OpenStates() {
+		openStates = append(openStates, ticket.State(st))
+	}
+	f := store.Filter{States: openStates}
+
+	if state, ok := getString(args, "state"); ok && !strings.EqualFold(state, "open") {
+		if !cfg.IsValidState(state) {
+			return nil, fmt.Errorf("invalid state: %s", state)
 		}
+		st := ticket.State(state)
+		f = store.Filter{States: []ticket.State{st}, IncludeArchived: state == "archived"}
 	}
 	return s.ListTickets(ctx, f)
 }
 
-func handleCreate(ctx context.Context, s *local.Store, args map[string]interface{}) (interface{}, error) {
+func handleCreate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
 	title, ok := getString(args, "title")
 	if !ok || strings.TrimSpace(title) == "" {
 		return nil, fmt.Errorf("title is required")
@@ -61,19 +67,19 @@ func handleCreate(ctx context.Context, s *local.Store, args map[string]interface
 	if err != nil {
 		return nil, err
 	}
-	state := ticket.StateBacklog
+	state := cfg.DefaultState
 	if v, ok := getString(args, "state"); ok && v != "" {
-		state = ticket.State(v)
+		state = v
 	}
-	if !ticket.IsValidState(state) {
+	if !cfg.IsValidState(state) {
 		return nil, fmt.Errorf("invalid state: %s", state)
 	}
-	priority := 10
+	priority := cfg.DefaultPriority
 	if p, ok := getInt(args, "priority"); ok {
 		priority = p
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	t := &ticket.Ticket{ID: id, Seq: seq, Title: title, Description: getStringOr(args, "desc", ""), State: state, Priority: priority, CreatedAt: now, UpdatedAt: now, CreatedBy: "agent:mcp"}
+	t := &ticket.Ticket{ID: id, Seq: seq, Title: title, Description: getStringOr(args, "desc", ""), State: ticket.State(state), Priority: priority, CreatedAt: now, UpdatedAt: now, CreatedBy: "agent:mcp"}
 	if err := s.CreateTicket(ctx, t); err != nil {
 		return nil, err
 	}
@@ -95,7 +101,7 @@ func handleShow(ctx context.Context, s *local.Store, args map[string]interface{}
 	return t, nil
 }
 
-func handleUpdate(ctx context.Context, s *local.Store, args map[string]interface{}) (interface{}, error) {
+func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
 	id, ok := getString(args, "id")
 	if !ok || id == "" {
 		return nil, fmt.Errorf("id is required")
@@ -109,10 +115,10 @@ func handleUpdate(ctx context.Context, s *local.Store, args map[string]interface
 	}
 	if v, ok := getString(args, "state"); ok && v != "" {
 		ns := ticket.State(v)
-		if !ticket.IsValidState(ns) {
+		if !cfg.IsValidState(v) {
 			return nil, fmt.Errorf("invalid state: %s", v)
 		}
-		if err := ticket.ValidateTransition(t.State, ns); err != nil {
+		if err := ticket.ValidateTransition(cfg, t.State, ns); err != nil {
 			return nil, err
 		}
 		t.State = ns

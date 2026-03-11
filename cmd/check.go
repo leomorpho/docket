@@ -84,7 +84,15 @@ func loadTicketsForCheck(ctx context.Context, s *local.Store, args []string) ([]
 		}
 		return []*ticket.Ticket{t}, nil
 	}
-	return s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.StateBacklog, ticket.StateTodo, ticket.StateInProgress, ticket.StateInReview}})
+	cfg, err := ticket.LoadConfig(s.RepoRoot)
+	if err != nil {
+		cfg = ticket.DefaultConfig()
+	}
+	var states []ticket.State
+	for _, st := range cfg.OpenStates() {
+		states = append(states, ticket.State(st))
+	}
+	return s.ListTickets(ctx, store.Filter{States: states})
 }
 
 func init() {

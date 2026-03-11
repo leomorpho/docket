@@ -13,19 +13,12 @@ import (
 	"github.com/leoaudibert/docket/internal/ticket"
 )
 
-type boardColumn int
-
-const (
-	colBacklog boardColumn = iota
-	colTodo
-	colInProgress
-	colBlocked
-	colInReview
-	colDone
-)
+const virtualStateBlocked = "blocked"
 
 type column struct {
-	kind    boardColumn
+	// state is the ticket state this column represents, or virtualStateBlocked
+	// for the computed blocked column.
+	state   string
 	title   string
 	tickets []*ticket.Ticket
 }
@@ -49,9 +42,15 @@ type BoardModel struct {
 	repoRoot string
 	backend  store.Backend
 	actor    string
+	cfg      *ticket.Config
 
 	allTickets []*ticket.Ticket
 	columns    []column
+
+	// stateToColIdx maps state name → column index (excludes the blocked column).
+	stateToColIdx map[string]int
+	// blockedColIdx is the index of the virtual blocked column (-1 if absent).
+	blockedColIdx int
 
 	focusCol int
 	focusRow int
@@ -70,20 +69,76 @@ type BoardModel struct {
 	newTitle      string
 }
 
+// NewBoardModel creates a BoardModel. If config cannot be loaded it falls back
+// to a minimal set of columns so the board still renders.
 func NewBoardModel(repoRoot string, backend store.Backend, actor string) BoardModel {
-	return BoardModel{
-		repoRoot: repoRoot,
-		backend:  backend,
-		actor:    actor,
-		columns: []column{
-			{kind: colBacklog, title: "BACKLOG"},
-			{kind: colTodo, title: "TODO"},
-			{kind: colInProgress, title: "IN PROGRESS"},
-			{kind: colBlocked, title: "BLOCKED"},
-			{kind: colInReview, title: "IN REVIEW"},
-			{kind: colDone, title: "DONE"},
-		},
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		// Fallback: minimal hard-coded columns so the board is usable even if
+		// config is unavailable.
+		cfg = ticket.DefaultConfig()
 	}
+	cols, stateToColIdx, blockedColIdx := buildColumnsFromConfig(cfg)
+	return BoardModel{
+		repoRoot:      repoRoot,
+		backend:       backend,
+		actor:         actor,
+		cfg:           cfg,
+		columns:       cols,
+		stateToColIdx: stateToColIdx,
+		blockedColIdx: blockedColIdx,
+	}
+}
+
+// buildColumnsFromConfig creates the board column list from config.
+// It returns the columns, a map from state name → column index, and the
+// index of the virtual "BLOCKED" column.
+func buildColumnsFromConfig(cfg *ticket.Config) ([]column, map[string]int, int) {
+	ordered := cfg.ColumnOrder() // sorted by Column value
+
+	// Find the last open-state column index in the ordered list.
+	lastOpenIdx := -1
+	for i, sc := range ordered {
+		if sc.Open {
+			lastOpenIdx = i
+		}
+	}
+
+	var cols []column
+	stateToColIdx := make(map[string]int, len(ordered)+1)
+
+	// Find the state name for each StateConfig.
+	nameFor := make(map[int]string, len(ordered)) // column value → state name
+	for name, sc := range cfg.States {
+		nameFor[sc.Column] = name
+	}
+
+	blockedInserted := false
+	blockedColIdx := -1
+
+	for i, sc := range ordered {
+		stateName := nameFor[sc.Column]
+		stateToColIdx[stateName] = len(cols)
+		cols = append(cols, column{
+			state: stateName,
+			title: strings.ToUpper(sc.Label),
+		})
+
+		// Insert BLOCKED virtual column after the last open-state column.
+		if i == lastOpenIdx && !blockedInserted {
+			blockedColIdx = len(cols)
+			cols = append(cols, column{state: virtualStateBlocked, title: "BLOCKED"})
+			blockedInserted = true
+		}
+	}
+
+	// If there were no open states, append blocked at the end.
+	if !blockedInserted && len(cfg.States) > 0 {
+		blockedColIdx = len(cols)
+		cols = append(cols, column{state: virtualStateBlocked, title: "BLOCKED"})
+	}
+
+	return cols, stateToColIdx, blockedColIdx
 }
 
 func (m BoardModel) Init() tea.Cmd {
@@ -154,7 +209,7 @@ func (m BoardModel) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.creatingTitle = false
 			m.newTitle = ""
-			return m, createTicketCmd(m.backend, m.actor, title)
+			return m, createTicketCmd(m.backend, m.actor, title, m.cfg)
 		case "backspace", "ctrl+h":
 			m.newTitle = dropLastRune(m.newTitle)
 			return m, nil
@@ -307,8 +362,7 @@ func (m BoardModel) moveStateCmd(delta int) tea.Cmd {
 	if m.focusCol < 0 || m.focusCol >= len(m.columns) {
 		return nil
 	}
-	col := m.columns[m.focusCol]
-	if col.kind == colBlocked {
+	if m.columns[m.focusCol].state == virtualStateBlocked {
 		return func() tea.Msg {
 			return opMsg{err: fmt.Errorf("cannot move tickets from BLOCKED column")}
 		}
@@ -318,27 +372,27 @@ func (m BoardModel) moveStateCmd(delta int) tea.Cmd {
 		return nil
 	}
 
-	target, err := targetState(selected.State, delta)
+	target, err := m.targetState(selected.State, delta)
 	if err != nil {
 		return func() tea.Msg {
 			return opMsg{err: err}
 		}
 	}
 
-	return updateStateCmd(m.backend, selected.ID, target)
+	return updateStateCmd(m.backend, selected.ID, target, m.cfg)
 }
 
 func (m BoardModel) reorderPriorityCmd(delta int) tea.Cmd {
 	if m.focusCol < 0 || m.focusCol >= len(m.columns) {
 		return nil
 	}
-	col := m.columns[m.focusCol]
-	if col.kind == colBlocked {
+	if m.columns[m.focusCol].state == virtualStateBlocked {
 		return func() tea.Msg {
 			return opMsg{err: fmt.Errorf("cannot reprioritize in BLOCKED column")}
 		}
 	}
 
+	col := m.columns[m.focusCol]
 	if len(col.tickets) == 0 {
 		return nil
 	}
@@ -356,26 +410,20 @@ func (m BoardModel) reorderPriorityCmd(delta int) tea.Cmd {
 }
 
 func (m *BoardModel) rebuildColumns(selectedID string) {
+	// Clear all column ticket lists.
 	for i := range m.columns {
 		m.columns[i].tickets = nil
 	}
 
 	for _, t := range m.allTickets {
-		switch t.State {
-		case ticket.StateBacklog:
-			m.columns[colBacklog].tickets = append(m.columns[colBacklog].tickets, t)
-		case ticket.StateTodo:
-			m.columns[colTodo].tickets = append(m.columns[colTodo].tickets, t)
-		case ticket.StateInProgress:
-			m.columns[colInProgress].tickets = append(m.columns[colInProgress].tickets, t)
-		case ticket.StateInReview:
-			m.columns[colInReview].tickets = append(m.columns[colInReview].tickets, t)
-		case ticket.StateDone:
-			m.columns[colDone].tickets = append(m.columns[colDone].tickets, t)
+		// Assign to the matching state column.
+		if colIdx, ok := m.stateToColIdx[string(t.State)]; ok {
+			m.columns[colIdx].tickets = append(m.columns[colIdx].tickets, t)
 		}
 
-		if len(t.BlockedBy) > 0 {
-			m.columns[colBlocked].tickets = append(m.columns[colBlocked].tickets, t)
+		// Always add blocked tickets to the virtual blocked column.
+		if len(t.BlockedBy) > 0 && m.blockedColIdx >= 0 {
+			m.columns[m.blockedColIdx].tickets = append(m.columns[m.blockedColIdx].tickets, t)
 		}
 	}
 
@@ -452,18 +500,20 @@ func (m BoardModel) selectedTicketID() string {
 	return t.ID
 }
 
-func targetState(current ticket.State, delta int) (ticket.State, error) {
-	order := []ticket.State{
-		ticket.StateBacklog,
-		ticket.StateTodo,
-		ticket.StateInProgress,
-		ticket.StateInReview,
-		ticket.StateDone,
+// targetState returns the next state when moving left (delta=-1) or right
+// (delta=+1) on the board, using the config column order.
+func (m BoardModel) targetState(current ticket.State, delta int) (ticket.State, error) {
+	// Build ordered list of state names (excluding virtual blocked column).
+	var order []string
+	for _, col := range m.columns {
+		if col.state != virtualStateBlocked {
+			order = append(order, col.state)
+		}
 	}
 
 	idx := -1
 	for i, st := range order {
-		if st == current {
+		if ticket.State(st) == current {
 			idx = i
 			break
 		}
@@ -477,14 +527,11 @@ func targetState(current ticket.State, delta int) (ticket.State, error) {
 		return "", fmt.Errorf("cannot transition left from %s", current)
 	}
 	if targetIdx >= len(order) {
-		if current == ticket.StateDone && delta > 0 {
-			return "", fmt.Errorf("cannot transition from done to archived via board")
-		}
 		return "", fmt.Errorf("cannot transition right from %s", current)
 	}
 
-	target := order[targetIdx]
-	if err := ticket.ValidateTransition(current, target); err != nil {
+	target := ticket.State(order[targetIdx])
+	if err := ticket.ValidateTransition(m.cfg, current, target); err != nil {
 		return "", err
 	}
 
@@ -511,7 +558,7 @@ func loadDetailCmd(backend store.Backend, id string) tea.Cmd {
 	}
 }
 
-func updateStateCmd(backend store.Backend, id string, next ticket.State) tea.Cmd {
+func updateStateCmd(backend store.Backend, id string, next ticket.State, cfg *ticket.Config) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		t, err := backend.GetTicket(ctx, id)
@@ -522,7 +569,7 @@ func updateStateCmd(backend store.Backend, id string, next ticket.State) tea.Cmd
 			return opMsg{err: fmt.Errorf("ticket %s not found", id)}
 		}
 
-		if err := ticket.ValidateTransition(t.State, next); err != nil {
+		if err := ticket.ValidateTransition(cfg, t.State, next); err != nil {
 			return opMsg{err: err}
 		}
 
@@ -571,7 +618,7 @@ func swapPriorityCmd(backend store.Backend, firstID, secondID string) tea.Cmd {
 	}
 }
 
-func createTicketCmd(backend store.Backend, actor, title string) tea.Cmd {
+func createTicketCmd(backend store.Backend, actor, title string, cfg *ticket.Config) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		id, seq, err := backend.NextID(ctx)
@@ -585,8 +632,8 @@ func createTicketCmd(backend store.Backend, actor, title string) tea.Cmd {
 			Seq:         seq,
 			Title:       title,
 			Description: "",
-			Priority:    10,
-			State:       ticket.StateBacklog,
+			Priority:    cfg.DefaultPriority,
+			State:       ticket.State(cfg.DefaultState),
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   actor,
@@ -596,7 +643,7 @@ func createTicketCmd(backend store.Backend, actor, title string) tea.Cmd {
 			return opMsg{err: err}
 		}
 
-		return opMsg{status: fmt.Sprintf("Created %s in backlog", t.ID)}
+		return opMsg{status: fmt.Sprintf("Created %s in %s", t.ID, cfg.DefaultState)}
 	}
 }
 

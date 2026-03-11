@@ -49,9 +49,9 @@ func TestEnumerateTickets(t *testing.T) {
 	repo := t.TempDir()
 	now := time.Now().UTC().Truncate(time.Second)
 	seedTickets(t, repo,
-		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "done", State: ticket.StateDone, Priority: 2, CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute), CreatedBy: "me"},
-		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "todo", State: ticket.StateTodo, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me"},
-		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "archived", State: ticket.StateArchived, Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me"},
+		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "done", State: ticket.State("done"), Priority: 2, CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute), CreatedBy: "me"},
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "todo", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me"},
+		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "archived", State: ticket.State("archived"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me"},
 	)
 	got, err := EnumerateTickets(context.Background(), local.New(repo))
 	if err != nil {
@@ -107,7 +107,7 @@ func TestIncrementalRebuildAndFreshness(t *testing.T) {
 		Description: "Description",
 		AC:          []ticket.AcceptanceCriterion{{Description: "A1"}},
 		Handoff:     "Handoff",
-		State:       ticket.StateTodo,
+		State:       ticket.State("todo"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -168,7 +168,7 @@ func TestFullRebuildAndVersionMismatch(t *testing.T) {
 		ID:        "TKT-001",
 		Seq:       1,
 		Title:     "Semantic",
-		State:     ticket.StateTodo,
+		State:     ticket.State("todo"),
 		Priority:  1,
 		CreatedAt: now,
 		UpdatedAt: now,

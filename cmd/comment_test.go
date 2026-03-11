@@ -26,7 +26,7 @@ func TestCommentCmd(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:        "TKT-001",
 		Title:     "Test Ticket",
-		State:     ticket.StateTodo,
+		State:     ticket.State("todo"),
 		CreatedAt: now,
 		UpdatedAt: now,
 		CreatedBy: "me",

@@ -26,7 +26,7 @@ func TestShowCmd(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Test Ticket",
-		State:       ticket.StateTodo,
+		State:       ticket.State("todo"),
 		Priority:    1,
 		Description: "Desc here",
 		AC:          []ticket.AcceptanceCriterion{{Description: "AC1", Done: true}},

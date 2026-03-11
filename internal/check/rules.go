@@ -27,7 +27,7 @@ type Finding struct {
 type Rule func(ctx context.Context, backend store.Backend, t *ticket.Ticket, now time.Time) []Finding
 
 func RuleR001(ctx context.Context, backend store.Backend, t *ticket.Ticket, now time.Time) []Finding {
-	if t.State != ticket.StateInProgress {
+	if t.State != "in-progress" {
 		return nil
 	}
 	if now.Sub(t.UpdatedAt) <= 7*24*time.Hour {
@@ -44,7 +44,7 @@ func RuleR006(ctx context.Context, backend store.Backend, t *ticket.Ticket, now 
 		if err != nil || blocker == nil {
 			continue
 		}
-		if blocker.State == ticket.StateDone || blocker.State == ticket.StateArchived {
+		if blocker.State == "done" || blocker.State == "archived" {
 			out = append(out, Finding{
 				TicketID: t.ID,
 				Rule:     "R006",

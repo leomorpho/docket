@@ -125,7 +125,7 @@ func TestMetadataVersionMismatchFreshness(t *testing.T) {
 		ID:        "TKT-001",
 		Seq:       1,
 		Title:     "Semantic",
-		State:     ticket.StateTodo,
+		State:     ticket.State("todo"),
 		Priority:  1,
 		CreatedAt: now,
 		UpdatedAt: now,
