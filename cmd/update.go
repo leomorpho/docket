@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,8 @@ var (
 	updateRemoveLabels []string
 	updateBlockedBy    []string
 	updateUnblock      []string
+	updateParent       string
+	updateCascade      bool
 	updateDesc         string
 	updateHandoff      string
 )
@@ -42,6 +45,10 @@ var updateCmd = &cobra.Command{
 		if t == nil {
 			return fmt.Errorf("ticket %s not found", id)
 		}
+		cfg, cfgErr := ticket.LoadConfig(repo)
+		if cfgErr != nil {
+			return cfgErr
+		}
 
 		var updatedFields []string
 
@@ -53,12 +60,29 @@ var updateCmd = &cobra.Command{
 
 		// 2. State
 		if cmd.Flags().Changed("state") && updateState != "" {
-			cfg, err := ticket.LoadConfig(repo)
-			if err != nil {
-				return err
-			}
 			if !cfg.IsValidState(updateState) {
 				return fmt.Errorf("%q is not a valid state", updateState)
+			}
+			if updateState == "stale" {
+				openChildren, err := openDescendants(ctx, s, cfg, t.ID)
+				if err != nil {
+					return err
+				}
+				if len(openChildren) > 0 && !updateCascade {
+					ids := make([]string, 0, len(openChildren))
+					for _, c := range openChildren {
+						ids = append(ids, c.ID)
+					}
+					sort.Strings(ids)
+					return fmt.Errorf("cannot set %s to stale while open child tickets exist: %s (use --cascade)", t.ID, strings.Join(ids, ", "))
+				}
+				if updateCascade {
+					for _, c := range openChildren {
+						if err := ticket.ValidateTransition(cfg, c.State, ticket.State(updateState)); err != nil {
+							return fmt.Errorf("cannot cascade state to %s: %w", c.ID, err)
+						}
+					}
+				}
 			}
 			newState := ticket.State(updateState)
 			if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
@@ -67,6 +91,17 @@ var updateCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
 			t.State = newState
 			updatedFields = append(updatedFields, "state")
+		}
+
+		// 2b. Parent
+		if cmd.Flags().Changed("parent") {
+			p := strings.TrimSpace(updateParent)
+			if p == "" || strings.EqualFold(p, "none") {
+				t.Parent = ""
+			} else {
+				t.Parent = p
+			}
+			updatedFields = append(updatedFields, "parent")
 		}
 
 		// 3. Priority
@@ -189,6 +224,24 @@ var updateCmd = &cobra.Command{
 		if err := s.UpdateTicket(ctx, t); err != nil {
 			return fmt.Errorf("updating ticket: %w", err)
 		}
+		if updateState == "stale" && updateCascade {
+			openChildren, err := openDescendants(ctx, s, cfg, t.ID)
+			if err != nil {
+				return err
+			}
+			for _, child := range openChildren {
+				child.State = ticket.State(updateState)
+				child.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+				if err := s.UpdateTicket(ctx, child); err != nil {
+					return fmt.Errorf("updating child %s: %w", child.ID, err)
+				}
+			}
+		}
+		if cmd.Flags().Changed("parent") && t.Parent != "" {
+			if depth, err := s.ParentDepth(ctx, t.ID); err == nil && depth > 3 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s depth is %d (>3)\n", t.ID, depth)
+			}
+		}
 
 		if format == "json" {
 			res := map[string]interface{}{
@@ -215,6 +268,8 @@ var updateCmd = &cobra.Command{
 		updateRemoveLabels = nil
 		updateBlockedBy = nil
 		updateUnblock = nil
+		updateParent = ""
+		updateCascade = false
 		updateDesc = ""
 		updateHandoff = ""
 
@@ -243,7 +298,27 @@ func init() {
 	updateCmd.Flags().StringSliceVar(&updateRemoveLabels, "remove-label", []string{}, "remove one or more labels")
 	updateCmd.Flags().StringSliceVar(&updateBlockedBy, "blocked-by", []string{}, "add a blocker ticket ID")
 	updateCmd.Flags().StringSliceVar(&updateUnblock, "unblock", []string{}, "remove a blocker ticket ID")
+	updateCmd.Flags().StringVar(&updateParent, "parent", "", "set parent ticket ID (use 'none' to clear)")
+	updateCmd.Flags().BoolVar(&updateCascade, "cascade", false, "cascade state change to open descendants when required")
 	updateCmd.Flags().StringVar(&updateDesc, "desc", "", "new description (use - for stdin)")
 
 	rootCmd.AddCommand(updateCmd)
+}
+
+func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id string) ([]*ticket.Ticket, error) {
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+	openSet := map[ticket.State]bool{}
+	for _, state := range cfg.OpenStates() {
+		openSet[ticket.State(state)] = true
+	}
+	var out []*ticket.Ticket
+	for _, d := range idx.Descendants(id) {
+		if openSet[d.State] {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }

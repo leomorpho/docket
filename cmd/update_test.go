@@ -195,3 +195,79 @@ func TestUpdateCmd_HandoffFromStdin(t *testing.T) {
 		t.Fatalf("handoff mismatch:\n%s", updated.Handoff)
 	}
 }
+
+func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	cfg := ticket.DefaultConfig()
+	cfg.States["stale"] = ticket.StateConfig{
+		Label:  "Stale",
+		Open:   false,
+		Column: 6,
+		Next:   []string{"todo", "archived"},
+	}
+	todo := cfg.States["todo"]
+	todo.Next = append(todo.Next, "stale")
+	cfg.States["todo"] = todo
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Parent",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket parent failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-002",
+		Seq:         2,
+		Title:       "Child",
+		Parent:      "TKT-001",
+		State:       ticket.State("todo"),
+		Priority:    2,
+		CreatedAt:   now.Add(time.Minute),
+		UpdatedAt:   now.Add(time.Minute),
+		CreatedBy:   "me",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket child failed: %v", err)
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "stale"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("expected stale transition error without --cascade")
+	}
+
+	b.Reset()
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "stale", "--cascade"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("stale transition with cascade failed: %v", err)
+	}
+
+	parent, _ := s.GetTicket(ctx, "TKT-001")
+	child, _ := s.GetTicket(ctx, "TKT-002")
+	if parent.State != ticket.State("stale") {
+		t.Fatalf("parent state = %s, want stale", parent.State)
+	}
+	if child.State != ticket.State("stale") {
+		t.Fatalf("child state = %s, want stale", child.State)
+	}
+}

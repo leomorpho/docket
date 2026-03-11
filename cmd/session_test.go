@@ -28,6 +28,11 @@ func TestSessionAttachListCompress(t *testing.T) {
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Sess", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
+	cfg := ticket.DefaultConfig()
+	cfg.HandoffSections = []string{"Current state", "Risks"}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 
 	sessionFile := filepath.Join(tmpDir, "log.jsonl")
 	if err := os.WriteFile(sessionFile, []byte("hello session\n"), 0644); err != nil {
@@ -60,6 +65,12 @@ func TestSessionAttachListCompress(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "Write a handoff summary") {
 		t.Fatalf("expected prompt output, got:\n%s", b.String())
+	}
+	if !strings.Contains(b.String(), "**Current state:**") || !strings.Contains(b.String(), "**Risks:**") {
+		t.Fatalf("expected prompt sections from config, got:\n%s", b.String())
+	}
+	if strings.Contains(b.String(), "**Decisions made:**") {
+		t.Fatalf("did not expect hardcoded section in prompt, got:\n%s", b.String())
 	}
 
 	summary := filepath.Join(tmpDir, "summary.md")

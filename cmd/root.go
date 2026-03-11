@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/leoaudibert/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +19,21 @@ var rootCmd = &cobra.Command{
 	Use:   "docket",
 	Short: "git-native ticket system for AI-assisted development",
 	Long:  `A git-native ticket system built for human + LLM agentic workflows.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Tamper detection is non-blocking but runs on command startup.
+		if _, err := os.Stat(filepath.Join(repo, ".docket", "config.json")); err != nil {
+			return nil
+		}
+		s := local.New(repo)
+		changes, err := s.DetectTamperingAll(context.Background())
+		if err != nil {
+			return nil
+		}
+		if len(changes) > 0 {
+			fmt.Fprintf(os.Stderr, "warning: detected %d direct-edit changes (use `docket validate` for prescriptive fixes)\n", len(changes))
+		}
+		return nil
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},

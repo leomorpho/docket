@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -19,6 +20,11 @@ var (
 	listOnlyUnblocked   bool
 	listIncludeArchived bool
 )
+
+type listRow struct {
+	t     *ticket.Ticket
+	depth int
+}
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -55,42 +61,49 @@ var listCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("listing tickets: %w", err)
 		}
+		rows := buildListRows(ctx, s, tickets)
 
 		switch format {
 		case "json":
 			printJSON(cmd, tickets)
 		case "context":
-			printContext(cmd, tickets)
+			printContext(cmd, rows)
 		default:
-			printTable(cmd, tickets)
+			printTable(cmd, rows)
 		}
 
 		return nil
 	},
 }
 
-func printTable(cmd *cobra.Command, tickets []*ticket.Ticket) {
-	if len(tickets) == 0 {
+func printTable(cmd *cobra.Command, rows []listRow) {
+	if len(rows) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No tickets found.")
 		return
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tSTATE\tPRI\tTITLE\tLABELS")
-	for _, t := range tickets {
+	for _, row := range rows {
+		t := row.t
 		pStr := fmt.Sprintf("P%d", t.Priority)
 		lStr := strings.Join(t.Labels, ",")
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", t.ID, t.State, pStr, t.Title, lStr)
+		id := t.ID
+		if row.depth > 0 {
+			id = strings.Repeat("  ", row.depth) + "↳ " + id
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", id, t.State, pStr, t.Title, lStr)
 	}
 	w.Flush()
 }
 
-func printContext(cmd *cobra.Command, tickets []*ticket.Ticket) {
-	if len(tickets) == 0 {
+func printContext(cmd *cobra.Command, rows []listRow) {
+	if len(rows) == 0 {
 		return
 	}
 
-	for _, t := range tickets {
+	for _, row := range rows {
+		t := row.t
 		blockedStr := ""
 		if t.IsBlocked() {
 			blockedStr = " | BLOCKED by " + strings.Join(t.BlockedBy, ",")
@@ -99,8 +112,73 @@ func printContext(cmd *cobra.Command, tickets []*ticket.Ticket) {
 				blockedStr = " | labels:" + strings.Join(t.Labels, ",")
 			}
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "[%s] P%d %-11s | %-28s%s\n", t.ID, t.Priority, t.State, t.Title, blockedStr)
+		title := t.Title
+		if row.depth > 0 {
+			title = strings.Repeat("  ", row.depth) + "↳ " + title
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "[%s] P%d %-11s | %-28s%s\n", t.ID, t.Priority, t.State, title, blockedStr)
 	}
+}
+
+func buildListRows(ctx context.Context, s *local.Store, tickets []*ticket.Ticket) []listRow {
+	if len(tickets) == 0 {
+		return nil
+	}
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		out := make([]listRow, 0, len(tickets))
+		for _, t := range tickets {
+			out = append(out, listRow{t: t, depth: 0})
+		}
+		return out
+	}
+
+	inSet := make(map[string]*ticket.Ticket, len(tickets))
+	for _, t := range tickets {
+		inSet[t.ID] = t
+	}
+
+	var roots []*ticket.Ticket
+	for _, t := range tickets {
+		if t.Parent == "" {
+			roots = append(roots, t)
+			continue
+		}
+		if _, ok := inSet[t.Parent]; !ok {
+			roots = append(roots, t)
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].Priority != roots[j].Priority {
+			return roots[i].Priority < roots[j].Priority
+		}
+		return roots[i].CreatedAt.Before(roots[j].CreatedAt)
+	})
+
+	var out []listRow
+	seen := make(map[string]bool, len(tickets))
+	var walk func(t *ticket.Ticket, depth int)
+	walk = func(t *ticket.Ticket, depth int) {
+		if seen[t.ID] {
+			return
+		}
+		seen[t.ID] = true
+		out = append(out, listRow{t: t, depth: depth})
+		for _, child := range idx.Children[t.ID] {
+			if c, ok := inSet[child.ID]; ok {
+				walk(c, depth+1)
+			}
+		}
+	}
+	for _, root := range roots {
+		walk(root, 0)
+	}
+	for _, t := range tickets {
+		if !seen[t.ID] {
+			out = append(out, listRow{t: t, depth: 0})
+		}
+	}
+	return out
 }
 
 func init() {

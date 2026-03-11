@@ -83,7 +83,7 @@ var blameCmd = &cobra.Command{
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "  This line was last modified in commit %s (%s)\n", shortSHA(blame.SHA), commitDate)
 		fmt.Fprintf(cmd.OutOrStdout(), "  Ticket: %s\n\n", ticketID)
-		printTicketContext(cmd, t)
+		printTicketContext(cmd, t, acAggregate{})
 
 		return nil
 	},

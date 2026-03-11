@@ -23,6 +23,7 @@ type Ticket struct {
 	State         State     `yaml:"state" json:"state"`
 	Priority      int       `yaml:"priority" json:"priority"`
 	Labels        []string  `yaml:"labels,omitempty" json:"labels,omitempty"`
+	Parent        string    `yaml:"parent,omitempty" json:"parent,omitempty"`
 	BlockedBy     []string  `yaml:"blocked_by,omitempty" json:"blocked_by,omitempty"`
 	Blocks        []string  `yaml:"blocks,omitempty" json:"blocks,omitempty"`
 	LinkedCommits []string  `yaml:"linked_commits,omitempty" json:"linked_commits,omitempty"`

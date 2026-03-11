@@ -72,6 +72,7 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 			seq           INTEGER NOT NULL,
 			state         TEXT NOT NULL,
 			priority      INTEGER NOT NULL DEFAULT 10,
+			parent        TEXT,
 			title         TEXT NOT NULL,
 			created_by    TEXT NOT NULL,
 			created_at    DATETIME NOT NULL,
@@ -106,6 +107,7 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 
 		CREATE INDEX idx_tickets_state ON tickets(state);
 		CREATE INDEX idx_tickets_priority ON tickets(priority);
+		CREATE INDEX idx_tickets_parent ON tickets(parent);
 		CREATE INDEX idx_labels_ticket ON labels(ticket_id);
 		CREATE INDEX idx_annotations_ticket ON annotations(ticket_id);
 	`)
@@ -129,7 +131,7 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	stmtTicket, _ := tx.PrepareContext(ctx, `INSERT INTO tickets (id, seq, state, priority, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmtTicket, _ := tx.PrepareContext(ctx, `INSERT INTO tickets (id, seq, state, priority, parent, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	stmtLabel, _ := tx.PrepareContext(ctx, `INSERT INTO labels (ticket_id, label) VALUES (?, ?)`)
 	stmtBlocked, _ := tx.PrepareContext(ctx, `INSERT INTO blocked_by (ticket_id, blocks_id) VALUES (?, ?)`)
 	stmtCommit, _ := tx.PrepareContext(ctx, `INSERT INTO linked_commits (ticket_id, sha) VALUES (?, ?)`)
@@ -151,7 +153,7 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 				}
 			}
 
-			_, err = stmtTicket.ExecContext(ctx, t.ID, t.Seq, t.State, t.Priority, t.Title, t.CreatedBy, t.CreatedAt, t.UpdatedAt, t.IsBlocked(), acTotal, acDone)
+			_, err = stmtTicket.ExecContext(ctx, t.ID, t.Seq, t.State, t.Priority, t.Parent, t.Title, t.CreatedBy, t.CreatedAt, t.UpdatedAt, t.IsBlocked(), acTotal, acDone)
 			if err != nil {
 				return err
 			}
@@ -187,7 +189,7 @@ func (s *Store) queryTickets(ctx context.Context, f store.Filter) ([]*ticket.Tic
 	}
 	defer db.Close()
 
-	query := "SELECT id, seq, state, priority, title, created_by, created_at, updated_at FROM tickets WHERE 1=1"
+	query := "SELECT id, seq, state, priority, parent, title, created_by, created_at, updated_at FROM tickets WHERE 1=1"
 	var args []interface{}
 
 	if !f.IncludeArchived {
@@ -232,7 +234,7 @@ func (s *Store) queryTickets(ctx context.Context, f store.Filter) ([]*ticket.Tic
 	for rows.Next() {
 		t := &ticket.Ticket{}
 		var createdAt, updatedAt string
-		err := rows.Scan(&t.ID, &t.Seq, &t.State, &t.Priority, &t.Title, &t.CreatedBy, &createdAt, &updatedAt)
+		err := rows.Scan(&t.ID, &t.Seq, &t.State, &t.Priority, &t.Parent, &t.Title, &t.CreatedBy, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, err
 		}

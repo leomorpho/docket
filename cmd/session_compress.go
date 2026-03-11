@@ -27,6 +27,10 @@ var sessionCompressCmd = &cobra.Command{
 		id := args[0]
 		s := local.New(repo)
 		ctx := context.Background()
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			cfg = ticket.DefaultConfig()
+		}
 
 		sessionPath, err := s.ResolveSessionPath(ctx, id, sessionCompressName)
 		if err != nil {
@@ -43,11 +47,9 @@ var sessionCompressCmd = &cobra.Command{
 			fmt.Fprintln(cmd.OutOrStdout(), "")
 			fmt.Fprintln(cmd.OutOrStdout(), "## Handoff")
 			fmt.Fprintf(cmd.OutOrStdout(), "*Last updated: %s by %s*\n\n", time.Now().UTC().Format("2006-01-02T15:04:05Z"), detectActor())
-			fmt.Fprintln(cmd.OutOrStdout(), "**Current state:**")
-			fmt.Fprintln(cmd.OutOrStdout(), "**Decisions made:**")
-			fmt.Fprintln(cmd.OutOrStdout(), "**Files touched:**")
-			fmt.Fprintln(cmd.OutOrStdout(), "**Remaining work:**")
-			fmt.Fprintln(cmd.OutOrStdout(), "**AC status:**")
+			for _, section := range cfg.HandoffSections {
+				fmt.Fprintf(cmd.OutOrStdout(), "**%s:**\n", section)
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), "")
 			fmt.Fprintln(cmd.OutOrStdout(), "Session excerpt:")
 			fmt.Fprintln(cmd.OutOrStdout(), string(rawSession))

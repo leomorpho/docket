@@ -1,48 +1,71 @@
 {
-  "counter": 106,
+  "counter": 107,
   "backend": "local",
   "states": {
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": [
+        "backlog"
+      ]
+    },
     "backlog": {
       "label": "Backlog",
       "open": true,
       "column": 0,
-      "next": ["todo", "archived"]
-    },
-    "todo": {
-      "label": "To Do",
-      "open": true,
-      "column": 1,
-      "next": ["in-progress", "backlog", "archived"]
-    },
-    "in-progress": {
-      "label": "In Progress",
-      "open": true,
-      "column": 2,
-      "next": ["in-review", "todo", "archived"]
-    },
-    "in-review": {
-      "label": "In Review",
-      "open": true,
-      "column": 3,
-      "next": ["done", "in-progress", "archived"]
+      "next": [
+        "todo",
+        "archived"
+      ]
     },
     "done": {
       "label": "Done",
       "open": false,
       "column": 4,
-      "next": ["archived", "in-progress"]
+      "next": [
+        "archived",
+        "in-progress"
+      ]
     },
-    "archived": {
-      "label": "Archived",
-      "open": false,
-      "column": 5,
-      "next": ["backlog"]
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": [
+        "in-review",
+        "todo",
+        "archived"
+      ]
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": [
+        "done",
+        "in-progress",
+        "archived"
+      ]
     },
     "stale": {
       "label": "Stale",
       "open": false,
       "column": 6,
-      "next": ["backlog", "archived"]
+      "next": [
+        "backlog",
+        "archived"
+      ]
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": [
+        "in-progress",
+        "backlog",
+        "archived"
+      ]
     }
   },
   "labels": [
@@ -62,5 +85,19 @@
     "Files touched",
     "Remaining work",
     "AC status"
-  ]
+  ],
+  "semantic": {
+    "enabled": false,
+    "provider": "uv",
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "hf_home": "/Users/leoaudibert/.cache/docket/hf",
+    "sentence_transformers_home": "/Users/leoaudibert/.cache/docket/sbert",
+    "uv_cache_dir": "/Users/leoaudibert/.cache/docket/uv",
+    "lexical_weight": 0.35,
+    "vector_weight": 0.65,
+    "title_weight": 3,
+    "description_weight": 1.5,
+    "ac_weight": 2,
+    "handoff_weight": 1.25
+  }
 }

@@ -38,21 +38,28 @@ var showCmd = &cobra.Command{
 		if t == nil {
 			return fmt.Errorf("ticket %s not found", id)
 		}
+		agg := aggregateDescendantAC(ctx, s, id)
 
 		switch format {
 		case "json":
 			printJSON(cmd, t)
 		case "context":
-			printTicketContext(cmd, t)
+			printTicketContext(cmd, t, agg)
 		default:
-			printTicketHuman(cmd, t)
+			printTicketHuman(cmd, t, agg)
 		}
 
 		return nil
 	},
 }
 
-func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket) {
+type acAggregate struct {
+	Descendants int
+	Total       int
+	Done        int
+}
+
+func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s · %s · P%d · %s\n\n", t.ID, t.State, t.Priority, strings.Join(t.Labels, ", "))
 	fmt.Fprintf(out, "  %s\n\n", t.Title)
@@ -123,6 +130,9 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket) {
 	if len(t.LinkedCommits) > 0 {
 		fmt.Fprintf(out, "  Linked commits: %s\n", strings.Join(t.LinkedCommits, ", "))
 	}
+	if agg.Descendants > 0 {
+		fmt.Fprintf(out, "  Descendant AC: %d/%d done across %d descendant tickets\n", agg.Done, agg.Total, agg.Descendants)
+	}
 	if len(t.BlockedBy) > 0 {
 		fmt.Fprintf(out, "  Blocked by: %s\n", strings.Join(t.BlockedBy, ", "))
 	} else {
@@ -130,7 +140,7 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket) {
 	}
 }
 
-func printTicketContext(cmd *cobra.Command, t *ticket.Ticket) {
+func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "TICKET: %s · %s · P%d\n", t.ID, t.State, t.Priority)
 	fmt.Fprintf(out, "TITLE: %s\n", t.Title)
@@ -166,12 +176,40 @@ func printTicketContext(cmd *cobra.Command, t *ticket.Ticket) {
 	if len(t.LinkedCommits) > 0 {
 		fmt.Fprintf(out, "LINKED COMMITS: %s\n", strings.Join(t.LinkedCommits, ", "))
 	}
+	if agg.Descendants > 0 {
+		fmt.Fprintf(out, "DESCENDANT AC: %d/%d done across %d tickets\n", agg.Done, agg.Total, agg.Descendants)
+	}
 
 	if len(t.BlockedBy) > 0 {
 		fmt.Fprintf(out, "BLOCKED BY: %s\n", strings.Join(t.BlockedBy, ", "))
 	} else {
 		fmt.Fprintln(out, "BLOCKED BY: none")
 	}
+}
+
+func aggregateDescendantAC(ctx context.Context, s *local.Store, id string) acAggregate {
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return acAggregate{}
+	}
+	desc := idx.Descendants(id)
+	if len(desc) == 0 {
+		return acAggregate{}
+	}
+	agg := acAggregate{Descendants: len(desc)}
+	for _, d := range desc {
+		full, err := s.GetTicket(ctx, d.ID)
+		if err != nil || full == nil {
+			continue
+		}
+		agg.Total += len(full.AC)
+		for _, ac := range full.AC {
+			if ac.Done {
+				agg.Done++
+			}
+		}
+	}
+	return agg
 }
 
 func init() {

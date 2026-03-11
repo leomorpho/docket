@@ -21,6 +21,9 @@ func TestHelpJSONCommand(t *testing.T) {
 	if manifest["binary"] != "docket" {
 		t.Fatalf("binary = %v, want docket", manifest["binary"])
 	}
+	if _, ok := manifest["agent_instructions"].(string); !ok {
+		t.Fatalf("missing agent_instructions in manifest")
+	}
 
 	commands, ok := manifest["commands"].([]interface{})
 	if !ok || len(commands) == 0 {

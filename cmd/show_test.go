@@ -35,6 +35,23 @@ func TestShowCmd(t *testing.T) {
 		CreatedBy:   "me",
 	}
 	s.CreateTicket(ctx, tick)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-002",
+		Title:       "Child Ticket",
+		Parent:      "TKT-001",
+		State:       ticket.State("todo"),
+		Priority:    2,
+		Description: "Child desc",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "AC child 1", Done: true},
+			{Description: "AC child 2", Done: false},
+		},
+		CreatedAt: now.Add(time.Minute),
+		UpdatedAt: now.Add(time.Minute),
+		CreatedBy: "me",
+	}); err != nil {
+		t.Fatalf("create child ticket failed: %v", err)
+	}
 
 	// 1. Human format
 	b := new(bytes.Buffer)
@@ -48,6 +65,9 @@ func TestShowCmd(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "Test Ticket") {
 		t.Errorf("expected title, got:\n%s", b.String())
+	}
+	if !strings.Contains(b.String(), "Descendant AC: 1/2 done across 1 descendant tickets") {
+		t.Errorf("expected descendant AC aggregation in show output, got:\n%s", b.String())
 	}
 
 	// 2. MD format

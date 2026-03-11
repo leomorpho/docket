@@ -24,6 +24,7 @@ func TestListCmd(t *testing.T) {
 	now := time.Now().UTC()
 
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Open Ticket", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Title: "Child Ticket", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2, CreatedAt: now.Add(2 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Done Ticket", State: ticket.State("done"), Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "Archived Ticket", State: ticket.State("archived"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
@@ -37,6 +38,9 @@ func TestListCmd(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "TKT-001") {
 		t.Errorf("expected TKT-001 in default list, got:\n%s", b.String())
+	}
+	if !strings.Contains(b.String(), "↳ TKT-004") {
+		t.Errorf("expected indented child in list output, got:\n%s", b.String())
 	}
 	if strings.Contains(b.String(), "TKT-002") || strings.Contains(b.String(), "TKT-003") {
 		t.Errorf("expected only open tickets, but got:\n%s", b.String())
@@ -76,9 +80,7 @@ func TestListCmd(t *testing.T) {
 	if err := json.Unmarshal(b.Bytes(), &res); err != nil {
 		t.Fatalf("failed to parse JSON: %v", err)
 	}
-	if len(res) != 1 {
-		t.Errorf("expected 1 open ticket in JSON, got: %d", len(res))
-	} else if res[0]["id"] != "TKT-001" {
-		t.Errorf("expected TKT-001 in JSON, got: %v", res[0]["id"])
+	if len(res) != 2 {
+		t.Errorf("expected 2 open tickets in JSON, got: %d", len(res))
 	}
 }

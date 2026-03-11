@@ -19,6 +19,7 @@ var helpJSONCmd = &cobra.Command{
 			"binary":      "docket",
 			"version":     Version,
 			"description": rootCmd.Short,
+			"agent_instructions": "Do not edit .docket/tickets/*.md or .docket/manifest.json directly. Use docket commands only.",
 			"global_flags": map[string]interface{}{
 				"--format": map[string]interface{}{"type": "string", "values": []string{"human", "json", "context", "md"}, "default": "human"},
 				"--repo":   map[string]interface{}{"type": "string", "default": "current working directory"},

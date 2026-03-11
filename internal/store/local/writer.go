@@ -19,6 +19,7 @@ func render(t *ticket.Ticket) (string, error) {
 		State         ticket.State `yaml:"state"`
 		Priority      int          `yaml:"priority"`
 		Labels        []string     `yaml:"labels,omitempty"`
+		Parent        string       `yaml:"parent,omitempty"`
 		BlockedBy     []string     `yaml:"blocked_by,omitempty"`
 		Blocks        []string     `yaml:"blocks,omitempty"`
 		LinkedCommits []string     `yaml:"linked_commits,omitempty"`
@@ -31,6 +32,7 @@ func render(t *ticket.Ticket) (string, error) {
 		State:         t.State,
 		Priority:      t.Priority,
 		Labels:        t.Labels,
+		Parent:        t.Parent,
 		BlockedBy:     t.BlockedBy,
 		Blocks:        t.Blocks,
 		LinkedCommits: t.LinkedCommits,

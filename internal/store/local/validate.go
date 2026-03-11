@@ -77,6 +77,12 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 	}
 
 	// 3. References
+	if t.Parent != "" {
+		pPath := s.ticketPath(t.Parent)
+		if _, err := os.Stat(pPath); os.IsNotExist(err) {
+			errs = append(errs, store.ValidationError{Field: "parent", Message: fmt.Sprintf("referenced parent ticket %q does not exist", t.Parent)})
+		}
+	}
 	for i, bid := range t.BlockedBy {
 		bPath := s.ticketPath(bid)
 		if _, err := os.Stat(bPath); os.IsNotExist(err) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/leoaudibert/docket/internal/store"
 	"github.com/leoaudibert/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,15 @@ var validateCmd = &cobra.Command{
 			errs, warns, err := s.ValidateFile(id)
 			if err != nil {
 				return fmt.Errorf("reading ticket: %w", err)
+			}
+			tamper, err := s.DetectTampering(ctx, id)
+			if err == nil {
+				for _, ch := range tamper {
+					errs = append(errs, store.ValidationError{
+						Field:   "direct-edit." + ch.Field,
+						Message: fmt.Sprintf("detected manual change (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
+					})
+				}
 			}
 
 			if format == "json" {
@@ -60,6 +70,14 @@ var validateCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("validating all tickets: %w", err)
 			}
+			if changes, err := s.DetectTamperingAll(ctx); err == nil {
+				for _, ch := range changes {
+					allErrs[ch.ID] = append(allErrs[ch.ID], store.ValidationError{
+						Field:   "direct-edit." + ch.Field,
+						Message: fmt.Sprintf("detected manual change (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(ch.ID, ch.Field, ch.Actual)),
+					})
+				}
+			}
 
 			if format == "json" {
 				// This is a bit complex for JSON because we don't have a list of all IDs easily here
@@ -89,6 +107,24 @@ var validateCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func prescriptiveCommand(id, field, value string) string {
+	switch field {
+	case "state":
+		return fmt.Sprintf("docket update %s --state %s", id, value)
+	case "priority":
+		return fmt.Sprintf("docket update %s --priority %s", id, value)
+	case "title":
+		return fmt.Sprintf("docket update %s --title %q", id, value)
+	case "parent":
+		if value == "" {
+			return fmt.Sprintf("docket update %s --parent none", id)
+		}
+		return fmt.Sprintf("docket update %s --parent %s", id, value)
+	default:
+		return fmt.Sprintf("docket show %s", id)
+	}
 }
 
 func init() {

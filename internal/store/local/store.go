@@ -28,6 +28,9 @@ func (s *Store) CreateTicket(ctx context.Context, t *ticket.Ticket) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("ticket %s already exists", t.ID)
 	}
+	if err := s.validateParentRef(ctx, t); err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -37,8 +40,10 @@ func (s *Store) CreateTicket(ctx context.Context, t *ticket.Ticket) error {
 	if err != nil {
 		return err
 	}
-
-	return os.WriteFile(path, []byte(content), 0644)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return err
+	}
+	return s.upsertManifestTicket(t.ID, s.manifestEntryFromTicket(t))
 }
 
 func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
@@ -52,6 +57,9 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 	if existing == nil {
 		return fmt.Errorf("ticket %s not found", t.ID)
 	}
+	if err := s.validateParentRef(ctx, t); err != nil {
+		return err
+	}
 
 	// If the provided ticket has no comments, use the existing ones
 	if len(t.Comments) == 0 {
@@ -62,8 +70,10 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 	if err != nil {
 		return err
 	}
-
-	return os.WriteFile(path, []byte(content), 0644)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return err
+	}
+	return s.upsertManifestTicket(t.ID, s.manifestEntryFromTicket(t))
 }
 
 func (s *Store) GetTicket(ctx context.Context, id string) (*ticket.Ticket, error) {

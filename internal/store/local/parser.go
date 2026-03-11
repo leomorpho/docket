@@ -28,6 +28,7 @@ func parse(content string) (*ticket.Ticket, error) {
 		State         string   `yaml:"state"`
 		Priority      int      `yaml:"priority"`
 		Labels        []string `yaml:"labels,omitempty"`
+		Parent        string   `yaml:"parent,omitempty"`
 		BlockedBy     []string `yaml:"blocked_by,omitempty"`
 		Blocks        []string `yaml:"blocks,omitempty"`
 		LinkedCommits []string `yaml:"linked_commits,omitempty"`
@@ -45,6 +46,7 @@ func parse(content string) (*ticket.Ticket, error) {
 	t.State = ticket.State(fm.State)
 	t.Priority = fm.Priority
 	t.Labels = fm.Labels
+	t.Parent = fm.Parent
 	t.BlockedBy = fm.BlockedBy
 	t.Blocks = fm.Blocks
 	t.LinkedCommits = fm.LinkedCommits

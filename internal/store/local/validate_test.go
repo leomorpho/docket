@@ -144,3 +144,62 @@ func TestValidateFile_RequiresStructuredHandoffForReviewAndDone(t *testing.T) {
 		t.Fatalf("expected no handoff structure errors, got %v", errs)
 	}
 }
+
+func TestValidateFile_HandoffSectionsConfigDriven(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	cfg := ticket.DefaultConfig()
+	cfg.HandoffSections = []string{"Current state", "Risks"}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	t1 := &ticket.Ticket{
+		ID:          "TKT-011",
+		Seq:         11,
+		Title:       "Config handoff sections",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:tester",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		Handoff:     "**Current state:** good",
+	}
+	if err := s.CreateTicket(ctx, t1); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	errs, _, err := s.ValidateFile("TKT-011")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	missingRisks := false
+	for _, e := range errs {
+		if e.Field == "handoff" && strings.Contains(strings.ToLower(e.Message), "risks") {
+			missingRisks = true
+		}
+	}
+	if !missingRisks {
+		t.Fatalf("expected missing Risks section error, got %v", errs)
+	}
+
+	cfg.HandoffSections = []string{"Current state"}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	errs, _, err = s.ValidateFile("TKT-011")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	for _, e := range errs {
+		if e.Field == "handoff" && strings.Contains(strings.ToLower(e.Message), "risks") {
+			t.Fatalf("did not expect Risks to be required after config update: %v", errs)
+		}
+	}
+}
