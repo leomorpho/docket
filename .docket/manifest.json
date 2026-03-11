@@ -1,0 +1,40 @@
+{
+  "_warning": "DO NOT EDIT .docket/tickets/*.md OR .docket/manifest.json DIRECTLY. Use `docket` commands only.",
+  "tickets": {
+    "TKT-108": {
+      "title": "Read-only Svelte board UI for docket",
+      "state": "backlog",
+      "priority": 2
+    },
+    "TKT-109": {
+      "title": "Scaffold SvelteKit app in web/ hidden from user repos",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-108"
+    },
+    "TKT-110": {
+      "title": "Board view with config-driven columns and ticket cards",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-108"
+    },
+    "TKT-111": {
+      "title": "Ticket detail slide-in panel with markdown rendering",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-108"
+    },
+    "TKT-112": {
+      "title": "Filter bar and list view toggle",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-108"
+    },
+    "TKT-113": {
+      "title": "docket ui command to launch dev server",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-108"
+    }
+  }
+}
