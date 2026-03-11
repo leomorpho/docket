@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
 
 	let {
 		stateOptions,
@@ -21,94 +24,69 @@
 		priority: { value: number };
 		clear: undefined;
 	}>();
+
+	function labelDisplayText(): string {
+		return selectedLabel || 'All labels';
+	}
+
+	function onLabelChange(value: string) {
+		dispatch('label', { value: value === '__all' ? '' : value });
+	}
 </script>
 
-<div class="bar">
-	<div class="group states">
+<div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
+	<div class="flex flex-wrap items-center gap-2">
 		{#each stateOptions as state}
-			<button
-				type="button"
-				class:active={selectedStates.has(state.key)}
+			<Button
+				variant={selectedStates.has(state.key) ? 'secondary' : 'outline'}
+				size="sm"
 				onclick={() => dispatch('toggleState', { key: state.key })}
 			>
 				{state.label}
-			</button>
+			</Button>
 		{/each}
 	</div>
 
-	<div class="group">
-		<label>
-			Label
-			<select value={selectedLabel} onchange={(e) => dispatch('label', { value: (e.currentTarget as HTMLSelectElement).value })}>
-				<option value="">All</option>
-				{#each labelOptions as label}
-					<option value={label}>{label}</option>
-				{/each}
-			</select>
-		</label>
-	</div>
+	<div class="mt-3 flex flex-wrap items-end gap-3">
+		<div class="flex flex-col gap-1">
+			<p class="text-xs font-medium text-muted-foreground">Label</p>
+			<Select
+				type="single"
+				value={selectedLabel || '__all'}
+				onValueChange={(value: string) => onLabelChange(value || '__all')}
+			>
+				<SelectTrigger class="w-48 bg-white">{labelDisplayText()}</SelectTrigger>
+				<SelectContent>
+					<SelectItem value="__all">All labels</SelectItem>
+					{#each labelOptions as label}
+						<SelectItem value={label}>{label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+		</div>
 
-	<div class="group">
-		<label>
-			Max Priority
-			<div class="priorities">
-				{#each [0, 1, 2, 3, 4, 5] as p}
-					<button
-						type="button"
-						class:active={maxPriority === p}
-						onclick={() => dispatch('priority', { value: p })}
-					>
-						{p === 0 ? 'All' : `≤P${p}`}
-					</button>
+		<div class="flex flex-col gap-1">
+			<p class="text-xs font-medium text-muted-foreground">Max Priority</p>
+			<ToggleGroup
+				type="single"
+				class="rounded-md bg-white p-1"
+				value={maxPriority === 0 ? 'all' : String(maxPriority)}
+				onValueChange={(value) =>
+					dispatch('priority', {
+						value: value === 'all' || !value ? 0 : Number(value)
+					})}
+			>
+				<ToggleGroupItem size="sm" value="all">All</ToggleGroupItem>
+				{#each [1, 2, 3, 4, 5] as p}
+					<ToggleGroupItem size="sm" value={String(p)}>≤P{p}</ToggleGroupItem>
 				{/each}
-			</div>
-		</label>
-	</div>
+			</ToggleGroup>
+		</div>
 
-	<button class="clear" type="button" onclick={() => dispatch('clear')}>Clear filters</button>
+		<div class="ml-auto">
+			<Button variant="outline" size="sm" class="bg-white" onclick={() => dispatch('clear')}>
+				Clear filters
+			</Button>
+		</div>
+	</div>
 </div>
-
-<style>
-	.bar {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.7rem;
-		padding: 0.65rem;
-		border: 1px solid #d6e0ee;
-		border-radius: 12px;
-		background: #f8fbff;
-	}
-
-	.group {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-
-	.states {
-		flex-wrap: wrap;
-	}
-
-	button,
-	select {
-		border: 1px solid #cedaeb;
-		background: #fff;
-		border-radius: 8px;
-		padding: 0.25rem 0.5rem;
-		cursor: pointer;
-	}
-
-	button.active {
-		background: #e6eefb;
-		border-color: #95acd0;
-	}
-
-	.priorities {
-		display: inline-flex;
-		gap: 0.3rem;
-	}
-
-	.clear {
-		margin-left: auto;
-	}
-</style>

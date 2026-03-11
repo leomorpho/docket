@@ -3,20 +3,28 @@
 	import DetailSheet from '$lib/components/DetailSheet.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
 	import ListTable from '$lib/components/ListTable.svelte';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import type { Config, StateConfig, Ticket } from '$lib/types';
 
 	let { data } = $props<{ data: { config: Config; tickets: Ticket[] } }>();
 
-	const openStateEntries = (Object.entries(data.config.states) as [string, StateConfig][])
-		.filter(([, st]) => st.open)
-		.sort((a, b) => a[1].column - b[1].column);
+	const openStateEntries = $derived.by(() =>
+		(Object.entries(data.config.states) as [string, StateConfig][])
+			.filter(([, st]) => st.open)
+			.sort((a, b) => a[1].column - b[1].column)
+	);
 
-	const openStates = openStateEntries.map(([key]) => key);
-	const stateOptions = openStateEntries.map(([key, st]) => ({ key, label: st.label }));
-	const labelOptions: string[] = Array.from(new Set(data.tickets.flatMap((t: Ticket) => t.labels))).sort() as string[];
+	const openStates = $derived(openStateEntries.map(([key]) => key));
+	const stateOptions = $derived(openStateEntries.map(([key, st]) => ({ key, label: st.label })));
+	const labelOptions: string[] = $derived(
+		Array.from(new Set(data.tickets.flatMap((t: Ticket) => t.labels))).sort() as string[]
+	);
 
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
-	let selectedStates = $state(new Set(openStates));
+	let selectedStates = $state(new Set<string>());
+	let selectedStatesInitialized = $state(false);
 	let selectedLabel = $state('');
 	let maxPriority = $state(0);
 	let mode = $state<'board' | 'list'>('board');
@@ -24,6 +32,13 @@
 	let sheetOpen = $state(false);
 	let sortBy = $state<SortKey>('priority');
 	let sortDir = $state<'asc' | 'desc'>('asc');
+
+	$effect(() => {
+		if (!selectedStatesInitialized && openStates.length > 0) {
+			selectedStates = new Set(openStates);
+			selectedStatesInitialized = true;
+		}
+	});
 
 	const filtered = $derived(data.tickets.filter((t: Ticket) => {
 		if (!selectedStates.has(t.state)) return false;
@@ -74,85 +89,57 @@
 	}
 </script>
 
-<main>
-	<header>
-		<div>
-			<h1>Docket UI</h1>
-			<p>{filtered.length} of {data.tickets.length} tickets</p>
-		</div>
-		<div class="modes">
-			<button type="button" class:active={mode === 'board'} onclick={() => (mode = 'board')}>Board</button>
-			<button type="button" class:active={mode === 'list'} onclick={() => (mode = 'list')}>List</button>
-		</div>
-	</header>
+<main class="min-h-screen bg-gradient-to-br from-slate-50 via-zinc-50 to-slate-100 px-4 py-5 sm:px-6">
+	<div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+		<Card class="border-slate-200/80 bg-white/90 shadow-sm">
+			<CardHeader class="flex flex-row items-start justify-between gap-3">
+				<div class="space-y-1">
+					<CardTitle class="text-2xl tracking-tight">Docket UI</CardTitle>
+					<p class="text-sm text-muted-foreground">
+						{filtered.length} of {data.tickets.length} tickets visible
+					</p>
+				</div>
+				<Badge variant="secondary">{openStates.length} workflow states</Badge>
+			</CardHeader>
+			<CardContent>
+				<FilterBar
+					{stateOptions}
+					{labelOptions}
+					{selectedStates}
+					{selectedLabel}
+					{maxPriority}
+					on:toggleState={(e: CustomEvent<{ key: string }>) => toggleState(e.detail.key)}
+					on:label={(e: CustomEvent<{ value: string }>) => (selectedLabel = e.detail.value)}
+					on:priority={(e: CustomEvent<{ value: number }>) => (maxPriority = e.detail.value)}
+					on:clear={clearFilters}
+				/>
+			</CardContent>
+		</Card>
 
-	<FilterBar
-		{stateOptions}
-		{labelOptions}
-		{selectedStates}
-		{selectedLabel}
-		{maxPriority}
-		on:toggleState={(e: CustomEvent<{ key: string }>) => toggleState(e.detail.key)}
-		on:label={(e: CustomEvent<{ value: string }>) => (selectedLabel = e.detail.value)}
-		on:priority={(e: CustomEvent<{ value: number }>) => (maxPriority = e.detail.value)}
-		on:clear={clearFilters}
-	/>
+		<Tabs bind:value={mode} class="gap-3">
+			<TabsList class="w-fit border bg-white/80 p-1 shadow-xs">
+				<TabsTrigger value="board">Board</TabsTrigger>
+				<TabsTrigger value="list">List</TabsTrigger>
+			</TabsList>
 
-	{#if mode === 'board'}
-		<BoardView {columns} on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)} />
-	{:else}
-		<ListTable
-			tickets={sortedList}
-			{sortBy}
-			{sortDir}
-			on:sort={(e: CustomEvent<{ by: SortKey }>) => toggleSort(e.detail.by)}
-			on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
-		/>
-	{/if}
+			<TabsContent value="board" class="mt-0">
+				<BoardView
+					{columns}
+					on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
+				/>
+			</TabsContent>
 
-	<DetailSheet ticket={selectedTicket} open={sheetOpen} onClose={() => (sheetOpen = false)} />
+			<TabsContent value="list" class="mt-0">
+				<ListTable
+					tickets={sortedList}
+					{sortBy}
+					{sortDir}
+					on:sort={(e: CustomEvent<{ by: SortKey }>) => toggleSort(e.detail.by)}
+					on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
+				/>
+			</TabsContent>
+		</Tabs>
+	</div>
+
+	<DetailSheet ticket={selectedTicket} bind:open={sheetOpen} />
 </main>
-
-<style>
-	main {
-		padding: 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.9rem;
-	}
-
-	header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-		gap: 0.8rem;
-	}
-
-	h1 {
-		margin: 0;
-		font-size: 1.4rem;
-	}
-
-	p {
-		margin: 0.2rem 0 0;
-		color: #51627f;
-	}
-
-	.modes {
-		display: inline-flex;
-		border: 1px solid #cfdcec;
-		border-radius: 10px;
-		overflow: hidden;
-	}
-
-	.modes button {
-		border: 0;
-		padding: 0.35rem 0.7rem;
-		background: #fff;
-		cursor: pointer;
-	}
-
-	.modes button.active {
-		background: #e6eefb;
-	}
-</style>

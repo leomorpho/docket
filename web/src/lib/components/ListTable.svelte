@@ -1,5 +1,15 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Card, CardContent } from '$lib/components/ui/card';
+	import {
+		Table,
+		TableBody,
+		TableCell,
+		TableHead,
+		TableHeader,
+		TableRow
+	} from '$lib/components/ui/table';
 	import type { Ticket } from '$lib/types';
 
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
@@ -30,64 +40,42 @@
 	}
 </script>
 
-<table>
-	<thead>
-		<tr>
-			{#each keys as key}
-				<th>
-					<button type="button" onclick={() => dispatch('sort', { by: key })}>
-						{headerLabel(key)}
-						{#if sortBy === key}
-							{sortDir === 'asc' ? ' ↑' : ' ↓'}
-						{/if}
-					</button>
-				</th>
-			{/each}
-		</tr>
-	</thead>
-	<tbody>
-		{#each tickets as ticket}
-			<tr onclick={() => dispatch('select', { ticket })}>
-				<td>{ticket.id}</td>
-				<td>{ticket.title}</td>
-				<td>{ticket.state}</td>
-				<td>P{ticket.priority}</td>
-				<td>{ticket.parent ?? '-'}</td>
-				<td>{ticket.created_at}</td>
-			</tr>
-		{/each}
-	</tbody>
-</table>
-
-<style>
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-		border: 1px solid #d7e2f0;
-		border-radius: 12px;
-		overflow: hidden;
-	}
-
-	th,
-	td {
-		padding: 0.55rem 0.6rem;
-		border-bottom: 1px solid #e2eaf5;
-		text-align: left;
-	}
-
-	th button {
-		border: 0;
-		background: transparent;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	tbody tr {
-		cursor: pointer;
-	}
-
-	tbody tr:hover {
-		background: #f5f9ff;
-	}
-</style>
+<Card class="border-slate-200 bg-white/90 shadow-sm">
+	<CardContent class="p-0">
+		<Table>
+			<TableHeader>
+				<TableRow class="bg-slate-50/70 hover:bg-slate-50/70">
+					{#each keys as key}
+						<TableHead>
+							<button
+								type="button"
+								class="inline-flex w-full cursor-pointer items-center gap-1 text-left text-xs font-semibold tracking-wide uppercase text-slate-600"
+								onclick={() => dispatch('sort', { by: key })}
+							>
+								{headerLabel(key)}
+								{#if sortBy === key}
+									<span aria-hidden="true">{sortDir === 'asc' ? '↑' : '↓'}</span>
+								{/if}
+							</button>
+						</TableHead>
+					{/each}
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{#each tickets as ticket}
+					<TableRow
+						class="cursor-pointer bg-white/70 transition hover:bg-slate-50"
+						onclick={() => dispatch('select', { ticket })}
+					>
+						<TableCell class="font-medium text-slate-700">{ticket.id}</TableCell>
+						<TableCell class="max-w-[36ch] truncate">{ticket.title}</TableCell>
+						<TableCell><Badge variant="outline">{ticket.state}</Badge></TableCell>
+						<TableCell><Badge variant="secondary">P{ticket.priority}</Badge></TableCell>
+						<TableCell>{ticket.parent ?? '-'}</TableCell>
+						<TableCell class="text-muted-foreground">{ticket.created_at}</TableCell>
+					</TableRow>
+				{/each}
+			</TableBody>
+		</Table>
+	</CardContent>
+</Card>

@@ -1,109 +1,67 @@
 <script lang="ts">
 	import { marked } from 'marked';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
+	import { ScrollArea } from '$lib/components/ui/scroll-area';
+	import {
+		Sheet,
+		SheetContent,
+		SheetDescription,
+		SheetHeader,
+		SheetTitle
+	} from '$lib/components/ui/sheet';
 	import type { Ticket } from '$lib/types';
 
-	let { ticket, open = false, onClose } = $props<{
+	let { ticket, open = $bindable(false) } = $props<{
 		ticket: Ticket | null;
 		open: boolean;
-		onClose: () => void;
 	}>();
 
 	const html = $derived(ticket ? marked.parse(ticket.body, { gfm: true }) : '');
-
-	function onKeydown(e: KeyboardEvent) {
-		if (open && e.key === 'Escape') onClose();
-	}
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<Sheet bind:open>
+	<SheetContent class="w-[min(72rem,96vw)] max-w-none border-l-slate-200 bg-white/98 p-0 sm:w-[min(64rem,92vw)]">
+		{#if ticket}
+			<div class="flex h-full flex-col">
+				<SheetHeader class="space-y-3 border-b border-slate-200/80 px-6 pt-6 pb-5">
+					<div class="flex items-start justify-between gap-3">
+						<SheetTitle class="text-xl leading-tight font-semibold text-slate-900">{ticket.title}</SheetTitle>
+						<Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button>
+					</div>
+					<SheetDescription>
+						<div class="flex flex-wrap gap-2">
+							<Badge variant="outline">{ticket.state}</Badge>
+							<Badge variant="secondary">P{ticket.priority}</Badge>
+							<Badge variant="outline">{ticket.created_at}</Badge>
+							{#if ticket.parent}<Badge variant="outline">parent: {ticket.parent}</Badge>{/if}
+							{#each ticket.labels as label}
+								<Badge variant="secondary" class="bg-slate-100 text-slate-700">{label}</Badge>
+							{/each}
+						</div>
+					</SheetDescription>
+				</SheetHeader>
 
-{#if open && ticket}
-	<button class="overlay" onclick={onClose} aria-label="Close details"></button>
-	<section class="sheet" aria-modal="true">
-		<header class="header">
-			<h2>{ticket.title}</h2>
-			<button type="button" class="close" onclick={onClose}>Close</button>
-		</header>
-		<div class="meta">
-			<span>{ticket.state}</span>
-			<span>P{ticket.priority}</span>
-			<span>{ticket.created_at}</span>
-			{#if ticket.parent}<span>parent: {ticket.parent}</span>{/if}
-			{#if ticket.labels.length > 0}<span>labels: {ticket.labels.join(', ')}</span>{/if}
-		</div>
-		<article class="markdown">
-			{@html html}
-		</article>
-	</section>
-{/if}
+				<ScrollArea class="h-[calc(100vh-11rem)] px-6 py-5">
+					<article class="markdown max-w-none text-sm leading-relaxed text-slate-800">
+						{@html html}
+					</article>
+				</ScrollArea>
+			</div>
+		{/if}
+	</SheetContent>
+</Sheet>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		border: 0;
-		background: rgba(15, 23, 42, 0.44);
-		z-index: 40;
-	}
-
-	.sheet {
-		position: fixed;
-		right: 0;
-		top: 0;
-		bottom: 0;
-		width: min(58rem, 92vw);
-		background: #fff;
-		z-index: 50;
-		padding: 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.8rem;
-		box-shadow: -10px 0 28px rgba(15, 23, 42, 0.25);
-		overflow: auto;
-	}
-
-	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.8rem;
-	}
-
-	.header h2 {
-		margin: 0;
-	}
-
-	.close {
-		border: 1px solid #d4dfed;
-		background: #f7faff;
-		border-radius: 8px;
-		padding: 0.3rem 0.65rem;
-		cursor: pointer;
-	}
-
-	.meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.45rem;
-	}
-
-	.meta span {
-		background: #f2f6fd;
-		border: 1px solid #dde6f5;
-		border-radius: 999px;
-		padding: 0.12rem 0.5rem;
-		font-size: 0.78rem;
-	}
-
 	.markdown :global(pre) {
+		border-radius: 0.5rem;
 		background: #0f172a;
-		color: #e2e8f0;
-		padding: 0.8rem;
-		border-radius: 8px;
+		color: #f1f5f9;
+		padding: 1rem;
 		overflow: auto;
 	}
 
 	.markdown :global(code) {
-		font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 	}
 </style>

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Card, CardContent, CardHeader } from '$lib/components/ui/card';
 	import type { Ticket } from '$lib/types';
 
 	let { ticket } = $props<{ ticket: Ticket }>();
@@ -8,77 +10,30 @@
 	function select() {
 		dispatch('select', { ticket });
 	}
+
+	function priorityTone(priority: number): string {
+		if (priority <= 1) return 'bg-red-100/70 text-red-700 border-red-200';
+		if (priority <= 2) return 'bg-amber-100/75 text-amber-700 border-amber-200';
+		if (priority <= 3) return 'bg-sky-100/75 text-sky-700 border-sky-200';
+		return 'bg-emerald-100/70 text-emerald-700 border-emerald-200';
+	}
 </script>
 
-<button class="card" type="button" onclick={select}>
-	<div class="top">
-		<span class="id">{ticket.id}</span>
-		<span class="priority">P{ticket.priority}</span>
-	</div>
-	<h3 class="title">{ticket.title}</h3>
-	{#if ticket.labels.length > 0}
-		<div class="labels">
-			{#each ticket.labels as label}
-				<span class="label">{label}</span>
-			{/each}
-		</div>
-	{/if}
+<button type="button" class="w-full cursor-pointer text-left" onclick={select}>
+	<Card class="border-slate-200 bg-white/95 transition hover:-translate-y-0.5 hover:shadow-md">
+		<CardHeader class="flex flex-row items-center justify-between gap-2 pb-2">
+			<Badge variant="outline" class="bg-slate-100 text-slate-700">{ticket.id}</Badge>
+			<Badge variant="outline" class={priorityTone(ticket.priority)}>P{ticket.priority}</Badge>
+		</CardHeader>
+		<CardContent class="space-y-3">
+			<h3 class="line-clamp-2 text-sm leading-snug font-semibold text-slate-900">{ticket.title}</h3>
+			{#if ticket.labels.length > 0}
+				<div class="flex flex-wrap gap-1.5">
+					{#each ticket.labels as label}
+						<Badge variant="secondary" class="bg-slate-100/80 text-slate-700">{label}</Badge>
+					{/each}
+				</div>
+			{/if}
+		</CardContent>
+	</Card>
 </button>
-
-<style>
-	.card {
-		width: 100%;
-		border: 1px solid #dbe3ef;
-		border-radius: 12px;
-		background: #fff;
-		padding: 0.75rem;
-		text-align: left;
-		cursor: pointer;
-		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-	}
-
-	.card:hover {
-		border-color: #9fb6d8;
-	}
-
-	.top {
-		display: flex;
-		justify-content: space-between;
-		gap: 0.5rem;
-		font-size: 0.75rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.id,
-	.priority {
-		background: #eef3fb;
-		padding: 0.15rem 0.4rem;
-		border-radius: 999px;
-	}
-
-	.title {
-		margin: 0;
-		font-size: 0.95rem;
-		line-height: 1.3;
-		display: -webkit-box;
-		line-clamp: 2;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
-
-	.labels {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		margin-top: 0.6rem;
-	}
-
-	.label {
-		font-size: 0.72rem;
-		background: #f5f7fb;
-		border: 1px solid #e3e9f4;
-		border-radius: 999px;
-		padding: 0.1rem 0.45rem;
-	}
-</style>
