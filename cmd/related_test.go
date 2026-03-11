@@ -13,6 +13,27 @@ import (
 	"github.com/leoaudibert/docket/internal/ticket"
 )
 
+type semanticE2EProvider struct{}
+
+func (p *semanticE2EProvider) Name() string { return "fake" }
+func (p *semanticE2EProvider) Status(context.Context) (semantic.Status, error) {
+	return semantic.Status{Provider: "fake", Model: "fake-model", Available: true}, nil
+}
+func (p *semanticE2EProvider) Embed(ctx context.Context, req semantic.EmbedRequest) (semantic.EmbedResponse, error) {
+	results := make([]semantic.EmbedResult, 0, len(req.Inputs))
+	for _, input := range req.Inputs {
+		vector := []float64{0, 1}
+		if strings.Contains(strings.ToLower(input.Text), "semantic") || strings.Contains(strings.ToLower(input.Text), "vector") {
+			vector = []float64{1, 0}
+		}
+		results = append(results, semantic.EmbedResult{
+			ChunkID: input.ChunkID,
+			Vector:  vector,
+		})
+	}
+	return semantic.EmbedResponse{Model: req.Model, Dimension: 2, Results: results}, nil
+}
+
 func TestRelatedCmdLexicalOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
@@ -209,6 +230,59 @@ func TestRelatedCmdHybridUsesVectorScores(t *testing.T) {
 	}
 	if len(got.Results) == 0 || got.Results[0].TicketID != "TKT-003" {
 		t.Fatalf("expected vector-heavy result first, got %#v", got.Results)
+	}
+}
+
+func TestRelatedCmdEndToEndSemanticIndexing(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	relatedSemantic = "auto"
+	relatedLimit = 5
+
+	cfg := ticket.DefaultConfig()
+	cfg.Semantic.Enabled = true
+	cfg.Semantic.Provider = "fake"
+	cfg.Semantic.Model = "fake-model"
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	seedRelatedTicketsWithoutConfig(t, tmpDir,
+		&ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "semantic search", Description: "local vector index", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "semantic ranking", Description: "vector scoring", State: ticket.StateTodo, Priority: 1},
+		&ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "release notes", Description: "shipping docs", State: ticket.StateTodo, Priority: 1},
+	)
+
+	origFactory := semanticProviderFactory
+	defer func() {
+		semanticProviderFactory = origFactory
+	}()
+	semanticProviderFactory = func(cfg semantic.Config, opts semantic.ProviderOptions) (semantic.Provider, error) {
+		return &semanticE2EProvider{}, nil
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"semantic", "rebuild", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("semantic rebuild failed: %v", err)
+	}
+
+	b.Reset()
+	rootCmd.SetArgs([]string{"related", "TKT-001", "--semantic", "auto", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("related failed: %v", err)
+	}
+
+	var got relatedView
+	if err := json.Unmarshal(b.Bytes(), &got); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+	if !got.SemanticUsed {
+		t.Fatalf("expected semantic execution, got %#v", got)
+	}
+	if len(got.Results) == 0 || got.Results[0].TicketID != "TKT-002" {
+		t.Fatalf("expected semantic neighbor first, got %#v", got.Results)
 	}
 }
 

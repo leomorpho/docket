@@ -59,6 +59,23 @@ func TestCombineScoresKeepsSingleSourceTickets(t *testing.T) {
 	}
 }
 
+func TestCombineScoresHybridOrdering(t *testing.T) {
+	cfg := Config{LexicalWeight: 0.35, VectorWeight: 0.65}
+	combined := CombineScores(cfg,
+		[]LexicalScore{
+			{TicketID: "TKT-002", Score: 0.9},
+			{TicketID: "TKT-003", Score: 0.2},
+		},
+		[]VectorScore{
+			{TicketID: "TKT-003", Score: 1.0},
+			{TicketID: "TKT-002", Score: 0.1},
+		},
+	)
+	if len(combined) != 2 || combined[0].TicketID != "TKT-003" {
+		t.Fatalf("expected vector-heavy ticket first, got %#v", combined)
+	}
+}
+
 func TestBuildGraphInputsAndBoosts(t *testing.T) {
 	source := &ticket.Ticket{
 		ID:            "TKT-001",
@@ -77,6 +94,19 @@ func TestBuildGraphInputsAndBoosts(t *testing.T) {
 	boosts := CalculateGraphBoosts(inputs)
 	if boosts["TKT-002"] <= boosts["TKT-003"] {
 		t.Fatalf("expected dependency boost to exceed linked-commit boost: %#v", boosts)
+	}
+}
+
+func TestApplyGraphBoostsChangesOrder(t *testing.T) {
+	scores := []CombinedScore{
+		{TicketID: "TKT-002", Score: 0.55},
+		{TicketID: "TKT-003", Score: 0.6},
+	}
+	boosted := ApplyGraphBoosts(scores, map[string]float64{
+		"TKT-002": 0.1,
+	})
+	if boosted[0].TicketID != "TKT-002" {
+		t.Fatalf("expected graph boost to change ordering, got %#v", boosted)
 	}
 }
 

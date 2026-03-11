@@ -125,6 +125,45 @@ func TestSemanticStatusCmdWarnings(t *testing.T) {
 	}
 }
 
+func TestSemanticStatusCmdHumanMissingIndex(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	cfg := ticket.DefaultConfig()
+	cfg.Semantic.Enabled = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	origFactory := semanticProviderFactory
+	origFreshness := semanticFreshnessFn
+	defer func() {
+		semanticProviderFactory = origFactory
+		semanticFreshnessFn = origFreshness
+	}()
+	semanticProviderFactory = func(cfg semantic.Config, opts semantic.ProviderOptions) (semantic.Provider, error) {
+		return &testSemanticProvider{status: semantic.Status{
+			Provider:  cfg.Provider,
+			Model:     cfg.Model,
+			Available: true,
+		}}, nil
+	}
+	semanticFreshnessFn = func(ctx context.Context, repoRoot string, cfg semantic.Config) (semantic.Freshness, error) {
+		return semantic.Freshness{Status: semantic.FreshnessMissing, Reason: "missing"}, nil
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"semantic", "status"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if !strings.Contains(b.String(), "Warning: semantic index is missing") || !strings.Contains(b.String(), "Cache paths:") {
+		t.Fatalf("unexpected human output: %q", b.String())
+	}
+}
+
 func TestSemanticRebuildCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
@@ -175,5 +214,46 @@ func TestSemanticRebuildCmd(t *testing.T) {
 	}
 	if got["mode"] != "full" || got["added"].(float64) != 9 {
 		t.Fatalf("unexpected full rebuild payload: %v", got)
+	}
+}
+
+func TestSemanticRebuildCmdNoopAndFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	origFactory := semanticProviderFactory
+	origIncremental := semanticIncrementalFn
+	defer func() {
+		semanticProviderFactory = origFactory
+		semanticIncrementalFn = origIncremental
+	}()
+
+	semanticProviderFactory = func(cfg semantic.Config, opts semantic.ProviderOptions) (semantic.Provider, error) {
+		return &testSemanticProvider{status: semantic.Status{Provider: "uv", Model: cfg.Model, Available: true}}, nil
+	}
+	semanticIncrementalFn = func(ctx context.Context, repoRoot string, provider semantic.Provider, cfg semantic.Config) (semantic.RebuildStats, error) {
+		return semantic.RebuildStats{}, nil
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"semantic", "rebuild"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute noop rebuild failed: %v", err)
+	}
+	if !strings.Contains(b.String(), "added=0") || !strings.Contains(b.String(), "unchanged=0") {
+		t.Fatalf("unexpected noop output: %q", b.String())
+	}
+
+	semanticIncrementalFn = func(ctx context.Context, repoRoot string, provider semantic.Provider, cfg semantic.Config) (semantic.RebuildStats, error) {
+		return semantic.RebuildStats{}, context.DeadlineExceeded
+	}
+	rootCmd.SetArgs([]string{"semantic", "rebuild"})
+	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("expected rebuild failure, got %v", err)
 	}
 }

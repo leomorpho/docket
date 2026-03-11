@@ -91,3 +91,38 @@ func TestVectorStoreOpenUpsertQueryDelete(t *testing.T) {
 		t.Fatalf("Delete missing ID should be safe, got %v", err)
 	}
 }
+
+func TestVectorStoreReopenRoundTripsMetadata(t *testing.T) {
+	repo := t.TempDir()
+	ctx := context.Background()
+
+	store, err := OpenVectorStore(repo)
+	if err != nil {
+		t.Fatalf("OpenVectorStore failed: %v", err)
+	}
+	if err := store.Upsert(ctx, VectorDocument{
+		ID:        "chunk-1",
+		TicketID:  "TKT-010",
+		Type:      ChunkTypeAC,
+		Hash:      "hash-10",
+		Content:   "acceptance criteria",
+		Embedding: []float32{0.4, 0.6},
+	}); err != nil {
+		t.Fatalf("Upsert failed: %v", err)
+	}
+
+	reopened, err := OpenVectorStore(repo)
+	if err != nil {
+		t.Fatalf("OpenVectorStore reopen failed: %v", err)
+	}
+	results, err := reopened.Query(ctx, []float32{0.4, 0.6}, 1)
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected one result, got %d", len(results))
+	}
+	if results[0].TicketID != "TKT-010" || results[0].Type != ChunkTypeAC || results[0].Hash != "hash-10" {
+		t.Fatalf("unexpected round-tripped metadata: %+v", results[0])
+	}
+}
