@@ -27,7 +27,15 @@ type Metadata struct {
 }
 
 func MetadataPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "semantic", "metadata.json")
+	return filepath.Join(SemanticDir(repoRoot), "metadata.json")
+}
+
+func SemanticDir(repoRoot string) string {
+	return filepath.Join(repoRoot, ".docket", "semantic")
+}
+
+func VectorDBPath(repoRoot string) string {
+	return filepath.Join(SemanticDir(repoRoot), "vector")
 }
 
 func LoadMetadata(repoRoot string) (*Metadata, error) {
