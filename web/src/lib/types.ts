@@ -31,3 +31,19 @@ export type Ticket = {
 	updated_at: string;
 	body: string;
 };
+
+export type Finding = {
+	ticketId: string;
+	rule: string;
+	message: string;
+	severity: 'error' | 'warning';
+};
+
+export type ProjectHealth = {
+	ticketCount: number;
+	invalidSignatures: string[];
+	staleTickets: string[];
+	stateDistribution: Record<string, number>;
+	priorityDistribution: Record<number, number>;
+	findings: Finding[];
+};

@@ -4,6 +4,7 @@
 	import BoardView from '$lib/components/BoardView.svelte';
 	import DetailSheet from '$lib/components/DetailSheet.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
+	import HealthView from '$lib/components/HealthView.svelte';
 	import ListTable from '$lib/components/ListTable.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
@@ -58,6 +59,31 @@
 		}
 	});
 
+	// Handle initial ticket from URL
+	$effect(() => {
+		const ticketId = $page.url.searchParams.get('ticket');
+		if (ticketId && !selectedTicket) {
+			const t = data.tickets.find((t) => t.id === ticketId);
+			if (t) {
+				selectedTicket = t;
+				sheetOpen = true;
+				// Ensure its state is selected so it's visible if needed
+				if (!selectedStates.has(t.state)) {
+					selectedStates.add(t.state);
+					selectedStates = new Set(selectedStates);
+				}
+			}
+		}
+	});
+
+	$effect(() => {
+		if (!sheetOpen && $page.url.searchParams.has('ticket')) {
+			const url = new URL($page.url);
+			url.searchParams.delete('ticket');
+			goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+		}
+	});
+
 	// Reset filters when project changes
 	$effect(() => {
 		if (data.activeProjectId) {
@@ -107,6 +133,9 @@
 	function onCardSelect(ticket: Ticket) {
 		selectedTicket = ticket;
 		sheetOpen = true;
+		const url = new URL($page.url);
+		url.searchParams.set('ticket', ticket.id);
+		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
 	function toggleState(key: string) {
@@ -211,6 +240,7 @@
 			<TabsList class="w-fit border bg-white/80 p-1 shadow-xs">
 				<TabsTrigger value="board">Board</TabsTrigger>
 				<TabsTrigger value="list">List</TabsTrigger>
+				<TabsTrigger value="health">Health</TabsTrigger>
 			</TabsList>
 
 			<TabsContent value="board" class="mt-0">
@@ -228,6 +258,13 @@
 					on:sort={(e: CustomEvent<{ by: SortKey }>) => toggleSort(e.detail.by)}
 					on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
 				/>
+			</TabsContent>
+
+			<TabsContent value="health" class="mt-0">
+				<HealthView projectId={data.activeProjectId} on:select={(e: CustomEvent<{ id: string }>) => {
+					const t = data.tickets.find(t => t.id === e.detail.id);
+					if (t) onCardSelect(t);
+				}} />
 			</TabsContent>
 		</Tabs>
 	</div>
