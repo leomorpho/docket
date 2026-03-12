@@ -170,6 +170,41 @@
       "title": "Spike: multi-repo support in docket ui via shared port and project selector",
       "state": "in-progress",
       "priority": 3
+    },
+    "TKT-153": {
+      "title": "Divergent Work Prevention: Force agents to check for existing tickets",
+      "state": "backlog",
+      "priority": 2
+    },
+    "TKT-154": {
+      "title": "Ecosystem Analytics: Track and visualize ticket lead time",
+      "state": "backlog",
+      "priority": 2
+    },
+    "TKT-155": {
+      "title": "Enforcement: Implement DOCKET_AGENT_MODE for contextual validation",
+      "state": "backlog",
+      "priority": 2
+    },
+    "TKT-156": {
+      "title": "Observability: Implement docket ps to track active worktrees and claims",
+      "state": "backlog",
+      "priority": 2
+    },
+    "TKT-157": {
+      "title": "Continuity: Implement docket resume for seamless context handover",
+      "state": "backlog",
+      "priority": 1
+    },
+    "TKT-158": {
+      "title": "DX: Implement common command aliases (ls, st, up, cr)",
+      "state": "backlog",
+      "priority": 3
+    },
+    "TKT-159": {
+      "title": "Infrastructure: Implement a robust integration testing rig for Git/Process coordination",
+      "state": "backlog",
+      "priority": 1
     }
   }
 }
