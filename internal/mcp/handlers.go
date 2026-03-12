@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +30,7 @@ func Dispatch(action string, args map[string]interface{}, repoRoot string) (inte
 	case "list":
 		return handleList(ctx, s, cfg, args, repoRoot)
 	case "create":
-		return handleCreate(ctx, s, cfg, args)
+		return handleCreate(ctx, s, cfg, args, repoRoot)
 	case "show":
 		return handleShow(ctx, s, args)
 	case "update":
@@ -41,6 +43,30 @@ func Dispatch(action string, args map[string]interface{}, repoRoot string) (inte
 	default:
 		return nil, fmt.Errorf("unknown action: %s", action)
 	}
+}
+
+func getContent(args map[string]interface{}, textKey, fileKey, repoRoot string) (string, bool) {
+	if filePath, ok := getString(args, fileKey); ok && filePath != "" {
+		// Security: Validate path is within repo or /tmp
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return "", false
+		}
+		
+		absRepo, _ := filepath.Abs(repoRoot)
+		inRepo := strings.HasPrefix(absPath, absRepo)
+		inTmp := strings.HasPrefix(absPath, "/tmp") || strings.HasPrefix(absPath, os.TempDir())
+		
+		if !inRepo && !inTmp {
+			return "", false
+		}
+
+		data, err := os.ReadFile(absPath)
+		if err == nil {
+			return string(data), true
+		}
+	}
+	return getString(args, textKey)
 }
 
 func handleList(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}, repoRoot string) (interface{}, error) {
@@ -81,7 +107,7 @@ func handleList(ctx context.Context, s *local.Store, cfg *ticket.Config, args ma
 	return resp, nil
 }
 
-func handleCreate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
+func handleCreate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}, repoRoot string) (interface{}, error) {
 	title, ok := getString(args, "title")
 	if !ok || strings.TrimSpace(title) == "" {
 		return nil, fmt.Errorf("title is required")
@@ -101,8 +127,9 @@ func handleCreate(ctx context.Context, s *local.Store, cfg *ticket.Config, args 
 	if p, ok := getInt(args, "priority"); ok {
 		priority = p
 	}
+	desc, _ := getContent(args, "desc", "content_file", repoRoot)
 	now := time.Now().UTC().Truncate(time.Second)
-	t := &ticket.Ticket{ID: id, Seq: seq, Title: title, Description: getStringOr(args, "desc", ""), State: ticket.State(state), Priority: priority, CreatedAt: now, UpdatedAt: now, CreatedBy: "agent:mcp"}
+	t := &ticket.Ticket{ID: id, Seq: seq, Title: title, Description: desc, State: ticket.State(state), Priority: priority, CreatedAt: now, UpdatedAt: now, CreatedBy: "agent:mcp"}
 	if err := s.CreateTicket(ctx, t); err != nil {
 		return nil, err
 	}
@@ -155,6 +182,13 @@ func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args 
 	if v, ok := getInt(args, "priority"); ok {
 		t.Priority = v
 	}
+	if v, ok := getContent(args, "desc", "content_file", repoRoot); ok {
+		t.Description = v
+	}
+	if v, ok := getString(args, "handoff"); ok {
+		t.Handoff = v
+	}
+
 	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 	if err := s.UpdateTicket(ctx, t); err != nil {
 		return nil, err
