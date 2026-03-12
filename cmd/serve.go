@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/leoaudibert/docket/internal/mcp"
+	"github.com/leomorpho/docket/internal/mcp"
 	"github.com/spf13/cobra"
 )
 

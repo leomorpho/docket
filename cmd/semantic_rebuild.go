@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/leoaudibert/docket/internal/semantic"
+	"github.com/leomorpho/docket/internal/semantic"
 	"github.com/spf13/cobra"
 )
 

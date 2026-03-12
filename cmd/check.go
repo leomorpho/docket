@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	ck "github.com/leoaudibert/docket/internal/check"
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/store/local"
-	"github.com/leoaudibert/docket/internal/ticket"
+	ck "github.com/leomorpho/docket/internal/check"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 

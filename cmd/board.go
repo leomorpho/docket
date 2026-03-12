@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/store/local"
-	"github.com/leoaudibert/docket/internal/tui"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/tui"
 	"github.com/spf13/cobra"
 )
 

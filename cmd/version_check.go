@@ -53,7 +53,7 @@ func prepareVersionNotice(cmd *cobra.Command) {
 	cache, err := loadVersionCache()
 	if err == nil {
 		if cache.LatestVersion != "" && isVersionNewer(cache.LatestVersion, Version) {
-			versionNotice = fmt.Sprintf("update available: %s (current %s). Upgrade: go install github.com/leoaudibert/docket@latest", normalizeVersion(cache.LatestVersion), normalizeVersion(Version))
+			versionNotice = fmt.Sprintf("update available: %s (current %s). Upgrade: go install github.com/leomorpho/docket@latest", normalizeVersion(cache.LatestVersion), normalizeVersion(Version))
 		}
 		if time.Since(time.Unix(cache.CheckedAtUnix, 0)) < versionCheckTTL {
 			return
@@ -100,7 +100,7 @@ func spawnVersionCheckWorker() error {
 
 func fetchLatestReleaseVersion() (string, error) {
 	client := &http.Client{Timeout: 3 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos/leoaudibert/docket/releases/latest", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos/leomorpho/docket/releases/latest", nil)
 	if err != nil {
 		return "", err
 	}

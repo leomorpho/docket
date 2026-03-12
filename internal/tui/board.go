@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 const virtualStateBlocked = "blocked"

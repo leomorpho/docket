@@ -3,8 +3,8 @@ package cmd
 import (
 	"context"
 
-	"github.com/leoaudibert/docket/internal/semantic"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/semantic"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 var (

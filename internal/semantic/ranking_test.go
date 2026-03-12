@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type vectorTestProvider struct {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/store/local"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-module github.com/leoaudibert/docket
+module github.com/leomorpho/docket
 
 go 1.26.1
 

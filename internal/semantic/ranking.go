@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type FieldWeights struct {

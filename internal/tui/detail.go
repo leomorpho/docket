@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func formatTicketDetail(t *ticket.Ticket) string {

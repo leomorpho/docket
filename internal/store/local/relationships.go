@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 // RelationshipIndex is a runtime-only parent/child graph derived from ticket data.

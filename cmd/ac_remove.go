@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/leoaudibert/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
 

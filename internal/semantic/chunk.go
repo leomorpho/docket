@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type ChunkType string

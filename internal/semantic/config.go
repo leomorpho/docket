@@ -3,7 +3,7 @@ package semantic
 import (
 	"path/filepath"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func BridgeScriptPath(repoRoot string) string {

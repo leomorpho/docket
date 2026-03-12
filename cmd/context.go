@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	g "github.com/leoaudibert/docket/internal/git"
-	"github.com/leoaudibert/docket/internal/store/local"
-	"github.com/leoaudibert/docket/internal/ticket"
+	g "github.com/leomorpho/docket/internal/git"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 

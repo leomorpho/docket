@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type Checker struct {

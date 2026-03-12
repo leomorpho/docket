@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestSessionAttachListResolveAndCompressMark(t *testing.T) {

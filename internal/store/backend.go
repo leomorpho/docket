@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 // Filter specifies which tickets to return from ListTickets.

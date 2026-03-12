@@ -3,7 +3,7 @@ package semantic
 import (
 	"testing"
 
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestChunkTicket(t *testing.T) {

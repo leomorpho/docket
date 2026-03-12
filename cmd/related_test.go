@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/leoaudibert/docket/internal/semantic"
-	"github.com/leoaudibert/docket/internal/store/local"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/semantic"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type semanticE2EProvider struct{}

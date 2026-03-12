@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	g "github.com/leoaudibert/docket/internal/git"
-	"github.com/leoaudibert/docket/internal/store/local"
+	g "github.com/leomorpho/docket/internal/git"
+	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
 

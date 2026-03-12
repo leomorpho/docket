@@ -39,7 +39,7 @@ backlog → todo → in-progress → [blocked*] → in-review → done → archi
 
 ```bash
 # install
-go install github.com/leoaudibert/docket@latest
+go install github.com/leomorpho/docket@latest
 
 # initialize in your repo
 docket init

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
 

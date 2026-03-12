@@ -8,8 +8,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/leoaudibert/docket/internal/store"
-	"github.com/leoaudibert/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type fakeBackend struct {
