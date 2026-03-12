@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
 	import BoardView from '$lib/components/BoardView.svelte';
 	import DetailSheet from '$lib/components/DetailSheet.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
@@ -17,6 +18,11 @@
 	);
 
 	const openStates = $derived(openStateEntries.map(([key]) => key));
+	const allStates = $derived.by(() =>
+		(Object.entries(data.config.states) as [string, StateConfig][])
+			.sort((a, b) => a[1].column - b[1].column)
+			.map(([key, st]) => ({ key, label: st.label }))
+	);
 	const stateOptions = $derived(openStateEntries.map(([key, st]) => ({ key, label: st.label })));
 	const labelOptions: string[] = $derived(
 		Array.from(new Set(data.tickets.flatMap((t: Ticket) => t.labels))).sort() as string[]
@@ -38,6 +44,12 @@
 			selectedStates = new Set(openStates);
 			selectedStatesInitialized = true;
 		}
+	});
+
+	$effect(() => {
+		if (!selectedTicket) return;
+		const refreshed = data.tickets.find((t: Ticket) => t.id === selectedTicket?.id) ?? null;
+		selectedTicket = refreshed;
 	});
 
 	const filtered = $derived(data.tickets.filter((t: Ticket) => {
@@ -86,6 +98,35 @@
 		}
 		sortBy = by;
 		sortDir = 'asc';
+	}
+
+	type MutationKind = 'state' | 'title' | 'desc';
+	type MutationResult = { ok: boolean; error?: string };
+
+	async function mutateTicket(ticketID: string, kind: MutationKind, value: string): Promise<MutationResult> {
+		const response = await fetch(`/api/tickets/${ticketID}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ kind, value })
+		});
+		const payload = (await response.json().catch(() => ({}))) as MutationResult;
+		if (!response.ok || !payload.ok) {
+			return { ok: false, error: payload.error ?? 'Ticket update failed.' };
+		}
+		await invalidateAll();
+		return { ok: true };
+	}
+
+	function updateState(ticketID: string, value: string) {
+		return mutateTicket(ticketID, 'state', value);
+	}
+
+	function updateTitle(ticketID: string, value: string) {
+		return mutateTicket(ticketID, 'title', value);
+	}
+
+	function updateDescription(ticketID: string, value: string) {
+		return mutateTicket(ticketID, 'desc', value);
 	}
 </script>
 
@@ -141,5 +182,12 @@
 		</Tabs>
 	</div>
 
-	<DetailSheet ticket={selectedTicket} bind:open={sheetOpen} />
+	<DetailSheet
+		ticket={selectedTicket}
+		bind:open={sheetOpen}
+		stateOptions={allStates}
+		onUpdateState={updateState}
+		onUpdateTitle={updateTitle}
+		onUpdateDescription={updateDescription}
+	/>
 </main>

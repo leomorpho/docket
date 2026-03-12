@@ -185,13 +185,20 @@ func isInteractiveStdin() bool {
 }
 
 func promptOpen(cmd *cobra.Command, url string) bool {
-	fmt.Fprintf(cmd.OutOrStdout(), "Open %s in your default browser? [y/N]: ", url)
+	fmt.Fprintf(cmd.OutOrStdout(), "Open %s in your default browser? [Y/n]: ", url)
 	reader := bufio.NewReader(os.Stdin)
 	ans, err := reader.ReadString('\n')
 	if err != nil {
 		return false
 	}
-	a := strings.ToLower(strings.TrimSpace(ans))
+	return parseOpenAnswer(ans)
+}
+
+func parseOpenAnswer(raw string) bool {
+	a := strings.ToLower(strings.TrimSpace(raw))
+	if a == "" {
+		return true
+	}
 	return a == "y" || a == "yes"
 }
 

@@ -34,6 +34,11 @@ var updateCmd = &cobra.Command{
 	Short: "Update ticket fields",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			resetUpdateGlobals()
+			resetUpdateFlagChanges(cmd)
+		}()
+
 		id := args[0]
 		s := local.New(repo)
 		ctx := context.Background()
@@ -54,16 +59,24 @@ var updateCmd = &cobra.Command{
 
 		// 1. Title
 		if cmd.Flags().Changed("title") {
-			t.Title = updateTitle
+			nextTitle := strings.TrimSpace(updateTitle)
+			if nextTitle == "" {
+				return fmt.Errorf("title cannot be empty")
+			}
+			t.Title = nextTitle
 			updatedFields = append(updatedFields, "title")
 		}
 
 		// 2. State
-		if cmd.Flags().Changed("state") && updateState != "" {
-			if !cfg.IsValidState(updateState) {
-				return fmt.Errorf("%q is not a valid state", updateState)
+		if cmd.Flags().Changed("state") {
+			nextState := strings.TrimSpace(updateState)
+			if nextState == "" {
+				return fmt.Errorf("state cannot be empty")
 			}
-			if updateState == "stale" {
+			if !cfg.IsValidState(nextState) {
+				return fmt.Errorf("%q is not a valid state", nextState)
+			}
+			if nextState == "stale" {
 				openChildren, err := openDescendants(ctx, s, cfg, t.ID)
 				if err != nil {
 					return err
@@ -78,13 +91,13 @@ var updateCmd = &cobra.Command{
 				}
 				if updateCascade {
 					for _, c := range openChildren {
-						if err := ticket.ValidateTransition(cfg, c.State, ticket.State(updateState)); err != nil {
+						if err := ticket.ValidateTransition(cfg, c.State, ticket.State(nextState)); err != nil {
 							return fmt.Errorf("cannot cascade state to %s: %w", c.ID, err)
 						}
 					}
 				}
 			}
-			newState := ticket.State(updateState)
+			newState := ticket.State(nextState)
 			if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
 				return err
 			}
@@ -224,7 +237,7 @@ var updateCmd = &cobra.Command{
 		if err := s.UpdateTicket(ctx, t); err != nil {
 			return fmt.Errorf("updating ticket: %w", err)
 		}
-		if updateState == "stale" && updateCascade {
+		if strings.TrimSpace(updateState) == "stale" && updateCascade {
 			openChildren, err := openDescendants(ctx, s, cfg, t.ID)
 			if err != nil {
 				return err
@@ -259,22 +272,45 @@ var updateCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: %s\n", t.ID, strings.Join(updatedFields, ", "))
 		}
 
-		// Reset global variables for test isolation
-		updateState = ""
-		updatePriority = 0
-		updateTitle = ""
-		updateLabels = ""
-		updateAddLabels = nil
-		updateRemoveLabels = nil
-		updateBlockedBy = nil
-		updateUnblock = nil
-		updateParent = ""
-		updateCascade = false
-		updateDesc = ""
-		updateHandoff = ""
-
 		return nil
 	},
+}
+
+func resetUpdateGlobals() {
+	updateState = ""
+	updatePriority = 0
+	updateTitle = ""
+	updateLabels = ""
+	updateAddLabels = nil
+	updateRemoveLabels = nil
+	updateBlockedBy = nil
+	updateUnblock = nil
+	updateParent = ""
+	updateCascade = false
+	updateDesc = ""
+	updateHandoff = ""
+}
+
+func resetUpdateFlagChanges(cmd *cobra.Command) {
+	flagNames := []string{
+		"state",
+		"priority",
+		"title",
+		"handoff",
+		"labels",
+		"add-label",
+		"remove-label",
+		"blocked-by",
+		"unblock",
+		"parent",
+		"cascade",
+		"desc",
+	}
+	for _, name := range flagNames {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 func readUpdateValue(value string) (string, error) {

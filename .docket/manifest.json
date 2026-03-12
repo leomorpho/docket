@@ -75,6 +75,46 @@
       "title": "Version update notifications: detect and surface new docket releases",
       "state": "in-progress",
       "priority": 3
+    },
+    "TKT-123": {
+      "title": "UI DX: default browser prompt accepts Enter as yes",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-124": {
+      "title": "UI server bridge: execute whitelisted docket update commands",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-125": {
+      "title": "UI: move ticket state from board/list using docket update",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-126": {
+      "title": "UI: edit ticket title from detail panel via docket update",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-127": {
+      "title": "UI: edit ticket description/body from detail panel via docket update",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-128": {
+      "title": "UI mutation UX: consistent loading, error, and refresh behavior",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-129": {
+      "title": "Verification: cover UI prompt and browser-driven ticket mutations",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-130": {
+      "title": "CLI hardening: ensure docket update supports non-interactive UI mutation needs",
+      "state": "done",
+      "priority": 2
     }
   }
 }
