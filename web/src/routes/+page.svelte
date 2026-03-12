@@ -7,9 +7,11 @@
 	import HealthView from '$lib/components/HealthView.svelte';
 	import ListTable from '$lib/components/ListTable.svelte';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import type { Config, Project, StateConfig, Ticket } from '$lib/types';
+	import { onMount } from 'svelte';
 
 	let { data } = $props<{
 		data: {
@@ -51,6 +53,19 @@
 	let sheetOpen = $state(false);
 	let sortBy = $state<SortKey>('priority');
 	let sortDir = $state<'asc' | 'desc'>('asc');
+
+	onMount(() => {
+		const persisted = localStorage.getItem('docket_active_project');
+		if (persisted && !data.activeProjectId && data.projects.some((p) => p.id === persisted)) {
+			switchProject(persisted);
+		}
+	});
+
+	$effect(() => {
+		if (data.activeProjectId) {
+			localStorage.setItem('docket_active_project', data.activeProjectId);
+		}
+	});
 
 	$effect(() => {
 		if (!selectedStatesInitialized && openStates.length > 0) {
@@ -130,6 +145,26 @@
 		goto(url.toString(), { invalidateAll: true });
 	}
 
+	async function addProject() {
+		const dir = prompt('Enter the absolute path to your Docket repository:');
+		if (!dir) return;
+		try {
+			const response = await fetch('/api/projects', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ dir })
+			});
+			const result = await response.json();
+			if (result.ok) {
+				switchProject(result.project.id);
+			} else {
+				alert(result.error || 'Failed to register project.');
+			}
+		} catch (e: any) {
+			alert(e.message);
+		}
+	}
+
 	function onCardSelect(ticket: Ticket) {
 		selectedTicket = ticket;
 		sheetOpen = true;
@@ -202,22 +237,21 @@
 					</p>
 				</div>
 				<div class="flex items-center gap-3">
-					{#if data.projects.length > 1}
-						<div class="flex items-center gap-2">
-							<span class="text-xs text-muted-foreground">Project</span>
-							<select
-								class="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-slate-300"
-								value={data.activeProjectId ?? ''}
-								onchange={(e) => switchProject((e.target as HTMLSelectElement).value)}
-							>
-								{#each data.projects as project}
-									<option value={project.id}>{project.name}</option>
-								{/each}
-							</select>
-						</div>
-					{:else if activeProject}
-						<Badge variant="outline" class="font-mono text-xs">{activeProject.name}</Badge>
-					{/if}
+					<div class="flex items-center gap-2">
+						<span class="text-xs text-muted-foreground">Project</span>
+						<select
+							class="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-slate-300"
+							value={data.activeProjectId ?? ''}
+							onchange={(e) => switchProject((e.target as HTMLSelectElement).value)}
+						>
+							{#each data.projects as project}
+								<option value={project.id}>{project.name} ({project.id})</option>
+							{/each}
+						</select>
+						<Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={addProject} title="Add Project">
+							<span class="text-lg">+</span>
+						</Button>
+					</div>
 					<Badge variant="secondary">{openStates.length} workflow states</Badge>
 				</div>
 			</CardHeader>
