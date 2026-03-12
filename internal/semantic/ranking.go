@@ -292,6 +292,9 @@ const (
 	GraphEdgeBlocks          GraphEdgeKind = "blocks"
 	GraphEdgeLinkedCommit    GraphEdgeKind = "linked_commit"
 	GraphEdgeSessionAdjacent GraphEdgeKind = "session_adjacent"
+	GraphEdgeParent           GraphEdgeKind = "parent"
+	GraphEdgeChild            GraphEdgeKind = "child"
+	GraphEdgeSibling          GraphEdgeKind = "sibling"
 )
 
 type GraphEdge struct {
@@ -338,6 +341,15 @@ func BuildGraphInputs(source *ticket.Ticket, candidates []*ticket.Ticket) GraphI
 				break
 			}
 		}
+
+		// Hierarchy
+		if source.Parent != "" && source.Parent == candidate.ID {
+			inputs.Edges = append(inputs.Edges, GraphEdge{FromTicketID: source.ID, ToTicketID: candidate.ID, Kind: GraphEdgeParent})
+		} else if candidate.Parent != "" && candidate.Parent == source.ID {
+			inputs.Edges = append(inputs.Edges, GraphEdge{FromTicketID: source.ID, ToTicketID: candidate.ID, Kind: GraphEdgeChild})
+		} else if source.Parent != "" && candidate.Parent != "" && source.Parent == candidate.Parent {
+			inputs.Edges = append(inputs.Edges, GraphEdge{FromTicketID: source.ID, ToTicketID: candidate.ID, Kind: GraphEdgeSibling})
+		}
 	}
 	return inputs
 }
@@ -372,6 +384,10 @@ func graphEdgeWeight(kind GraphEdgeKind) float64 {
 		return 0.05
 	case GraphEdgeSessionAdjacent:
 		return 0.03
+	case GraphEdgeParent, GraphEdgeChild:
+		return 0.10
+	case GraphEdgeSibling:
+		return 0.08
 	default:
 		return 0
 	}

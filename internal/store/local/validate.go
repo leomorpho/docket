@@ -73,6 +73,14 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 		errs = append(errs, store.ValidationError{Field: "created_by", Message: "required"})
 	}
 
+	// 1b. Signature (TKT-147)
+	valid, sigErr := validateSignature(t)
+	if sigErr != nil {
+		errs = append(errs, store.ValidationError{Field: "signature", Message: fmt.Sprintf("validation failed: %v", sigErr)})
+	} else if !valid {
+		errs = append(errs, store.ValidationError{Field: "signature", Message: "Direct file mutation detected. You must use Docket's MCP tools or CLI to update tickets."})
+	}
+
 	// 2. Consistency
 	expectedFilename := id + ".md"
 	if filepath.Base(path) != expectedFilename {

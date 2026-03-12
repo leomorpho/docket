@@ -31,6 +31,7 @@ type Ticket struct {
 	CreatedAt     time.Time `yaml:"created_at" json:"created_at"`
 	UpdatedAt     time.Time `yaml:"updated_at" json:"updated_at"`
 	CreatedBy     string    `yaml:"created_by" json:"created_by"`
+	WriteHash     string    `yaml:"write_hash,omitempty" json:"write_hash,omitempty"`
 
 	// Parsed from markdown body
 	Title       string                `json:"title"`

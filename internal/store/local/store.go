@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/leomorpho/docket/internal/store"
@@ -13,10 +14,29 @@ import (
 
 type Store struct {
 	RepoRoot string
+	
+	mu    sync.RWMutex
+	relIdx *RelationshipIndex
 }
 
+var (
+	storesMu sync.Mutex
+	stores   = make(map[string]*Store)
+)
+
 func New(repoRoot string) *Store {
-	return &Store{RepoRoot: repoRoot}
+	absRepo, _ := filepath.Abs(repoRoot)
+	
+	storesMu.Lock()
+	defer storesMu.Unlock()
+	
+	if s, ok := stores[absRepo]; ok {
+		return s
+	}
+	
+	s := &Store{RepoRoot: absRepo}
+	stores[absRepo] = s
+	return s
 }
 
 func (s *Store) ticketPath(id string) string {
@@ -36,6 +56,9 @@ func (s *Store) CreateTicket(ctx context.Context, t *ticket.Ticket) error {
 		return err
 	}
 
+	if err := signTicket(t); err != nil {
+		return err
+	}
 	content, err := render(t)
 	if err != nil {
 		return err
@@ -43,6 +66,7 @@ func (s *Store) CreateTicket(ctx context.Context, t *ticket.Ticket) error {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return err
 	}
+	s.InvalidateRelationshipIndex()
 	return s.upsertManifestTicket(t.ID, s.manifestEntryFromTicket(t))
 }
 
@@ -66,6 +90,9 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 		t.Comments = existing.Comments
 	}
 
+	if err := signTicket(t); err != nil {
+		return err
+	}
 	content, err := render(t)
 	if err != nil {
 		return err
@@ -73,6 +100,7 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		return err
 	}
+	s.InvalidateRelationshipIndex()
 	return s.upsertManifestTicket(t.ID, s.manifestEntryFromTicket(t))
 }
 

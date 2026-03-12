@@ -35,6 +35,7 @@ func parse(content string) (*ticket.Ticket, error) {
 		CreatedAt     string   `yaml:"created_at"`
 		UpdatedAt     string   `yaml:"updated_at"`
 		CreatedBy     string   `yaml:"created_by"`
+		WriteHash     string   `yaml:"write_hash"`
 	}{}
 
 	if err := yaml.Unmarshal([]byte(fmData), &fm); err != nil {
@@ -51,6 +52,7 @@ func parse(content string) (*ticket.Ticket, error) {
 	t.Blocks = fm.Blocks
 	t.LinkedCommits = fm.LinkedCommits
 	t.CreatedBy = fm.CreatedBy
+	t.WriteHash = fm.WriteHash
 
 	if fm.CreatedAt != "" {
 		t.CreatedAt, _ = time.Parse(time.RFC3339, fm.CreatedAt)

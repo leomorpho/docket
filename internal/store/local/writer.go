@@ -1,12 +1,42 @@
 package local
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
 	"github.com/leomorpho/docket/internal/ticket"
 	"gopkg.in/yaml.v3"
 )
+
+func signTicket(t *ticket.Ticket) error {
+	t.WriteHash = "" // Clear existing hash for stable calculation
+	content, err := render(t)
+	if err != nil {
+		return err
+	}
+	h := sha256.Sum256([]byte(content))
+	t.WriteHash = hex.EncodeToString(h[:])
+	return nil
+}
+
+func validateSignature(t *ticket.Ticket) (bool, error) {
+	if t.WriteHash == "" {
+		return false, nil
+	}
+	originalHash := t.WriteHash
+	t.WriteHash = "" // Clear to re-calculate
+	defer func() { t.WriteHash = originalHash }()
+
+	content, err := render(t)
+	if err != nil {
+		return false, err
+	}
+	h := sha256.Sum256([]byte(content))
+	calculated := hex.EncodeToString(h[:])
+	return calculated == originalHash, nil
+}
 
 func render(t *ticket.Ticket) (string, error) {
 	var sb strings.Builder
@@ -26,6 +56,7 @@ func render(t *ticket.Ticket) (string, error) {
 		CreatedAt     string       `yaml:"created_at"`
 		UpdatedAt     string       `yaml:"updated_at"`
 		CreatedBy     string       `yaml:"created_by"`
+		WriteHash     string       `yaml:"write_hash,omitempty"`
 	}{
 		ID:            t.ID,
 		Seq:           t.Seq,
@@ -39,6 +70,7 @@ func render(t *ticket.Ticket) (string, error) {
 		CreatedAt:     t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:     t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		CreatedBy:     t.CreatedBy,
+		WriteHash:     t.WriteHash,
 	}
 	fmBytes, err := yaml.Marshal(fm)
 	if err != nil {
