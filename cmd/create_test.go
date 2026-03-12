@@ -25,8 +25,10 @@ func TestCreateCmd(t *testing.T) {
 
 	// 1. Create first ticket
 	b := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
 	rootCmd.SetOut(b)
-	rootCmd.SetArgs([]string{"create", "--title", "First Ticket", "--priority", "1"})
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"create", "--title", "First Ticket", "--priority", "1", "--desc", "This ticket has enough context to satisfy create validation requirements.", "--ac", "A first concrete outcome"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
@@ -48,13 +50,18 @@ func TestCreateCmd(t *testing.T) {
 			t.Errorf("ticket file does not contain title: %s", string(data))
 		}
 	}
+	t1, _ := s.GetTicket(context.Background(), "TKT-001")
+	if len(t1.AC) != 1 || t1.AC[0].Description != "A first concrete outcome" {
+		t.Fatalf("expected inline AC to be created, got %+v", t1.AC)
+	}
 
 	// 3. Create second ticket with DOCKET_ACTOR
 	os.Setenv("DOCKET_ACTOR", "agent:test-model")
 	defer os.Unsetenv("DOCKET_ACTOR")
-	
+
 	b.Reset()
-	rootCmd.SetArgs([]string{"create", "--title", "Second Ticket", "--labels", "feat,llm"})
+	errBuf.Reset()
+	rootCmd.SetArgs([]string{"create", "--title", "Second Ticket", "--labels", "feat,llm", "--desc", "This second ticket also provides enough context for autonomous execution by another agent."})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("second create failed: %v", err)
 	}
@@ -73,7 +80,7 @@ func TestCreateCmd(t *testing.T) {
 	// 4. JSON output
 	format = "json"
 	b.Reset()
-	rootCmd.SetArgs([]string{"create", "--title", "JSON Ticket"})
+	rootCmd.SetArgs([]string{"create", "--title", "JSON Ticket", "--desc", "JSON output ticket with detailed context for autonomous execution and validation coverage."})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("JSON create failed: %v", err)
 	}
@@ -94,10 +101,10 @@ func TestCreateCmd_ValidationError(t *testing.T) {
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
-	
+
 	// Reset flags because they are global
 	title = ""
-	
+
 	rootCmd.SetArgs([]string{"create"})
 	err := rootCmd.Execute()
 	if err == nil {
@@ -108,9 +115,43 @@ func TestCreateCmd_ValidationError(t *testing.T) {
 	}
 
 	// Test invalid state
-	rootCmd.SetArgs([]string{"create", "--title", "T", "--state", "invalid"})
+	rootCmd.SetArgs([]string{"create", "--title", "T", "--desc", "This description satisfies minimum required context for create validation.", "--state", "invalid"})
 	err = rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for invalid state, got nil")
+	}
+}
+
+func TestCreateCmd_RequiresDescription(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "Missing Desc"})
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--desc is required") {
+		t.Fatalf("expected description required error, got %v", err)
+	}
+}
+
+func TestCreateCmd_WarnsOnShortDescription(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(errOut)
+	rootCmd.SetArgs([]string{"create", "--title", "Short desc", "--desc", "too short description"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "under 50 characters") {
+		t.Fatalf("expected short-description warning, got: %s", errOut.String())
 	}
 }

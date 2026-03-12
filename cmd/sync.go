@@ -55,11 +55,19 @@ var syncCmd = &cobra.Command{
 					r.ID, strings.Join(fields, ", "), hint)
 			} else {
 				rejected++
-				fmt.Fprintf(cmd.ErrOrStderr(), "  rejected (invalid): %s — direct edit has schema errors:\n", r.ID)
+				if r.Reverted {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  rejected (invalid) and reverted: %s — direct edit had schema errors:\n", r.ID)
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  rejected (invalid): %s — direct edit has schema errors:\n", r.ID)
+				}
 				for _, e := range r.Errors {
 					fmt.Fprintf(cmd.ErrOrStderr(), "    - %s: %s\n", e.Field, e.Message)
 				}
-				fmt.Fprintf(cmd.ErrOrStderr(), "  Fix with CLI instead of editing the file directly.\n")
+				if r.Reverted {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  The file was reverted to the last valid values. Use CLI commands for changes.\n")
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  Fix with CLI instead of editing the file directly.\n")
+				}
 			}
 		}
 

@@ -35,6 +35,9 @@ var acListCmd = &cobra.Command{
 				mark = "[x]"
 			}
 			line := fmt.Sprintf("%d. %s %s", i+1, mark, ac.Description)
+			if ac.Run != "" {
+				line += " (run: " + ac.Run + ")"
+			}
 			if ac.Evidence != "" {
 				line += " — evidence: " + ac.Evidence
 			}

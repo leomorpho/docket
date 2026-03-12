@@ -24,6 +24,16 @@ func TestHelpJSONCommand(t *testing.T) {
 	if _, ok := manifest["agent_instructions"].(map[string]any); !ok {
 		t.Fatalf("missing agent_instructions in manifest")
 	}
+	ai := manifest["agent_instructions"].(map[string]any)
+	quality, ok := ai["ticket_quality"].(map[string]any)
+	if !ok {
+		t.Fatalf("ticket_quality guidance missing in agent_instructions")
+	}
+	for _, key := range []string{"size", "description", "ac", "comments"} {
+		if quality[key] == nil {
+			t.Fatalf("ticket_quality.%s missing", key)
+		}
+	}
 
 	commands, ok := manifest["commands"].([]any)
 	if !ok || len(commands) == 0 {
@@ -36,7 +46,7 @@ func TestHelpJSONCommand(t *testing.T) {
 		names[m["name"].(string)] = true
 	}
 
-	required := []string{"create", "list", "show", "update", "comment", "board", "blame", "scan", "refs", "context", "session", "ac", "check", "help-json"}
+	required := []string{"create", "list", "show", "update", "comment", "board", "blame", "scan", "refs", "context", "session", "ac", "check", "help-json", "install", "upgrade"}
 	for _, r := range required {
 		if !names[r] {
 			t.Fatalf("missing command in manifest: %s", r)

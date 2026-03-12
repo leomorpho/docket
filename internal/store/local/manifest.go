@@ -178,6 +178,7 @@ func (s *Store) DetectTamperingAll(ctx context.Context) ([]TamperChange, error) 
 type ReconcileResult struct {
 	ID       string
 	Accepted bool
+	Reverted bool
 	Changes  []TamperChange
 	Errors   []store.ValidationError
 }
@@ -220,6 +221,14 @@ func (s *Store) ReconcileTampering(ctx context.Context) ([]ReconcileResult, erro
 					result.Accepted = true
 				}
 			}
+		} else {
+			if manifest, loadErr := s.loadManifest(); loadErr == nil {
+				if expected, ok := manifest.Tickets[id]; ok {
+					if revertErr := s.revertTicketFields(ctx, id, expected); revertErr == nil {
+						result.Reverted = true
+					}
+				}
+			}
 		}
 		// If schema errors exist, leave Accepted=false and include errors
 
@@ -232,6 +241,21 @@ func (s *Store) ReconcileTampering(ctx context.Context) ([]ReconcileResult, erro
 	})
 
 	return results, nil
+}
+
+func (s *Store) revertTicketFields(ctx context.Context, id string, expected ManifestTicket) error {
+	t, err := s.GetTicket(ctx, id)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		return nil
+	}
+	t.Title = expected.Title
+	t.State = ticket.State(expected.State)
+	t.Priority = expected.Priority
+	t.Parent = expected.Parent
+	return s.UpdateTicket(ctx, t)
 }
 
 func diffManifestTicket(id string, expected, actual ManifestTicket) []TamperChange {

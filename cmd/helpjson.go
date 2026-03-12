@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var Version = "0.1.0"
-
 var helpJSONCmd = &cobra.Command{
 	Use:   "help-json",
 	Short: "Print machine-readable CLI manifest",
@@ -115,11 +113,13 @@ func commandExamples(name string) []string {
 		"session attach":   {"docket session attach TKT-001 --file /tmp/log.jsonl"},
 		"session list":     {"docket session list TKT-001"},
 		"session compress": {"docket session compress TKT-001", "docket session compress TKT-001 --summary-file /tmp/summary.md"},
-		"ac add":           {"docket ac add TKT-001 --desc 'Tests pass'"},
+		"ac add":           {"docket ac add TKT-001 --desc 'Tests pass'", "docket ac add TKT-001 --desc 'Unit tests pass' --run 'go test ./...'"},
 		"ac complete":      {"docket ac complete TKT-001 --step 1 --evidence 'go test passed'"},
-		"ac check":         {"docket ac check TKT-001", "docket ac check TKT-001 --format json"},
+		"ac check":         {"docket ac check TKT-001", "docket ac check TKT-001 --dry-run"},
 		"ac list":          {"docket ac list TKT-001"},
 		"check":            {"docket check", "docket check TKT-001 --fix"},
+		"install":          {"docket install"},
+		"upgrade":          {"docket upgrade", "docket upgrade --check"},
 		"help-json":        {"docket help-json | jq .commands[].name"},
 	}
 	if v, ok := examples[name]; ok {

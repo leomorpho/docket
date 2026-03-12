@@ -20,6 +20,8 @@ var rootCmd = &cobra.Command{
 	Short: "git-native ticket system for AI-assisted development",
 	Long:  `A git-native ticket system built for human + LLM agentic workflows.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		prepareVersionNotice(cmd)
+
 		// Tamper detection is non-blocking but runs on command startup.
 		if _, err := os.Stat(filepath.Join(repo, ".docket", "config.json")); err != nil {
 			return nil
@@ -33,6 +35,9 @@ var rootCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "warning: detected %d direct-edit changes (use `docket validate` for prescriptive fixes)\n", len(changes))
 		}
 		return nil
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		flushVersionNotice(cmd)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()

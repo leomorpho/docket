@@ -12,6 +12,7 @@ import (
 )
 
 var acAddDesc string
+var acAddRun string
 
 var acAddCmd = &cobra.Command{
 	Use:   "add <TKT-NNN>",
@@ -34,6 +35,7 @@ var acAddCmd = &cobra.Command{
 		t.AC = append(t.AC, ticket.AcceptanceCriterion{
 			Description: strings.TrimSpace(acAddDesc),
 			Done:        false,
+			Run:         strings.TrimSpace(acAddRun),
 		})
 		t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 		if err := s.UpdateTicket(context.Background(), t); err != nil {
@@ -51,5 +53,6 @@ var acAddCmd = &cobra.Command{
 
 func init() {
 	acAddCmd.Flags().StringVar(&acAddDesc, "desc", "", "acceptance criterion description")
+	acAddCmd.Flags().StringVar(&acAddRun, "run", "", "optional command to execute during ac check")
 	acCmd.AddCommand(acAddCmd)
 }

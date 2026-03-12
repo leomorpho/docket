@@ -19,21 +19,20 @@ var (
 	priority int
 	labels   string
 	state    string
+	createAC []string
 )
 
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new ticket",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			resetCreateGlobals()
+			resetCreateFlagChanges(cmd)
+		}()
+
 		if title == "" {
 			return fmt.Errorf("--title is required")
-		}
-
-		// Quality warnings (advisory only — never block creation)
-		if desc == "" || desc == "-" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: --desc not provided. Add context so other agents can pick up this ticket without asking questions.\n  Tip: docket update TKT-NNN --desc \"...\"\n")
-		} else if len(strings.Fields(desc)) < 20 {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: description is very short. Add enough context for another agent to execute this without clarification.\n")
 		}
 
 		cfg, err := ticket.LoadConfig(repo)
@@ -69,6 +68,12 @@ var createCmd = &cobra.Command{
 			}
 			desc = string(data)
 		}
+		if strings.TrimSpace(desc) == "" {
+			return fmt.Errorf("--desc is required. Provide context with --desc \"...\" or --desc - to read from stdin")
+		}
+		if len(strings.TrimSpace(desc)) < 50 {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: description is under 50 characters. Add more context so another agent can execute this without clarification.\n")
+		}
 
 		// 4. Parse labels
 		var labelList []string
@@ -96,6 +101,13 @@ var createCmd = &cobra.Command{
 			UpdatedAt:   now,
 			CreatedBy:   actor,
 		}
+		for _, ac := range createAC {
+			trimmed := strings.TrimSpace(ac)
+			if trimmed == "" {
+				continue
+			}
+			t.AC = append(t.AC, ticket.AcceptanceCriterion{Description: trimmed})
+		}
 
 		// 6. Create ticket
 		if err := s.CreateTicket(ctx, t); err != nil {
@@ -113,10 +125,29 @@ var createCmd = &cobra.Command{
 			})
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Created %s: %s\n", t.ID, t.Title)
-			fmt.Fprintf(cmd.OutOrStdout(), "  Tip: add acceptance criteria: docket ac add %s --desc \"specific testable outcome\"\n", t.ID)
+			if len(t.AC) == 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "  Tip: add acceptance criteria: docket ac add %s --desc \"specific testable outcome\"\n", t.ID)
+			}
 		}
 		return nil
 	},
+}
+
+func resetCreateGlobals() {
+	title = ""
+	desc = ""
+	priority = 0
+	labels = ""
+	state = ""
+	createAC = nil
+}
+
+func resetCreateFlagChanges(cmd *cobra.Command) {
+	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 func init() {
@@ -125,6 +156,7 @@ func init() {
 	createCmd.Flags().IntVar(&priority, "priority", 0, "ticket priority (default from config)")
 	createCmd.Flags().StringVar(&labels, "labels", "", "comma-separated labels")
 	createCmd.Flags().StringVar(&state, "state", "", "initial state (default from config)")
+	createCmd.Flags().StringSliceVar(&createAC, "ac", []string{}, "add acceptance criteria inline (repeatable)")
 
 	rootCmd.AddCommand(createCmd)
 }

@@ -14,6 +14,7 @@ type AcceptanceCriterion struct {
 	Description string `yaml:"description"`
 	Done        bool   `yaml:"done"`
 	Evidence    string `yaml:"evidence,omitempty"`
+	Run         string `yaml:"run,omitempty"`
 }
 
 type Ticket struct {

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -122,5 +124,51 @@ func TestACCheck_NoItemsIsComplete(t *testing.T) {
 	rootCmd.SetArgs([]string{"ac", "check", "TKT-002"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected success for no AC, got: %v", err)
+	}
+}
+
+func TestACRunCommandAndDryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-003", Seq: 3, Title: "Runnable AC", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "add", "TKT-003", "--desc", "Create marker file", "--run", "echo ok > .ac-check.tmp"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("ac add with run failed: %v", err)
+	}
+
+	// Dry-run should not execute.
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"ac", "check", "TKT-003", "--dry-run"})
+	if err := rootCmd.Execute(); !errors.Is(err, errACIncomplete) {
+		t.Fatalf("expected incomplete on dry-run, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, ".ac-check.tmp")); err == nil {
+		t.Fatal("expected dry-run to not execute command")
+	}
+	if !strings.Contains(b.String(), "Dry-run commands:") {
+		t.Fatalf("expected dry-run output, got: %s", b.String())
+	}
+
+	// Real run should execute and complete.
+	b.Reset()
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"ac", "check", "TKT-003"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected runnable AC to pass, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, ".ac-check.tmp")); err != nil {
+		t.Fatalf("expected command side effect file, got err: %v", err)
 	}
 }

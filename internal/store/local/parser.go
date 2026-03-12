@@ -115,6 +115,10 @@ func processSection(t *ticket.Ticket, section string, lines []string) {
 				} else {
 					ac.Description = strings.TrimSpace(desc)
 				}
+				if runIdx := strings.LastIndex(ac.Description, "(run: "); runIdx != -1 && strings.HasSuffix(ac.Description, ")") {
+					ac.Run = strings.TrimSpace(strings.TrimSuffix(ac.Description[runIdx+6:], ")"))
+					ac.Description = strings.TrimSpace(ac.Description[:runIdx])
+				}
 				if ac.Description != "" {
 					t.AC = append(t.AC, ac)
 				}

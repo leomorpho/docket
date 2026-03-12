@@ -66,6 +66,9 @@ func render(t *ticket.Ticket) (string, error) {
 				box = "[x]"
 			}
 			line := fmt.Sprintf("- %s %s", box, ac.Description)
+			if ac.Run != "" {
+				line += " (run: " + ac.Run + ")"
+			}
 			if ac.Evidence != "" {
 				line += " : " + ac.Evidence
 			}
