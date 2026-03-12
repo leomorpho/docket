@@ -5,3 +5,5 @@ docket
 web/node_modules
 web/.svelte-kit
 web/build
+.docket/locks.json
+.doombox/
