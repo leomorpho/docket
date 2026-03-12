@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/dustin/go-humanize"
@@ -30,15 +31,19 @@ var sessionListCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Sessions for %s:\n", id)
 		if len(files) == 0 {
 			fmt.Fprintln(cmd.OutOrStdout(), "  (none)")
-			return nil
 		}
-
 		for _, f := range files {
 			note := ""
 			if strings.HasSuffix(f.Name, ".compressed") {
 				note = ", compressed"
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s%s)\n", f.Name, humanize.Bytes(uint64(f.SizeBytes)), note)
+		}
+		if cp, err := listCheckpointPaths(repo, id); err == nil && len(cp) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Checkpoints for %s:\n", id)
+			for _, p := range cp {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", filepath.Base(p))
+			}
 		}
 		return nil
 	},

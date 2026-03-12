@@ -39,6 +39,7 @@ set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 MSG_FILE="$REPO_ROOT/.git/COMMIT_EDITMSG"
+DOCKET_BIN="${DOCKET_BIN:-docket}"
 
 if [ ! -f "$MSG_FILE" ]; then
   echo "docket: warning: .git/COMMIT_EDITMSG not found; skipping Ticket trailer checks" >&2
@@ -58,6 +59,21 @@ for ID in $TICKETS; do
     exit 1
   fi
 done
+
+if [ "${DOCKET_SKIP_AC:-0}" != "1" ]; then
+  for ID in $TICKETS; do
+    if command -v "$DOCKET_BIN" >/dev/null 2>&1; then
+      "$DOCKET_BIN" __hook-ac-check "$ID" || exit 1
+    else
+      echo "docket: warning: docket binary not found in PATH; skipping AC prompt checks" >&2
+      break
+    fi
+  done
+fi
+
+if command -v "$DOCKET_BIN" >/dev/null 2>&1; then
+  "$DOCKET_BIN" __hook-lock-check || true
+fi
 
 exit 0
 `

@@ -133,37 +133,37 @@
     },
     "TKT-134": {
       "title": "Smart defaults by stack — auto-inject AC on ticket creation",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-135": {
       "title": "Human interactive AC prompt in pre-commit hook",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-136": {
       "title": "Scope locking — file claim tracking per ticket",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-137": {
       "title": "Worktree conflict detection + mutual exclusivity declarations",
-      "state": "backlog",
+      "state": "done",
       "priority": 3
     },
     "TKT-138": {
       "title": "AC templates — named composable acceptance criteria sets",
-      "state": "backlog",
+      "state": "done",
       "priority": 3
     },
     "TKT-139": {
       "title": "Session continuity checkpoints — auto-snapshot on AC completion",
-      "state": "backlog",
+      "state": "done",
       "priority": 3
     },
     "TKT-140": {
       "title": "docket ac update and ac remove commands",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     }
   }

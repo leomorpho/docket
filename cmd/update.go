@@ -104,6 +104,9 @@ var updateCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
 			t.State = newState
 			updatedFields = append(updatedFields, "state")
+			if newState == ticket.State("in-review") || newState == ticket.State("done") {
+				_ = releaseLockForTicket(repo, t.ID)
+			}
 		}
 
 		// 2b. Parent

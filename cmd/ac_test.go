@@ -172,3 +172,110 @@ func TestACRunCommandAndDryRun(t *testing.T) {
 		t.Fatalf("expected command side effect file, got err: %v", err)
 	}
 }
+
+func TestACUpdateAndRemove(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-004", Seq: 4, Title: "Update AC", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "First AC"},
+			{Description: "Second AC"},
+		},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "update", "TKT-004", "--step", "1", "--desc", "Updated AC", "--run", "echo hi"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("ac update failed: %v", err)
+	}
+	updated, _ := s.GetTicket(context.Background(), "TKT-004")
+	if updated.AC[0].Description != "Updated AC" || updated.AC[0].Run != "echo hi" {
+		t.Fatalf("ac update not persisted: %+v", updated.AC[0])
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "remove", "TKT-004", "--step", "2", "--yes"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("ac remove failed: %v", err)
+	}
+	updated, _ = s.GetTicket(context.Background(), "TKT-004")
+	if len(updated.AC) != 1 {
+		t.Fatalf("expected AC length 1 after remove, got %d", len(updated.AC))
+	}
+}
+
+func TestHookACCheckRespectsSkipEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	t.Setenv("DOCKET_SKIP_AC", "1")
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-005", Seq: 5, Title: "Hook AC", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+		AC: []ticket.AcceptanceCriterion{{Description: "Prose AC"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-005"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected skip env to bypass hook ac check, got: %v", err)
+	}
+}
+
+func TestHookACCheckInteractivePrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-006", Seq: 6, Title: "Hook Prompt", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+		AC: []ticket.AcceptanceCriterion{{Description: "Manual check"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	origStdin := os.Stdin
+	defer func() { os.Stdin = origStdin }()
+	r, w, _ := os.Pipe()
+	_, _ = w.WriteString("n\n")
+	_ = w.Close()
+	os.Stdin = r
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-006"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("expected hook prompt denial to fail")
+	}
+
+	// Retry with yes.
+	r2, w2, _ := os.Pipe()
+	_, _ = w2.WriteString("y\n")
+	_ = w2.Close()
+	os.Stdin = r2
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-006"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected hook prompt approval to pass, got: %v", err)
+	}
+	tk, _ := s.GetTicket(context.Background(), "TKT-006")
+	if !tk.AC[0].Done {
+		t.Fatal("expected AC to be marked done after y confirmation")
+	}
+}

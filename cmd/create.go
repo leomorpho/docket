@@ -14,12 +14,14 @@ import (
 )
 
 var (
-	title    string
-	desc     string
-	priority int
-	labels   string
-	state    string
-	createAC []string
+	title        string
+	desc         string
+	priority     int
+	labels       string
+	state        string
+	createAC     []string
+	noACDefaults bool
+	acTemplate   string
 )
 
 var createCmd = &cobra.Command{
@@ -108,6 +110,10 @@ var createCmd = &cobra.Command{
 			}
 			t.AC = append(t.AC, ticket.AcceptanceCriterion{Description: trimmed})
 		}
+		t.AC = append(t.AC, applyTemplates(repo, acTemplate)...)
+		if len(t.AC) == 0 && !noACDefaults {
+			t.AC = append(t.AC, autoACDefaults(repo)...)
+		}
 
 		// 6. Create ticket
 		if err := s.CreateTicket(ctx, t); err != nil {
@@ -140,10 +146,12 @@ func resetCreateGlobals() {
 	labels = ""
 	state = ""
 	createAC = nil
+	noACDefaults = false
+	acTemplate = ""
 }
 
 func resetCreateFlagChanges(cmd *cobra.Command) {
-	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac"} {
+	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template"} {
 		if f := cmd.Flags().Lookup(name); f != nil {
 			f.Changed = false
 		}
@@ -157,6 +165,8 @@ func init() {
 	createCmd.Flags().StringVar(&labels, "labels", "", "comma-separated labels")
 	createCmd.Flags().StringVar(&state, "state", "", "initial state (default from config)")
 	createCmd.Flags().StringSliceVar(&createAC, "ac", []string{}, "add acceptance criteria inline (repeatable)")
+	createCmd.Flags().BoolVar(&noACDefaults, "no-ac-defaults", false, "skip automatic AC defaults inferred from project stack")
+	createCmd.Flags().StringVar(&acTemplate, "ac-template", "", "comma-separated AC template names to apply")
 
 	rootCmd.AddCommand(createCmd)
 }

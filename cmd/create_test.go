@@ -155,3 +155,90 @@ func TestCreateCmd_WarnsOnShortDescription(t *testing.T) {
 		t.Fatalf("expected short-description warning, got: %s", errOut.String())
 	}
 }
+
+func TestCreateCmd_AutoInjectACDefaultsTypescript(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"dependencies":{"typescript":"^5.0.0"}}`), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "TS defaults", "--desc", "Description long enough to satisfy required quality checks during create command execution."})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	t1, _ := s.GetTicket(context.Background(), "TKT-001")
+	if len(t1.AC) < 2 {
+		t.Fatalf("expected at least 2 AC defaults, got %d", len(t1.AC))
+	}
+	if t1.AC[0].Run == "" {
+		t.Fatalf("expected runnable defaults, got %+v", t1.AC)
+	}
+}
+
+func TestCreateCmd_ACDefaultsConfigOverridesBuiltins(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"dependencies":{"typescript":"^5.0.0"}}`), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir .docket: %v", err)
+	}
+	cfgYAML := "ac_defaults:\n  typescript:\n    - desc: \"Only custom AC\"\n      run: \"echo custom\"\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, ".docket", "config.yaml"), []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "TS override", "--desc", "Description long enough to satisfy required quality checks during create command execution."})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	t1, _ := s.GetTicket(context.Background(), "TKT-001")
+	if len(t1.AC) != 1 || t1.AC[0].Description != "Only custom AC" || t1.AC[0].Run != "echo custom" {
+		t.Fatalf("expected config override defaults only, got %+v", t1.AC)
+	}
+}
+
+func TestCreateCmd_NoACDefaultsFlagAndUnknownStack(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "No defaults", "--desc", "Description long enough to satisfy required quality checks during create command execution.", "--no-ac-defaults"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	t1, _ := s.GetTicket(context.Background(), "TKT-001")
+	if len(t1.AC) != 0 {
+		t.Fatalf("expected no AC defaults with --no-ac-defaults, got %+v", t1.AC)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "Unknown stack", "--desc", "Description long enough to satisfy required quality checks during create command execution."})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed for unknown stack: %v", err)
+	}
+	t2, _ := s.GetTicket(context.Background(), "TKT-002")
+	if len(t2.AC) != 0 {
+		t.Fatalf("expected unknown stack to skip defaults, got %+v", t2.AC)
+	}
+}

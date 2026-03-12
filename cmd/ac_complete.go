@@ -50,6 +50,7 @@ var acCompleteCmd = &cobra.Command{
 		if err := s.UpdateTicket(context.Background(), t); err != nil {
 			return err
 		}
+		_, _ = writeCheckpoint(repo, buildCheckpoint(repo, id, "AC completion checkpoint"))
 
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{"ticket_id": id, "step": idx + 1, "complete": true})

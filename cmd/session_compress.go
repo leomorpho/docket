@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	sessionCompressName    string
-	sessionCompressKeep    bool
-	sessionCompressSummary string
+	sessionCompressName       string
+	sessionCompressKeep       bool
+	sessionCompressSummary    string
+	sessionCompressCheckpoint bool
 )
 
 var sessionCompressCmd = &cobra.Command{
@@ -24,6 +25,8 @@ var sessionCompressCmd = &cobra.Command{
 	Short: "Compress a session into a handoff summary",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer resetSessionCompressGlobals()
+		defer resetSessionCompressFlagChanges(cmd)
 		id := args[0]
 		s := local.New(repo)
 		ctx := context.Background()
@@ -62,6 +65,9 @@ var sessionCompressCmd = &cobra.Command{
 		}
 		summary := strings.TrimSpace(string(summaryData))
 		summary = strings.TrimSpace(strings.TrimPrefix(summary, "## Handoff"))
+		if sessionCompressCheckpoint {
+			_, _ = writeCheckpoint(repo, buildCheckpoint(repo, id, summary))
+		}
 
 		t, err := s.GetTicket(ctx, id)
 		if err != nil {
@@ -107,9 +113,25 @@ var sessionCompressCmd = &cobra.Command{
 	},
 }
 
+func resetSessionCompressGlobals() {
+	sessionCompressName = ""
+	sessionCompressKeep = false
+	sessionCompressSummary = ""
+	sessionCompressCheckpoint = false
+}
+
+func resetSessionCompressFlagChanges(cmd *cobra.Command) {
+	for _, name := range []string{"session", "keep", "summary-file", "checkpoint"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
+}
+
 func init() {
 	sessionCompressCmd.Flags().StringVar(&sessionCompressName, "session", "", "session filename (default: latest)")
 	sessionCompressCmd.Flags().BoolVar(&sessionCompressKeep, "keep", false, "keep original session filename without .compressed rename")
 	sessionCompressCmd.Flags().StringVar(&sessionCompressSummary, "summary-file", "", "path to handoff summary markdown")
+	sessionCompressCmd.Flags().BoolVar(&sessionCompressCheckpoint, "checkpoint", false, "save compressed summary as checkpoint file")
 	sessionCmd.AddCommand(sessionCompressCmd)
 }

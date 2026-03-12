@@ -138,6 +138,9 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 	} else {
 		fmt.Fprintln(out, "  Blocked by: (none)")
 	}
+	if rel := ticketRelationsLine(t.ID); rel != "" {
+		fmt.Fprintf(out, "  Relations: %s\n", rel)
+	}
 }
 
 func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
@@ -185,6 +188,26 @@ func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 	} else {
 		fmt.Fprintln(out, "BLOCKED BY: none")
 	}
+	if rel := ticketRelationsLine(t.ID); rel != "" {
+		fmt.Fprintf(out, "RELATIONS: %s\n", rel)
+	}
+}
+
+func ticketRelationsLine(id string) string {
+	st, err := loadRelations(repo)
+	if err != nil || len(st.Relations) == 0 {
+		return ""
+	}
+	parts := []string{}
+	for _, r := range st.Relations {
+		if r.From == id {
+			parts = append(parts, fmt.Sprintf("%s -> %s", r.Relation, r.To))
+		}
+		if r.To == id {
+			parts = append(parts, fmt.Sprintf("%s <- %s", r.Relation, r.From))
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 func aggregateDescendantAC(ctx context.Context, s *local.Store, id string) acAggregate {
