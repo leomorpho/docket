@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func parse(content string) (*ticket.Ticket, error) {
+func Parse(content string) (*ticket.Ticket, error) {
 	t := &ticket.Ticket{}
 
 	// Split frontmatter
@@ -103,13 +103,13 @@ func processSection(t *ticket.Ticket, section string, lines []string) {
 		t.Description = content
 	case "acceptance criteria":
 		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "- [") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "- [") {
 				ac := ticket.AcceptanceCriterion{}
-				ac.Done = strings.HasPrefix(line, "- [x]")
+				ac.Done = strings.HasPrefix(trimmed, "- [x]")
 				desc := ""
-				if len(line) > 6 {
-					desc = line[6:]
+				if len(trimmed) > 6 {
+					desc = trimmed[6:]
 				}
 				if idx := strings.Index(desc, " : "); idx != -1 {
 					ac.Evidence = strings.TrimSpace(desc[idx+3:])
@@ -124,15 +124,18 @@ func processSection(t *ticket.Ticket, section string, lines []string) {
 				if ac.Description != "" {
 					t.AC = append(t.AC, ac)
 				}
+			} else if len(t.AC) > 0 && trimmed != "" {
+				// Append to previous AC
+				t.AC[len(t.AC)-1].Description += "\n" + line
 			}
 		}
 	case "plan":
 		for _, line := range lines {
-			line = strings.TrimSpace(line)
+			trimmed := strings.TrimSpace(line)
 			// Matches "1. [status] description"
-			if idx := strings.Index(line, ". ["); idx != -1 && idx < 5 {
+			if idx := strings.Index(trimmed, ". ["); idx != -1 && idx < 5 {
 				p := ticket.PlanStep{}
-				afterNum := line[idx+2:] // "[status] description"
+				afterNum := trimmed[idx+2:] // "[status] description"
 				closeBracket := strings.Index(afterNum, "]")
 				if closeBracket != -1 {
 					p.Status = afterNum[1:closeBracket]
@@ -145,6 +148,9 @@ func processSection(t *ticket.Ticket, section string, lines []string) {
 					}
 					t.Plan = append(t.Plan, p)
 				}
+			} else if len(t.Plan) > 0 && trimmed != "" {
+				// Append to previous Plan step
+				t.Plan[len(t.Plan)-1].Description += "\n" + line
 			}
 		}
 	case "comments":

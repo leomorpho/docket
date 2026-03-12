@@ -31,3 +31,8 @@ func IsWorktree(repoRoot string) (bool, error) {
 	}
 	return strings.TrimSpace(out) == "true", nil
 }
+
+// Show returns the content of a file at a specific git ref.
+func Show(repoRoot, ref, path string) (string, error) {
+	return runGit(repoRoot, "show", ref+":"+path)
+}
