@@ -30,8 +30,20 @@ func TestEnsureLocksGitignored(t *testing.T) {
 
 func TestUpdateAutoReleasesLockOnDoneState(t *testing.T) {
 	tmp := t.TempDir()
+	oldRepo := repo
 	repo = tmp
+	defer func() { repo = oldRepo }()
 	format = "human"
+
+	// Initialize git repo because update to in-progress now triggers claiming
+	run := func(args ...string) {
+		c := exec.Command("git", append([]string{"-C", tmp}, args...)...)
+		_ = c.Run()
+	}
+	run("init")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "test")
+
 	s := local.New(tmp)
 	if err := ticket.SaveConfig(tmp, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("save config: %v", err)
@@ -69,7 +81,9 @@ func TestUpdateAutoReleasesLockOnDoneState(t *testing.T) {
 
 func TestHookLockCheckWarnsOnOverlap(t *testing.T) {
 	tmp := t.TempDir()
+	oldRepo := repo
 	repo = tmp
+	defer func() { repo = oldRepo }()
 	format = "human"
 	_ = os.MkdirAll(filepath.Join(tmp, ".git"), 0o755)
 	_ = os.WriteFile(filepath.Join(tmp, ".git", "COMMIT_EDITMSG"), []byte("feat: x\n\nTicket: TKT-999\n"), 0o644)
@@ -111,7 +125,9 @@ func TestHookLockCheckWarnsOnOverlap(t *testing.T) {
 
 func TestWorktreeStartAndLockStatus(t *testing.T) {
 	tmp := t.TempDir()
+	oldRepo := repo
 	repo = tmp
+	defer func() { repo = oldRepo }()
 	format = "human"
 	run := func(args ...string) {
 		c := exec.Command("git", append([]string{"-C", tmp}, args...)...)

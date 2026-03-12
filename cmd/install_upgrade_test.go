@@ -12,12 +12,19 @@ import (
 
 func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	tmpDir := t.TempDir()
+	oldRepo := repo
 	repo = tmpDir
+	defer func() { repo = oldRepo }()
 	format = "human"
 
 	if err := os.MkdirAll(filepath.Join(tmpDir, ".git", "hooks"), 0o755); err != nil {
 		t.Fatalf("mkdir hooks failed: %v", err)
 	}
+
+	// Reset global flags
+	installSkill = false
+	installCursor = false
+	installVSCode = false
 
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
@@ -64,6 +71,10 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 
 	before := string(claudeData)
 	rootCmd.SetOut(new(bytes.Buffer))
+	// Reset global flags
+	installSkill = false
+	installCursor = false
+	installVSCode = false
 	rootCmd.SetArgs([]string{"install"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("second install failed: %v", err)
@@ -93,12 +104,18 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 
 func TestUpgradeCheckAndApply(t *testing.T) {
 	tmpDir := t.TempDir()
+	oldRepo := repo
 	repo = tmpDir
+	defer func() { repo = oldRepo }()
 	format = "human"
 
 	if err := os.MkdirAll(filepath.Join(tmpDir, ".git", "hooks"), 0o755); err != nil {
 		t.Fatalf("mkdir hooks failed: %v", err)
 	}
+	// Reset global flags
+	installSkill = false
+	installCursor = false
+	installVSCode = false
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetArgs([]string{"install"})
 	if err := rootCmd.Execute(); err != nil {

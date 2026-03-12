@@ -1,15 +1,19 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	installSkill bool
+	installSkill  bool
+	installCursor bool
+	installVSCode bool
 )
 
 var installCmd = &cobra.Command{
@@ -18,6 +22,12 @@ var installCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if installSkill {
 			return installGeminiSkill(cmd)
+		}
+		if installCursor {
+			return installCursorRules(cmd)
+		}
+		if installVSCode {
+			return installVSCodeSettings(cmd)
 		}
 
 		gitDir := filepath.Join(repo, ".git")
@@ -56,6 +66,104 @@ var installCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(installCmd)
 	installCmd.Flags().BoolVar(&installSkill, "skill", false, "install Docket skill for Gemini CLI")
+	installCmd.Flags().BoolVar(&installCursor, "cursor", false, "install .cursorrules for Cursor")
+	installCmd.Flags().BoolVar(&installVSCode, "vscode", false, "install .vscode/settings.json for VS Code")
+}
+
+func installCursorRules(cmd *cobra.Command) error {
+	path := filepath.Join(repo, ".cursorrules")
+	
+	rules := `
+# Docket Rules for Cursor Agents
+
+- **CRITICAL: Do not edit .docket/tickets/*.md directly.** Always use the 'docket' MCP tools for all modifications.
+- **Workflow:**
+    1. **list** to find your assigned or next ticket.
+    2. **show** to read the full specification and acceptance criteria.
+    3. **update** the ticket to 'in-progress'. This will automatically claim the ticket and may create a dedicated git worktree for your changes.
+    4. If a worktree was created, perform your work within that directory.
+    5. Once finished, ensure all acceptance criteria are met and tests pass.
+    6. **update** the ticket to 'done'. This will automatically commit your changes, merge them back to the main branch, and cleanup the worktree/claim.
+- **Large Payloads:** If your content is > 1000 characters, write it to a temporary file and pass the path to the 'content_file' parameter in MCP calls.
+`
+
+	// Check if file exists to append or create
+	existing, err := os.ReadFile(path)
+	if err == nil {
+		if strings.Contains(string(existing), "Docket Rules") {
+			fmt.Fprintf(cmd.OutOrStdout(), ".cursorrules already contains Docket rules.\n")
+			return nil
+		}
+		// Append
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if _, err := f.WriteString("\n" + rules); err != nil {
+			return err
+		}
+	} else {
+		// Create
+		if err := os.WriteFile(path, []byte(rules), 0644); err != nil {
+			return err
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Installed Docket rules to: %s\n", path)
+	return nil
+}
+
+func installVSCodeSettings(cmd *cobra.Command) error {
+	dir := filepath.Join(repo, ".vscode")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "settings.json")
+
+	// Standard MCP configuration for various extensions
+	config := map[string]any{
+		"mcp.servers": map[string]any{
+			"docket": map[string]any{
+				"command": "docket",
+				"args":    []string{"serve", "--mcp", "--repo", repo},
+			},
+		},
+	}
+
+	// For simplicity in this implementation, we'll write/overwrite if not present
+	// In a real scenario, we might want to merge with existing JSON
+	existing, err := os.ReadFile(path)
+	if err == nil {
+		var m map[string]any
+		if err := json.Unmarshal(existing, &m); err == nil {
+			// Basic merge
+			if m["mcp.servers"] == nil {
+				m["mcp.servers"] = config["mcp.servers"]
+			} else {
+				servers := m["mcp.servers"].(map[string]any)
+				servers["docket"] = config["mcp.servers"].(map[string]any)["docket"]
+			}
+			data, _ := json.MarshalIndent(m, "", "  ")
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				return err
+			}
+		} else {
+			// If JSON is invalid, just overwrite with our config
+			data, _ := json.MarshalIndent(config, "", "  ")
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				return err
+			}
+		}
+	} else {
+		data, _ := json.MarshalIndent(config, "", "  ")
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			return err
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Installed VS Code settings to: %s\n", path)
+	return nil
 }
 
 func installGeminiSkill(cmd *cobra.Command) error {
