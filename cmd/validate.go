@@ -79,7 +79,11 @@ func runValidateOne(cmd *cobra.Command, s *local.Store, id string, reconcileByID
 	if len(errs) > 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
 		for _, e := range errs {
-			fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, e.Message)
+			msg := e.Message
+			if e.Field == "signature" {
+				msg = fmt.Sprintf("🚨 Direct Mutation Detected. Run `docket fix %s` to repair and see the correct usage.", id)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, msg)
 		}
 		if showWarns && len(warns) > 0 {
 			for _, w := range warns {
@@ -154,7 +158,11 @@ func runValidateAll(cmd *cobra.Command, s *local.Store, reconcileResults []local
 		for id, errs := range allErrs {
 			fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
 			for _, e := range errs {
-				fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, e.Message)
+				msg := e.Message
+				if e.Field == "signature" {
+					msg = fmt.Sprintf("🚨 Direct Mutation Detected. Run `docket fix %s` to repair and see the correct usage.", id)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, msg)
 			}
 		}
 		if showWarns || strict {

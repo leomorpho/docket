@@ -3,7 +3,7 @@ pre-commit:
     docket-validate:
       glob: ".docket/tickets/*.md"
       run: docket validate {staged_files}
-      fail_text: "Ticket schema validation failed. Fix errors before committing."
+      fail_text: "Ticket schema validation failed. Run `docket fix --all` to repair signatures and see correct tool usage."
 
     docket-ac-check:
       run: |

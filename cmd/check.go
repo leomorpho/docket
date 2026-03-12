@@ -12,7 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var checkFix bool
+var (
+	checkFix    bool
+	checkDoctor bool
+)
 
 var errCheckFindings = errors.New("check findings present")
 
@@ -34,6 +37,11 @@ var checkCmd = &cobra.Command{
 		findings, err := checker.Run(ctx, tickets, checkFix)
 		if err != nil {
 			return err
+		}
+
+		if checkDoctor {
+			doctorFindings, _ := runDoctor(ctx, s)
+			findings = append(findings, doctorFindings...)
 		}
 
 		errorsCount := 0
@@ -73,6 +81,34 @@ var checkCmd = &cobra.Command{
 	},
 }
 
+func runDoctor(ctx context.Context, s *local.Store) ([]ck.Finding, error) {
+	var findings []ck.Finding
+	allErrs, _, err := s.ValidateAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for id, errs := range allErrs {
+		for _, e := range errs {
+			sev := ck.SeverityWarning
+			if e.Field == "signature" || e.Field == "format" {
+				sev = ck.SeverityError
+			}
+			msg := e.Message
+			if e.Field == "signature" {
+				msg = fmt.Sprintf("🚨 Direct Mutation Detected. Run `docket fix %s` to repair.", id)
+			}
+			findings = append(findings, ck.Finding{
+				TicketID: id,
+				Rule:     "V001",
+				Message:  msg,
+				Severity: sev,
+			})
+		}
+	}
+	return findings, nil
+}
+
 func loadTicketsForCheck(ctx context.Context, s *local.Store, args []string) ([]*ticket.Ticket, error) {
 	if len(args) == 1 {
 		t, err := s.GetTicket(ctx, args[0])
@@ -97,5 +133,6 @@ func loadTicketsForCheck(ctx context.Context, s *local.Store, args []string) ([]
 
 func init() {
 	checkCmd.Flags().BoolVar(&checkFix, "fix", false, "apply low-risk automatic fixes")
+	checkCmd.Flags().BoolVar(&checkDoctor, "doctor", false, "run comprehensive system health checks")
 	rootCmd.AddCommand(checkCmd)
 }
