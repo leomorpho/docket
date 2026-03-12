@@ -171,6 +171,26 @@
       "state": "in-progress",
       "priority": 3
     },
+    "TKT-142": {
+      "title": "Core: Implement cross-worktree claiming in shared .git directory",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-143": {
+      "title": "Invisible Coordination: Trigger ticket claims on state transition",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-150": {
+      "title": "Transparent Isolation: Automatically create Git worktrees for agents",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-151": {
+      "title": "Transparent Integration: Merge-back and cleanup on ticket completion",
+      "state": "done",
+      "priority": 2
+    },
     "TKT-153": {
       "title": "Divergent Work Prevention: Force agents to check for existing tickets",
       "state": "backlog",

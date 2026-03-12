@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -24,13 +26,13 @@ func Dispatch(action string, args map[string]interface{}, repoRoot string) (inte
 
 	switch action {
 	case "list":
-		return handleList(ctx, s, cfg, args)
+		return handleList(ctx, s, cfg, args, repoRoot)
 	case "create":
 		return handleCreate(ctx, s, cfg, args)
 	case "show":
 		return handleShow(ctx, s, args)
 	case "update":
-		return handleUpdate(ctx, s, cfg, args)
+		return handleUpdate(ctx, s, cfg, args, repoRoot)
 	case "comment":
 		return handleComment(ctx, s, args)
 	case "check":
@@ -41,7 +43,7 @@ func Dispatch(action string, args map[string]interface{}, repoRoot string) (inte
 	}
 }
 
-func handleList(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
+func handleList(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}, repoRoot string) (interface{}, error) {
 	var openStates []ticket.State
 	for _, st := range cfg.OpenStates() {
 		openStates = append(openStates, ticket.State(st))
@@ -55,7 +57,28 @@ func handleList(ctx context.Context, s *local.Store, cfg *ticket.Config, args ma
 		st := ticket.State(state)
 		f = store.Filter{States: []ticket.State{st}, IncludeArchived: state == "archived"}
 	}
-	return s.ListTickets(ctx, f)
+	
+	tickets, err := s.ListTickets(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	type ticketResp struct {
+		*ticket.Ticket
+		ClaimedBy string `json:"claimed_by,omitempty"`
+	}
+
+	var resp []ticketResp
+	for _, t := range tickets {
+		cl, _ := claim.GetClaim(repoRoot, t.ID)
+		claimedBy := ""
+		if cl != nil {
+			claimedBy = cl.AgentID
+		}
+		resp = append(resp, ticketResp{Ticket: t, ClaimedBy: claimedBy})
+	}
+
+	return resp, nil
 }
 
 func handleCreate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
@@ -101,7 +124,7 @@ func handleShow(ctx context.Context, s *local.Store, args map[string]interface{}
 	return t, nil
 }
 
-func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}) (interface{}, error) {
+func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args map[string]interface{}, repoRoot string) (interface{}, error) {
 	id, ok := getString(args, "id")
 	if !ok || id == "" {
 		return nil, fmt.Errorf("id is required")
@@ -113,6 +136,8 @@ func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args 
 	if t == nil {
 		return nil, fmt.Errorf("ticket %s not found", id)
 	}
+
+	oldState := t.State
 	if v, ok := getString(args, "state"); ok && v != "" {
 		ns := ticket.State(v)
 		if !cfg.IsValidState(v) {
@@ -123,6 +148,7 @@ func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args 
 		}
 		t.State = ns
 	}
+
 	if v, ok := getString(args, "title"); ok && strings.TrimSpace(v) != "" {
 		t.Title = strings.TrimSpace(v)
 	}
@@ -133,7 +159,61 @@ func handleUpdate(ctx context.Context, s *local.Store, cfg *ticket.Config, args 
 	if err := s.UpdateTicket(ctx, t); err != nil {
 		return nil, err
 	}
-	return map[string]interface{}{"id": t.ID, "state": t.State, "priority": t.Priority}, nil
+
+	resp := map[string]interface{}{"id": t.ID, "state": t.State, "priority": t.Priority}
+
+	// Handle transitions (Claims/Releases/Worktrees)
+	if t.State == "in-progress" && oldState != "in-progress" {
+		// Auto-claim
+		actor := "agent:mcp"
+		// If caller provided an agent ID via metadata
+		if aid, ok := getString(args, "_agent_id"); ok {
+			actor = "agent:" + aid
+		}
+
+		isAgent := true // MCP is typically called by agents
+		if isAgent {
+			wtPath, wtErr := git.GetAgentWorktreeDir(t.ID)
+			if wtErr == nil {
+				branch := "docket/" + t.ID
+				if err := git.CreateWorktree(repoRoot, t.ID, branch, wtPath); err == nil {
+					_ = claim.Claim(repoRoot, t.ID, wtPath, actor)
+					resp["new_worktree_path"] = wtPath
+				} else {
+					// Fallback to current worktree if failed
+					_ = claim.Claim(repoRoot, t.ID, repoRoot, actor)
+				}
+			} else {
+				_ = claim.Claim(repoRoot, t.ID, repoRoot, actor)
+			}
+		} else {
+			_ = claim.Claim(repoRoot, t.ID, repoRoot, actor)
+		}
+	} else if (t.State == "done" || t.State == "archived") && (oldState != "done" && oldState != "archived") {
+		// Auto-release and Merge-back
+		cl, _ := claim.GetClaim(repoRoot, t.ID)
+		if cl != nil && cl.Worktree != repoRoot {
+			// It was in a separate worktree, try to merge back
+			branch := "docket/" + t.ID
+			// 1. Commit any changes in the worktree
+			_ = git.CommitAll(cl.Worktree, fmt.Sprintf("Auto-commit for %s completion", t.ID))
+
+			// 2. Try to merge back from the main repo
+			if err := git.MergeBranch(repoRoot, branch); err == nil {
+				// Success, cleanup
+				_ = git.RemoveWorktree(repoRoot, cl.Worktree)
+				_ = git.DeleteBranch(repoRoot, branch)
+				_ = claim.Release(repoRoot, t.ID)
+			} else {
+				// Merge failed, maybe conflict
+				return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", err, cl.Worktree)
+			}
+		} else {
+			_ = claim.Release(repoRoot, t.ID)
+		}
+	}
+
+	return resp, nil
 }
 
 func handleComment(ctx context.Context, s *local.Store, args map[string]interface{}) (interface{}, error) {

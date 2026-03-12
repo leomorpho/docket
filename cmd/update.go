@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -102,8 +103,23 @@ var updateCmd = &cobra.Command{
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
+			oldState := t.State
 			t.State = newState
 			updatedFields = append(updatedFields, "state")
+
+			// Handle transitions (Claims/Releases)
+			if t.State == "in-progress" && oldState != "in-progress" {
+				actor := detectActor()
+				if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
+					actor = "agent:" + agentID
+				}
+				if err := claim.Claim(repo, t.ID, repo, actor); err != nil {
+					return fmt.Errorf("conflict: %w", err)
+				}
+			} else if (string(t.State) == "done" || string(t.State) == "archived") && (string(oldState) != "done" && string(oldState) != "archived") {
+				_ = claim.Release(repo, t.ID)
+			}
+
 			if newState == ticket.State("in-review") || newState == ticket.State("done") {
 				_ = releaseLockForTicket(repo, t.ID)
 			}
