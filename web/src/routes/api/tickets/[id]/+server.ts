@@ -6,6 +6,7 @@ import { runTicketMutation, type TicketMutation } from '$lib/server/docket-cli';
 type MutationBody = {
 	kind?: 'state' | 'title' | 'desc';
 	value?: string;
+	projectId?: string;
 };
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -14,12 +15,13 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		return json({ ok: false, error: 'Invalid mutation payload.' }, { status: 400 });
 	}
 
+	const projectId = body.projectId;
 	const mutation: TicketMutation = {
 		kind: body.kind,
 		value: body.value
 	};
-	const allowedStates = new Set(Object.keys(readConfig().states));
-	const result = await runTicketMutation(params.id, mutation, allowedStates);
+	const allowedStates = new Set(Object.keys(readConfig(projectId).states));
+	const result = await runTicketMutation(params.id, mutation, allowedStates, projectId);
 	if (!result.ok) {
 		return json(result, { status: 400 });
 	}

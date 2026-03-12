@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { getProject } from '$lib/server/registry';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,7 +22,11 @@ export type MutationResult = {
 	error: string;
 };
 
-function docketRoot(): string {
+function docketRoot(projectId?: string): string {
+	if (projectId) {
+		const project = getProject(projectId);
+		if (project) return project.dir;
+	}
 	return process.env.DOCKET_DIR ?? process.cwd();
 }
 
@@ -62,14 +67,15 @@ function validateMutation(id: string, mutation: TicketMutation, allowedStates: S
 export async function runTicketMutation(
 	id: string,
 	mutation: TicketMutation,
-	allowedStates: Set<string>
+	allowedStates: Set<string>,
+	projectId?: string
 ): Promise<MutationResult> {
 	const validationError = validateMutation(id, mutation, allowedStates);
 	if (validationError) {
 		return { ok: false, error: validationError };
 	}
 
-	const root = docketRoot();
+	const root = docketRoot(projectId);
 	const docketBin = resolveDocketBinary(root);
 	const args = ['update', id, '--format', 'json'];
 	if (mutation.kind === 'state') {

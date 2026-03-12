@@ -12,6 +12,13 @@ export type Config = {
 	labels: string[];
 };
 
+export type Project = {
+	id: string;
+	dir: string;
+	name: string;
+	registeredAt: string;
+};
+
 export type Ticket = {
 	id: string;
 	seq: number;

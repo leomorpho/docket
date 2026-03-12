@@ -1,9 +1,14 @@
 import type { PageServerLoad } from './$types';
 import { readConfig, readTickets } from '$lib/server/docket';
+import { listProjects } from '$lib/server/registry';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ url }) => {
+	const projects = listProjects();
+	const projectId = url.searchParams.get('project') ?? projects[0]?.id;
 	return {
-		config: readConfig(),
-		tickets: readTickets()
+		projects,
+		activeProjectId: projectId ?? null,
+		config: readConfig(projectId ?? undefined),
+		tickets: readTickets(projectId ?? undefined)
 	};
 };

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Config, Ticket } from '$lib/types';
+import { getProject } from '$lib/server/registry';
 
 type FrontmatterTicket = Omit<Ticket, 'title' | 'body'>;
 
@@ -18,12 +19,16 @@ const defaultConfig: Config = {
 	labels: []
 };
 
-function docketRoot(): string {
+function docketRoot(projectId?: string): string {
+	if (projectId) {
+		const project = getProject(projectId);
+		if (project) return project.dir;
+	}
 	return process.env.DOCKET_DIR ?? process.cwd();
 }
 
-export function readConfig(): Config {
-	const p = path.join(docketRoot(), '.docket', 'config.json');
+export function readConfig(projectId?: string): Config {
+	const p = path.join(docketRoot(projectId), '.docket', 'config.json');
 	if (!fs.existsSync(p)) {
 		return defaultConfig;
 	}
@@ -78,8 +83,8 @@ function parseTicketFile(content: string): Ticket | null {
 	};
 }
 
-export function readTickets(): Ticket[] {
-	const dir = path.join(docketRoot(), '.docket', 'tickets');
+export function readTickets(projectId?: string): Ticket[] {
+	const dir = path.join(docketRoot(projectId), '.docket', 'tickets');
 	if (!fs.existsSync(dir)) {
 		return [];
 	}

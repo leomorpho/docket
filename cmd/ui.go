@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
-	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,13 +25,39 @@ var (
 	uiNoOpen bool
 )
 
+const uiHubPort = 43173
+
 var uiCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "Launch the local Svelte UI dev server",
-	Long:  "Installs UI dependencies, starts the SvelteKit dev server, prints the local URL, and can open it in your default browser.",
+	Long:  "Installs UI dependencies, starts the SvelteKit dev server, prints the local URL, and can open it in your default browser. If a docket UI server is already running it registers this project with it instead of starting a new one.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if uiOpen && uiNoOpen {
 			return fmt.Errorf("--open and --no-open cannot be used together")
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		hubURL := fmt.Sprintf("http://127.0.0.1:%d", uiHubPort)
+
+		// If a docket UI server is already running, register this project and open.
+		if projectID, ok := registerWithHub(hubURL, cwd); ok {
+			openURL := fmt.Sprintf("%s/?project=%s", hubURL, projectID)
+			fmt.Fprintf(cmd.OutOrStdout(), "Docket UI already running — registered %q\n", filepath.Base(cwd))
+			fmt.Fprintf(cmd.OutOrStdout(), "Open: %s\n", openURL)
+			shouldOpen := uiOpen
+			if !uiOpen && !uiNoOpen && isInteractiveStdin() {
+				shouldOpen = promptOpen(cmd, openURL)
+			}
+			if shouldOpen {
+				if err := openBrowser(openURL); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to open browser: %v\n", err)
+				}
+			}
+			return nil
 		}
 
 		webDir, err := resolveWebDir()
@@ -38,10 +66,6 @@ var uiCmd = &cobra.Command{
 		}
 		if _, err := exec.LookPath("pnpm"); err != nil {
 			return fmt.Errorf("pnpm not found in PATH. Install pnpm, then retry `docket ui`")
-		}
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
 		}
 
 		// Always ensure dependencies are installed so users can run `docket ui` directly.
@@ -55,20 +79,15 @@ var uiCmd = &cobra.Command{
 			return fmt.Errorf("failed to install UI dependencies: %w", err)
 		}
 
-		// Use an uncommon high port range to avoid collisions with typical dev servers.
-		port, err := pickOpenPort(43173, 200)
-		if err != nil {
-			return fmt.Errorf("failed to pick UI port: %w", err)
-		}
-		fallbackURL := fmt.Sprintf("http://127.0.0.1:%d/", port)
-		fmt.Fprintf(cmd.OutOrStdout(), "Starting Docket UI on preferred URL: %s\n", fallbackURL)
+		fallbackURL := fmt.Sprintf("http://127.0.0.1:%d/", uiHubPort)
+		fmt.Fprintf(cmd.OutOrStdout(), "Starting Docket UI on %s\n", fallbackURL)
 
 		shouldOpen := uiOpen
 		if !uiOpen && !uiNoOpen && isInteractiveStdin() {
 			shouldOpen = promptOpen(cmd, fallbackURL)
 		}
 
-		proc := exec.Command("pnpm", "dev", "--host", "127.0.0.1", "--port", strconv.Itoa(port), "--strictPort")
+		proc := exec.Command("pnpm", "dev", "--host", "127.0.0.1", "--port", strconv.Itoa(uiHubPort), "--strictPort")
 		proc.Dir = webDir
 		proc.Env = append(os.Environ(), "DOCKET_DIR="+cwd)
 		proc.Stdin = os.Stdin
@@ -92,13 +111,17 @@ var uiCmd = &cobra.Command{
 
 		if shouldOpen {
 			go func() {
-				url := fallbackURL
+				serverURL := fallbackURL
 				select {
 				case detected := <-localURLCh:
-					url = detected
+					serverURL = strings.TrimSuffix(detected, "/")
 				case <-time.After(6 * time.Second):
 				}
-				if err := openBrowser(url); err != nil {
+				// Register and open with project param.
+				if projectID, ok := registerWithHubRetry(serverURL, cwd, 10*time.Second); ok {
+					serverURL = fmt.Sprintf("%s/?project=%s", serverURL, projectID)
+				}
+				if err := openBrowser(serverURL); err != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to open browser: %v\n", err)
 				}
 			}()
@@ -108,6 +131,59 @@ var uiCmd = &cobra.Command{
 		wg.Wait()
 		return err
 	},
+}
+
+// registerWithHub attempts to register the project dir with an existing docket UI
+// server. Returns the project ID and true on success.
+func registerWithHub(hubURL, dir string) (string, bool) {
+	// First check the server is a docket UI instance.
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	resp, err := client.Get(hubURL + "/api/health")
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	var health struct {
+		OK      bool   `json:"ok"`
+		Service string `json:"service"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil || health.Service != "docket-ui" {
+		return "", false
+	}
+
+	return postRegister(hubURL, dir, 2*time.Second)
+}
+
+// registerWithHubRetry retries registration until the server is ready or timeout.
+func registerWithHubRetry(hubURL, dir string, timeout time.Duration) (string, bool) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if id, ok := postRegister(hubURL, dir, time.Second); ok {
+			return id, true
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return "", false
+}
+
+func postRegister(hubURL, dir string, timeout time.Duration) (string, bool) {
+	payload, _ := json.Marshal(map[string]string{"dir": dir})
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Post(hubURL+"/api/projects/register", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	var result struct {
+		OK      bool `json:"ok"`
+		Project struct {
+			ID string `json:"id"`
+		} `json:"project"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || !result.OK {
+		return "", false
+	}
+	return result.Project.ID, true
 }
 
 func resolveWebDir() (string, error) {
@@ -151,29 +227,6 @@ func walkForWeb(start string) string {
 func hasWebPackage(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, "package.json"))
 	return err == nil && !info.IsDir()
-}
-
-func pickOpenPort(start, attempts int) (int, error) {
-	for i := 0; i < attempts; i++ {
-		p := start + i
-		ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p))
-		if err != nil {
-			continue
-		}
-		_ = ln.Close()
-		return p, nil
-	}
-	// Fallback to any available ephemeral port.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, fmt.Errorf("no open port found from %d to %d and failed ephemeral fallback: %w", start, start+attempts-1, err)
-	}
-	defer ln.Close()
-	addr, ok := ln.Addr().(*net.TCPAddr)
-	if !ok {
-		return 0, fmt.Errorf("failed to resolve ephemeral TCP port")
-	}
-	return addr.Port, nil
 }
 
 func isInteractiveStdin() bool {
@@ -242,3 +295,4 @@ func init() {
 	uiCmd.Flags().BoolVar(&uiNoOpen, "no-open", false, "do not prompt to open the UI URL")
 	rootCmd.AddCommand(uiCmd)
 }
+

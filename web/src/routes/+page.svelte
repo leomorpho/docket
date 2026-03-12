@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import BoardView from '$lib/components/BoardView.svelte';
 	import DetailSheet from '$lib/components/DetailSheet.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
@@ -7,9 +8,16 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
-	import type { Config, StateConfig, Ticket } from '$lib/types';
+	import type { Config, Project, StateConfig, Ticket } from '$lib/types';
 
-	let { data } = $props<{ data: { config: Config; tickets: Ticket[] } }>();
+	let { data } = $props<{
+		data: {
+			projects: Project[];
+			activeProjectId: string | null;
+			config: Config;
+			tickets: Ticket[];
+		};
+	}>();
 
 	const openStateEntries = $derived.by(() =>
 		(Object.entries(data.config.states) as [string, StateConfig][])
@@ -28,6 +36,10 @@
 		Array.from(new Set(data.tickets.flatMap((t: Ticket) => t.labels))).sort() as string[]
 	);
 
+	const activeProject = $derived(
+		data.projects.find((p) => p.id === data.activeProjectId) ?? data.projects[0] ?? null
+	);
+
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
 	let selectedStates = $state(new Set<string>());
 	let selectedStatesInitialized = $state(false);
@@ -43,6 +55,18 @@
 		if (!selectedStatesInitialized && openStates.length > 0) {
 			selectedStates = new Set(openStates);
 			selectedStatesInitialized = true;
+		}
+	});
+
+	// Reset filters when project changes
+	$effect(() => {
+		if (data.activeProjectId) {
+			selectedStates = new Set(openStates);
+			selectedStatesInitialized = false;
+			selectedLabel = '';
+			maxPriority = 0;
+			selectedTicket = null;
+			sheetOpen = false;
 		}
 	});
 
@@ -73,6 +97,12 @@
 		if (av > bv) return sortDir === 'asc' ? 1 : -1;
 		return 0;
 	}));
+
+	function switchProject(id: string) {
+		const url = new URL($page.url);
+		url.searchParams.set('project', id);
+		goto(url.toString(), { invalidateAll: true });
+	}
 
 	function onCardSelect(ticket: Ticket) {
 		selectedTicket = ticket;
@@ -107,13 +137,15 @@
 		const response = await fetch(`/api/tickets/${ticketID}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ kind, value })
+			body: JSON.stringify({ kind, value, projectId: data.activeProjectId })
 		});
 		const payload = (await response.json().catch(() => ({}))) as MutationResult;
 		if (!response.ok || !payload.ok) {
 			return { ok: false, error: payload.error ?? 'Ticket update failed.' };
 		}
-		await invalidateAll();
+		const url = new URL($page.url);
+		if (data.activeProjectId) url.searchParams.set('project', data.activeProjectId);
+		await goto(url.toString(), { invalidateAll: true });
 		return { ok: true };
 	}
 
@@ -140,7 +172,25 @@
 						{filtered.length} of {data.tickets.length} tickets visible
 					</p>
 				</div>
-				<Badge variant="secondary">{openStates.length} workflow states</Badge>
+				<div class="flex items-center gap-3">
+					{#if data.projects.length > 1}
+						<div class="flex items-center gap-2">
+							<span class="text-xs text-muted-foreground">Project</span>
+							<select
+								class="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-slate-300"
+								value={data.activeProjectId ?? ''}
+								onchange={(e) => switchProject((e.target as HTMLSelectElement).value)}
+							>
+								{#each data.projects as project}
+									<option value={project.id}>{project.name}</option>
+								{/each}
+							</select>
+						</div>
+					{:else if activeProject}
+						<Badge variant="outline" class="font-mono text-xs">{activeProject.name}</Badge>
+					{/if}
+					<Badge variant="secondary">{openStates.length} workflow states</Badge>
+				</div>
 			</CardHeader>
 			<CardContent>
 				<FilterBar
