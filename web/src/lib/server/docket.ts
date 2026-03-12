@@ -69,6 +69,58 @@ function parseTicketFile(content: string): Ticket | null {
 	const titleMatch = body.match(/^#\s+[A-Z]+-\d+:\s+(.+)$/m) ?? body.match(/^#\s+(.+)$/m);
 	const title = titleMatch?.[1]?.trim() ?? 'Untitled';
 	const fm = fmObj as Record<string, unknown> & FrontmatterTicket;
+
+	const ac: AcceptanceCriterion[] = [];
+	const acSection = body.match(/## Acceptance Criteria([\s\S]*?)(##|$)/);
+	if (acSection) {
+		const lines = acSection[1].split('\n');
+		for (const line of lines) {
+			const m = line.trim().match(/^- \[(x| )\] (.*)$/);
+			if (m) {
+				const done = m[1] === 'x';
+				let desc = m[2].trim();
+				let evidence: string | undefined;
+				if (desc.includes(' — evidence: ')) {
+					const parts = desc.split(' — evidence: ');
+					desc = parts[0];
+					evidence = parts[1];
+				} else if (desc.includes(' : ')) {
+					const parts = desc.split(' : ');
+					desc = parts[0];
+					evidence = parts[1];
+				}
+				ac.push({ done, description: desc, evidence });
+			}
+		}
+	}
+
+	const plan: PlanStep[] = [];
+	const planSection = body.match(/## Plan([\s\S]*?)(##|$)/);
+	if (planSection) {
+		const lines = planSection[1].split('\n');
+		for (const line of lines) {
+			const m = line.trim().match(/^\d+\. \[(.*?)\] (.*)$/);
+			if (m) {
+				const status = m[1].trim();
+				let desc = m[2].trim();
+				let notes: string | undefined;
+				if (desc.includes(' — ')) {
+					const parts = desc.split(' — ');
+					desc = parts[0];
+					notes = parts[1];
+				} else if (desc.includes(' : ')) {
+					const parts = desc.split(' : ');
+					desc = parts[0];
+					notes = parts[1];
+				}
+				plan.push({ status, description: desc, notes });
+			}
+		}
+	}
+
+	const handoffMatch = body.match(/## Handoff([\s\S]*?)$/);
+	const handoff = handoffMatch ? handoffMatch[1].trim() : undefined;
+
 	return {
 		id: String(fm.id ?? ''),
 		seq: Number(fm.seq ?? 0),
@@ -79,6 +131,9 @@ function parseTicketFile(content: string): Ticket | null {
 		title,
 		created_at: String(fm.created_at ?? ''),
 		updated_at: String(fm.updated_at ?? ''),
+		ac,
+		plan,
+		handoff,
 		body
 	};
 }

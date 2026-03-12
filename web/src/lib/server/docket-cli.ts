@@ -11,7 +11,8 @@ const ticketIDRe = /^TKT-\d+$/;
 export type TicketMutation =
 	| { kind: 'state'; value: string }
 	| { kind: 'title'; value: string }
-	| { kind: 'desc'; value: string };
+	| { kind: 'desc'; value: string }
+	| { kind: 'ac-complete'; value: string; evidence?: string };
 
 export type MutationResult = {
 	ok: true;
@@ -77,15 +78,24 @@ export async function runTicketMutation(
 
 	const root = docketRoot(projectId);
 	const docketBin = resolveDocketBinary(root);
-	const args = ['update', id, '--format', 'json'];
-	if (mutation.kind === 'state') {
-		args.push('--state', mutation.value.trim());
-	}
-	if (mutation.kind === 'title') {
-		args.push('--title', mutation.value.trim());
-	}
-	if (mutation.kind === 'desc') {
-		args.push('--desc', mutation.value);
+	let args: string[] = [];
+	
+	if (mutation.kind === 'ac-complete') {
+		args = ['ac', 'complete', id, mutation.value, '--format', 'json'];
+		if (mutation.evidence) {
+			args.push('--evidence', mutation.evidence);
+		}
+	} else {
+		args = ['update', id, '--format', 'json'];
+		if (mutation.kind === 'state') {
+			args.push('--state', mutation.value.trim());
+		}
+		if (mutation.kind === 'title') {
+			args.push('--title', mutation.value.trim());
+		}
+		if (mutation.kind === 'desc') {
+			args.push('--desc', mutation.value);
+		}
 	}
 
 	try {

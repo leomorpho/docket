@@ -27,7 +27,8 @@
 		stateOptions,
 		onUpdateState,
 		onUpdateTitle,
-		onUpdateDescription
+		onUpdateDescription,
+		onUpdateAC
 	} = $props<{
 		ticket: Ticket | null;
 		open: boolean;
@@ -35,6 +36,7 @@
 		onUpdateState: (ticketID: string, state: string) => Promise<MutationResult>;
 		onUpdateTitle: (ticketID: string, title: string) => Promise<MutationResult>;
 		onUpdateDescription: (ticketID: string, description: string) => Promise<MutationResult>;
+		onUpdateAC: (ticketID: string, acDesc: string, evidence: string) => Promise<MutationResult>;
 	}>();
 
 	const html = $derived(ticket ? marked.parse(ticket.body, { gfm: true }) : '');
@@ -202,6 +204,40 @@
 							</Button>
 						</div>
 					</div>
+
+					{#if ticket.ac.length > 0}
+						<div class="mb-5 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+							<p class="mb-2 text-xs font-medium tracking-wide text-slate-600 uppercase">Acceptance Criteria</p>
+							<div class="space-y-2">
+								{#each ticket.ac as ac}
+									<div class="flex items-start gap-3 rounded-md border border-slate-100 bg-white p-2">
+										<input
+											type="checkbox"
+											checked={ac.done}
+											class="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
+											onchange={async (e) => {
+												if ((e.target as HTMLInputElement).checked) {
+													const evidence = prompt('Provide evidence for completion (e.g. commit SHA, file path, or description):');
+													if (evidence !== null) {
+														await onUpdateAC(ticket.id, ac.description, evidence);
+													} else {
+														(e.target as HTMLInputElement).checked = false;
+													}
+												}
+											}}
+											disabled={ac.done}
+										/>
+										<div class="flex-1">
+											<p class="text-sm {ac.done ? 'text-slate-500 line-through' : 'text-slate-900'}">{ac.description}</p>
+											{#if ac.evidence}
+												<p class="mt-1 text-xs text-emerald-600">Evidence: {ac.evidence}</p>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
 					<article class="markdown max-w-none text-sm leading-relaxed text-slate-800">
 						{@html html}
 					</article>

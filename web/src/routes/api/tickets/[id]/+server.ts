@@ -4,8 +4,9 @@ import { readConfig } from '$lib/server/docket';
 import { runTicketMutation, type TicketMutation } from '$lib/server/docket-cli';
 
 type MutationBody = {
-	kind?: 'state' | 'title' | 'desc';
+	kind?: 'state' | 'title' | 'desc' | 'ac-complete';
 	value?: string;
+	evidence?: string;
 	projectId?: string;
 };
 
@@ -18,8 +19,9 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	const projectId = body.projectId;
 	const mutation: TicketMutation = {
 		kind: body.kind,
-		value: body.value
-	};
+		value: body.value,
+		evidence: body.evidence
+	} as TicketMutation;
 	const allowedStates = new Set(Object.keys(readConfig(projectId).states));
 	const result = await runTicketMutation(params.id, mutation, allowedStates, projectId);
 	if (!result.ok) {

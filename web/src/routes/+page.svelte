@@ -224,6 +224,27 @@
 	function updateDescription(ticketID: string, value: string) {
 		return mutateTicket(ticketID, 'desc', value);
 	}
+
+	async function updateAC(ticketID: string, acDesc: string, evidence: string) {
+		const response = await fetch(`/api/tickets/${ticketID}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				kind: 'ac-complete',
+				value: acDesc,
+				evidence,
+				projectId: data.activeProjectId
+			})
+		});
+		const payload = (await response.json().catch(() => ({}))) as MutationResult;
+		if (!response.ok || !payload.ok) {
+			return { ok: false, error: payload.error ?? 'AC update failed.' };
+		}
+		const url = new URL($page.url);
+		if (data.activeProjectId) url.searchParams.set('project', data.activeProjectId);
+		await goto(url.toString(), { invalidateAll: true });
+		return { ok: true };
+	}
 </script>
 
 <main class="min-h-screen bg-gradient-to-br from-slate-50 via-zinc-50 to-slate-100 px-4 py-5 sm:px-6">
@@ -310,5 +331,6 @@
 		onUpdateState={updateState}
 		onUpdateTitle={updateTitle}
 		onUpdateDescription={updateDescription}
+		onUpdateAC={updateAC}
 	/>
 </main>

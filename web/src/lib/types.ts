@@ -19,6 +19,18 @@ export type Project = {
 	registeredAt: string;
 };
 
+export type AcceptanceCriterion = {
+	description: string;
+	done: boolean;
+	evidence?: string;
+};
+
+export type PlanStep = {
+	description: string;
+	status: string;
+	notes?: string;
+};
+
 export type Ticket = {
 	id: string;
 	seq: number;
@@ -29,6 +41,9 @@ export type Ticket = {
 	title: string;
 	created_at: string;
 	updated_at: string;
+	ac: AcceptanceCriterion[];
+	plan: PlanStep[];
+	handoff?: string;
 	body: string;
 };
 
