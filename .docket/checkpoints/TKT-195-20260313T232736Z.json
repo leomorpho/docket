@@ -1,0 +1,16 @@
+{
+  "ticket_id": "TKT-195",
+  "created_at": "2026-03-13T23:27:36Z",
+  "ac_done": 1,
+  "ac_total": 3,
+  "changed_files": [
+    ".docket/manifest.json",
+    ".docket/tickets/TKT-195.md"
+  ],
+  "last_comments": [
+    "Gap report completed in docs/worktree-flow-gap-report.md. Root causes: silent worktree fallback in StartTask, worktree path dropped in CLI start/update surfaces, MCP terminal flow pre-writes state and ignores FinishTask errors, and session resume is checkpoint-only (not claim/worktree handover). Follow-up enforcement tickets: TKT-196, TKT-197, TKT-198, TKT-199."
+  ],
+  "branch": "main",
+  "worktree_path": "/workspace/project",
+  "summary": "AC completion checkpoint"
+}

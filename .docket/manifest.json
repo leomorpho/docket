@@ -1007,7 +1007,7 @@
     },
     "TKT-195": {
       "title": "Audit why existing automatic worktree behavior is not visible in normal agent flows",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-176"
     },
