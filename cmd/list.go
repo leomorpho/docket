@@ -27,8 +27,9 @@ type listRow struct {
 }
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List tickets",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {

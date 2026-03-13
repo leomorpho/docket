@@ -11,8 +11,9 @@ import (
 )
 
 var boardCmd = &cobra.Command{
-	Use:   "board",
-	Short: "Open the interactive kanban board",
+	Use:     "board",
+	Aliases: []string{"bd"},
+	Short:   "Open the interactive kanban board",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s := local.New(repo)
 		return runBoard(repo, s)

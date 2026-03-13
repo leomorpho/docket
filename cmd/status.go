@@ -14,8 +14,9 @@ import (
 var statusParallel bool
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show docket status and parallel work safety",
+	Use:     "status",
+	Aliases: []string{"st"},
+	Short:   "Show docket status and parallel work safety",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !statusParallel {
 			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for in-progress ticket matrix.")
