@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/spf13/cobra"
 )
 
@@ -15,6 +17,34 @@ var sessionResumeCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
+		actor := detectActor()
+		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
+			actor = "agent:" + agentID
+		}
+		if strings.HasPrefix(actor, "agent:") {
+			cl, err := claim.GetClaim(repo, id)
+			if err != nil {
+				return fmt.Errorf("loading claim for %s: %w", id, err)
+			}
+			if cl == nil || strings.TrimSpace(cl.Worktree) == "" {
+				return fmt.Errorf("agent-managed resume requires a claim-bound worktree for %s", id)
+			}
+			absRepo, _ := filepath.Abs(repo)
+			absWT, _ := filepath.Abs(cl.Worktree)
+			if absWT == absRepo {
+				return fmt.Errorf("agent-managed resume rejected for %s: claim points to main checkout, not dedicated worktree", id)
+			}
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			absCWD, _ := filepath.Abs(cwd)
+			rel, relErr := filepath.Rel(absWT, absCWD)
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+				return fmt.Errorf("agent-managed resume must run inside bound worktree: %s", absWT)
+			}
+		}
+
 		paths, err := listCheckpointPaths(repo, id)
 		if err != nil {
 			return err

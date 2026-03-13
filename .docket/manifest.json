@@ -1013,7 +1013,7 @@
     },
     "TKT-196": {
       "title": "Require Docket-created worktrees for agent-managed runs and fail closed without fallback",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-176"
     },

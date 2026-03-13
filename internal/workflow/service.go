@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/leomorpho/docket/internal/store"
@@ -45,22 +46,35 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 		t.StartedAt = t.UpdatedAt
 	}
 
-	// Handle VCS and Claims
+	isAgentManaged := strings.HasPrefix(agentID, "agent:")
+
+	// Handle VCS and claims.
 	wtPath, wtErr := m.vcs.GetAgentWorktreeDir(ctx, t.ID)
 	repoRoot, _ := m.vcs.GetRepoRoot(ctx)
 	claimedPath := repoRoot
-	
-	if wtErr == nil {
-		branch := "docket/" + t.ID
-		if err := m.vcs.CreateWorktree(ctx, t.ID, branch, wtPath); err == nil {
-			_ = m.claimer.Claim(ctx, t.ID, wtPath, agentID)
-			claimedPath = wtPath
-		} else {
-			// Fallback to repo root
-			_ = m.claimer.Claim(ctx, t.ID, repoRoot, agentID)
+
+	if wtErr != nil {
+		if isAgentManaged {
+			return nil, "", fmt.Errorf("agent-managed run requires dedicated worktree path for %s: %w", t.ID, wtErr)
 		}
-	} else {
 		_ = m.claimer.Claim(ctx, t.ID, repoRoot, agentID)
+	} else {
+		branch := "docket/" + t.ID
+		if err := m.vcs.CreateWorktree(ctx, t.ID, branch, wtPath); err != nil {
+			if isAgentManaged {
+				return nil, "", fmt.Errorf("agent-managed run requires dedicated worktree for %s: %w", t.ID, err)
+			}
+			_ = m.claimer.Claim(ctx, t.ID, repoRoot, agentID)
+		} else {
+			if err := m.claimer.Claim(ctx, t.ID, wtPath, agentID); err != nil {
+				return nil, "", fmt.Errorf("claiming ticket in worktree: %w", err)
+			}
+			claimedPath = wtPath
+		}
+	}
+
+	if isAgentManaged && claimedPath == repoRoot {
+		return nil, "", fmt.Errorf("agent-managed run for %s rejected: run is not bound to a dedicated worktree", t.ID)
 	}
 
 	if err := m.store.UpdateTicket(ctx, t); err != nil {
@@ -88,12 +102,12 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 		branch := "docket/" + t.ID
 		// Commit changes in worktree
 		_ = m.vcs.CommitAll(ctx, cl.Worktree, fmt.Sprintf("Auto-commit for %s completion", t.ID))
-		
+
 		// Merge back
 		if err := m.vcs.MergeBranch(ctx, branch); err != nil {
 			return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", err, cl.Worktree)
 		}
-		
+
 		// Cleanup
 		_ = m.vcs.RemoveWorktree(ctx, cl.Worktree)
 		_ = m.vcs.DeleteBranch(ctx, branch)

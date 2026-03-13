@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/leomorpho/docket/internal/claim"
@@ -32,17 +33,31 @@ func (m *MockStore) Validate(ctx context.Context, id string) ([]store.Validation
 
 // MockVCS
 type MockVCS struct {
-	repoRoot string
+	repoRoot          string
+	worktreePath      string
+	getWorktreeDirErr error
+	createWorktreeErr error
 }
 
 func (m *MockVCS) CreateWorktree(ctx context.Context, ticketID, branch, path string) error {
-	return nil
+	return m.createWorktreeErr
 }
 func (m *MockVCS) RemoveWorktree(ctx context.Context, path string) error { return nil }
 func (m *MockVCS) GetAgentWorktreeDir(ctx context.Context, ticketID string) (string, error) {
+	if m.getWorktreeDirErr != nil {
+		return "", m.getWorktreeDirErr
+	}
+	if m.worktreePath != "" {
+		return m.worktreePath, nil
+	}
 	return "/tmp/wt-" + ticketID, nil
 }
-func (m *MockVCS) GetRepoRoot(ctx context.Context) (string, error)       { return "/tmp/repo", nil }
+func (m *MockVCS) GetRepoRoot(ctx context.Context) (string, error) {
+	if m.repoRoot != "" {
+		return m.repoRoot, nil
+	}
+	return "/tmp/repo", nil
+}
 func (m *MockVCS) CommitAll(ctx context.Context, path, msg string) error { return nil }
 func (m *MockVCS) MergeBranch(ctx context.Context, branch string) error  { return nil }
 func (m *MockVCS) DeleteBranch(ctx context.Context, branch string) error { return nil }
@@ -74,12 +89,15 @@ func TestWorkflowStartTask(t *testing.T) {
 	mgr := NewManager(s, v, c)
 	cfg := ticket.DefaultConfig()
 
-	res, wtPath, err := mgr.StartTask(context.Background(), "TKT-001", "agent-1", cfg)
+	res, wtPath, err := mgr.StartTask(context.Background(), "TKT-001", "agent:1", cfg)
 	if err != nil {
 		t.Fatalf("StartTask failed: %v", err)
 	}
 	if wtPath == "" {
 		t.Fatal("expected worktree path to be returned")
+	}
+	if wtPath == "/tmp/repo" {
+		t.Fatalf("expected dedicated worktree path for agent-managed start, got repo root %s", wtPath)
 	}
 
 	if res.State != "in-progress" {
@@ -88,9 +106,55 @@ func TestWorkflowStartTask(t *testing.T) {
 	if res.StartedAt.IsZero() {
 		t.Error("expected StartedAt to be set")
 	}
-	if c.claims["TKT-001"] != "agent-1" {
-		t.Errorf("expected TKT-001 to be claimed by agent-1, got %s", c.claims["TKT-001"])
+	if c.claims["TKT-001"] != "agent:1" {
+		t.Errorf("expected TKT-001 to be claimed by agent:1, got %s", c.claims["TKT-001"])
 	}
+}
+
+func TestWorkflowStartTask_AgentRequiresDedicatedWorktree(t *testing.T) {
+	cfg := ticket.DefaultConfig()
+
+	t.Run("fails when worktree path lookup fails", func(t *testing.T) {
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		v := &MockVCS{getWorktreeDirErr: errors.New("no cache dir")}
+		c := &MockClaim{claims: make(map[string]string)}
+		mgr := NewManager(s, v, c)
+
+		_, _, err := mgr.StartTask(context.Background(), "TKT-001", "agent:test", cfg)
+		if err == nil {
+			t.Fatal("expected error for missing dedicated worktree path")
+		}
+	})
+
+	t.Run("fails when worktree creation fails", func(t *testing.T) {
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		v := &MockVCS{createWorktreeErr: errors.New("git worktree add failed")}
+		c := &MockClaim{claims: make(map[string]string)}
+		mgr := NewManager(s, v, c)
+
+		_, _, err := mgr.StartTask(context.Background(), "TKT-001", "agent:test", cfg)
+		if err == nil {
+			t.Fatal("expected error for failed worktree creation")
+		}
+	})
+
+	t.Run("human flow still falls back to repo root", func(t *testing.T) {
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		v := &MockVCS{
+			repoRoot:          "/tmp/repo",
+			createWorktreeErr: errors.New("git worktree add failed"),
+		}
+		c := &MockClaim{claims: make(map[string]string)}
+		mgr := NewManager(s, v, c)
+
+		_, wtPath, err := mgr.StartTask(context.Background(), "TKT-001", "human:test", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error for human fallback: %v", err)
+		}
+		if wtPath != "/tmp/repo" {
+			t.Fatalf("expected repo-root fallback for human flow, got %s", wtPath)
+		}
+	})
 }
 
 func TestWorkflowFinishTask(t *testing.T) {
