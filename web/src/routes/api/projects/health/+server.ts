@@ -45,19 +45,39 @@ export const GET: RequestHandler = async ({ url }) => {
 		const prioDist: Record<number, number> = {};
 		const invalidSigs: string[] = [];
 		const staleTickets: string[] = [];
-		const now = new Date();
-		const staleThreshold = 7; // days
+		let totalCycleTime = 0;
+		let completedCount = 0;
 
 		if (fs.existsSync(ticketsDir)) {
-			const files = fs.readdirSync(ticketsDir).filter(f => f.endsWith('.md'));
+			const files = fs.readdirSync(ticketsDir).filter((f) => f.endsWith('.md'));
 			for (const file of findings) {
 				if (file.message.includes('Direct Mutation Detected')) {
 					invalidSigs.push(file.ticketId);
 				}
 			}
-			
-			// We can get more info from the tickets if we want, 
-			// but for now let's use the CLI results as the primary source.
+
+			// We need to read tickets to get timestamps
+			// (Ideally we'd have a server-side cache for this)
+			for (const file of files) {
+				try {
+					const content = fs.readFileSync(path.join(ticketsDir, file), 'utf8');
+					const fmMatch = content.match(/---([\s\S]*?)---/);
+					if (fmMatch) {
+						const fm = fmMatch[1];
+						const startedAt = fm.match(/started_at: "(.*?)"/);
+						const completedAt = fm.match(/completed_at: "(.*?)"/);
+						if (startedAt && completedAt) {
+							const start = new Date(startedAt[1]);
+							const end = new Date(completedAt[1]);
+							const cycleTime = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+							totalCycleTime += cycleTime;
+							completedCount++;
+						}
+					}
+				} catch {
+					// Skip unparseable
+				}
+			}
 		}
 
 		return json({
@@ -65,10 +85,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			health: {
 				ticketCount: result.checked,
 				invalidSignatures: invalidSigs,
-				staleTickets: staleTickets, // TODO: Implement staleness in CLI doctor
+				staleTickets: staleTickets,
 				stateDistribution: stateDist,
 				priorityDistribution: prioDist,
-				findings: findings
+				findings: findings,
+				avgCycleTime: completedCount > 0 ? totalCycleTime / completedCount : 0
 			}
 		});
 	} catch (err: any) {

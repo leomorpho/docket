@@ -55,6 +55,8 @@ func render(t *ticket.Ticket) (string, error) {
 		LinkedCommits []string     `yaml:"linked_commits,omitempty"`
 		CreatedAt     string       `yaml:"created_at"`
 		UpdatedAt     string       `yaml:"updated_at"`
+		StartedAt     string       `yaml:"started_at,omitempty"`
+		CompletedAt   string       `yaml:"completed_at,omitempty"`
 		CreatedBy     string       `yaml:"created_by"`
 		WriteHash     string       `yaml:"write_hash,omitempty"`
 	}{
@@ -71,6 +73,12 @@ func render(t *ticket.Ticket) (string, error) {
 		UpdatedAt:     t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		CreatedBy:     t.CreatedBy,
 		WriteHash:     t.WriteHash,
+	}
+	if !t.StartedAt.IsZero() {
+		fm.StartedAt = t.StartedAt.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if !t.CompletedAt.IsZero() {
+		fm.CompletedAt = t.CompletedAt.UTC().Format("2006-01-02T15:04:05Z")
 	}
 	fmBytes, err := yaml.Marshal(fm)
 	if err != nil {

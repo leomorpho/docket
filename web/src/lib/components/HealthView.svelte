@@ -97,6 +97,26 @@
 			</Card>
 		</div>
 
+		<div class="grid gap-4 sm:grid-cols-2">
+			<Card>
+				<CardHeader>
+					<CardTitle>Performance</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<div class="space-y-4">
+						<div class="flex justify-between items-center">
+							<span class="text-sm text-slate-600">Avg. Cycle Time</span>
+							<span class="font-semibold">{health.avgCycleTime.toFixed(1)} days</span>
+						</div>
+						<div class="flex justify-between items-center">
+							<span class="text-sm text-slate-600">Tickets in Progress</span>
+							<Badge>{health.findings.filter(f => f.rule === 'V001' && f.message.includes('in-progress')).length}</Badge>
+						</div>
+					</div>
+				</CardContent>
+			</Card>
+		</div>
+
 		<Card>
 			<CardHeader>
 				<CardTitle>Detailed Findings</CardTitle>

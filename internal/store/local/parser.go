@@ -34,6 +34,8 @@ func Parse(content string) (*ticket.Ticket, error) {
 		LinkedCommits []string `yaml:"linked_commits,omitempty"`
 		CreatedAt     string   `yaml:"created_at"`
 		UpdatedAt     string   `yaml:"updated_at"`
+		StartedAt     string   `yaml:"started_at"`
+		CompletedAt   string   `yaml:"completed_at"`
 		CreatedBy     string   `yaml:"created_by"`
 		WriteHash     string   `yaml:"write_hash"`
 	}{}
@@ -59,6 +61,12 @@ func Parse(content string) (*ticket.Ticket, error) {
 	}
 	if fm.UpdatedAt != "" {
 		t.UpdatedAt, _ = time.Parse(time.RFC3339, fm.UpdatedAt)
+	}
+	if fm.StartedAt != "" {
+		t.StartedAt, _ = time.Parse(time.RFC3339, fm.StartedAt)
+	}
+	if fm.CompletedAt != "" {
+		t.CompletedAt, _ = time.Parse(time.RFC3339, fm.CompletedAt)
 	}
 
 	// Parse body

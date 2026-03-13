@@ -85,6 +85,18 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 		return err
 	}
 
+	// Track timestamps on state transitions
+	if t.State == "in-progress" && existing.State != "in-progress" {
+		if t.StartedAt.IsZero() {
+			t.StartedAt = time.Now().UTC().Truncate(time.Second)
+		}
+	}
+	if t.State == "done" && existing.State != "done" {
+		if t.CompletedAt.IsZero() {
+			t.CompletedAt = time.Now().UTC().Truncate(time.Second)
+		}
+	}
+
 	// If the provided ticket has no comments, use the existing ones
 	if len(t.Comments) == 0 {
 		t.Comments = existing.Comments
@@ -110,7 +122,7 @@ func (s *Store) GetTicket(ctx context.Context, id string) (*ticket.Ticket, error
 		return nil, err
 	}
 
-	return parse(data)
+	return Parse(data)
 }
 
 func (s *Store) GetRaw(ctx context.Context, id string) (string, error) {

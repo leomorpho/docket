@@ -47,6 +47,8 @@ export type Ticket = {
 	title: string;
 	created_at: string;
 	updated_at: string;
+	started_at?: string;
+	completed_at?: string;
 	ac: AcceptanceCriterion[];
 	plan: PlanStep[];
 	handoff?: string;
@@ -67,4 +69,5 @@ export type ProjectHealth = {
 	stateDistribution: Record<string, number>;
 	priorityDistribution: Record<number, number>;
 	findings: Finding[];
+	avgCycleTime: number;
 };

@@ -30,6 +30,8 @@ type Ticket struct {
 	LinkedCommits []string  `yaml:"linked_commits,omitempty" json:"linked_commits,omitempty"`
 	CreatedAt     time.Time `yaml:"created_at" json:"created_at"`
 	UpdatedAt     time.Time `yaml:"updated_at" json:"updated_at"`
+	StartedAt     time.Time `yaml:"started_at,omitempty" json:"started_at,omitempty"`
+	CompletedAt   time.Time `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
 	CreatedBy     string    `yaml:"created_by" json:"created_by"`
 	WriteHash     string    `yaml:"write_hash,omitempty" json:"write_hash,omitempty"`
 
