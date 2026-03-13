@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,13 +41,16 @@ func TestSecureModeUnlockExpiryAndPrivilegedRejection(t *testing.T) {
 	}
 
 	out.Reset()
-	rootCmd.SetArgs([]string{"secure", "approve", "--ticket", "TKT-001", "--action", "set trust anchor", "--yes"})
+	rootCmd.SetArgs([]string{"secure", "set-anchor", "--ticket", "TKT-001", "--signer-id", "signer-1", "--yes"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("secure approve while active failed: %v", err)
+		t.Fatalf("secure set-anchor while active failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpHome, "repos")); err != nil {
+		t.Fatalf("expected repo namespace directory to exist after set-anchor: %v", err)
 	}
 
 	time.Sleep(220 * time.Millisecond)
-	rootCmd.SetArgs([]string{"secure", "approve", "--ticket", "TKT-001", "--action", "set trust anchor", "--yes"})
+	rootCmd.SetArgs([]string{"secure", "set-anchor", "--ticket", "TKT-001", "--signer-id", "signer-1", "--yes"})
 	err = rootCmd.Execute()
 	if !errors.Is(err, security.ErrSecureModeInactive) {
 		t.Fatalf("expected secure inactive error after TTL expiry, got: %v", err)

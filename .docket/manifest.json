@@ -923,7 +923,7 @@
     },
     "TKT-181": {
       "title": "Namespace per-repo trust anchors under stable repo IDs in DOCKET_HOME",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-173"
     },

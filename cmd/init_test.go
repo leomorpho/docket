@@ -35,6 +35,10 @@ func TestInitCmd(t *testing.T) {
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
 		t.Errorf("config.json not created at %s", cfgPath)
 	}
+	repoIDPath := filepath.Join(tmpDir, ".docket", "repo_id")
+	if _, err := os.Stat(repoIDPath); os.IsNotExist(err) {
+		t.Errorf("repo_id not created at %s", repoIDPath)
+	}
 
 	ticketsDir := filepath.Join(tmpDir, ".docket", "tickets")
 	if _, err := os.Stat(ticketsDir); os.IsNotExist(err) {

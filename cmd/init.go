@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +43,13 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 			return fmt.Errorf("saving config: %w", err)
 		}
 
+		// 2b. Initialize stable repo namespace under DOCKET_HOME.
+		ns := security.NewRepoNamespaceStore(docketHome)
+		repoID, nsPath, err := ns.EnsureRepoNamespace(repo)
+		if err != nil {
+			return fmt.Errorf("initializing repo security namespace: %w", err)
+		}
+
 		// 3. Update gitignore
 		gitignorePath := filepath.Join(repo, ".gitignore")
 		ignoreContent := "\n# docket\n.docket/index.db\n.docket/tickets/*/sessions/\n"
@@ -68,6 +76,7 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 			printJSON(cmd, map[string]string{"status": "ok", "path": docketDir})
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized docket in %s/\n\n", docketDir)
+			fmt.Fprintf(cmd.OutOrStdout(), "Security namespace: %s (%s)\n\n", repoID, nsPath)
 			fmt.Fprintln(cmd.OutOrStdout(), "Next steps:")
 			fmt.Fprintln(cmd.OutOrStdout(), "  export DOCKET_HOME=$HOME/.docket-home")
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket create --title \"My first ticket\"")

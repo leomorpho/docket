@@ -14,6 +14,7 @@ var (
 	secureTicket   string
 	secureAction   string
 	secureYes      bool
+	secureSignerID string
 )
 
 var secureCmd = &cobra.Command{
@@ -103,6 +104,47 @@ var secureApproveCmd = &cobra.Command{
 	},
 }
 
+var secureAnchorSetCmd = &cobra.Command{
+	Use:   "set-anchor",
+	Short: "Set repo trust anchor in DOCKET_HOME namespace (privileged)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if secureTicket == "" {
+			return fmt.Errorf("--ticket is required")
+		}
+		if secureSignerID == "" {
+			return fmt.Errorf("--signer-id is required")
+		}
+
+		mgr := security.NewSessionManager(docketHome)
+		if err := mgr.RequireActive(repo); err != nil {
+			return err
+		}
+
+		action := fmt.Sprintf("set trust anchor signer=%s", secureSignerID)
+		confirmed := secureYes
+		if !confirmed {
+			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, secureTicket, action)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("privileged action cancelled")
+			}
+		}
+
+		ns := security.NewRepoNamespaceStore(docketHome)
+		repoID, err := ns.SetTrustAnchor(repo, secureSignerID)
+		if err != nil {
+			return err
+		}
+		if err := mgr.RecordPrivilegedAction(repo, secureTicket, action); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Trust anchor set for repo %s (signer=%s)\n", repoID, secureSignerID)
+		return nil
+	},
+}
+
 func init() {
 	secureUnlockCmd.Flags().StringVar(&securePassword, "password", "", "keystore password")
 	secureUnlockCmd.Flags().DurationVar(&secureTTL, "ttl", 10*time.Minute, "secure-mode TTL before automatic expiry")
@@ -111,9 +153,14 @@ func init() {
 	secureApproveCmd.Flags().StringVar(&secureAction, "action", "", "human-readable action description")
 	secureApproveCmd.Flags().BoolVar(&secureYes, "yes", false, "skip interactive confirmation prompt")
 
+	secureAnchorSetCmd.Flags().StringVar(&secureTicket, "ticket", "", "ticket ID associated with this privileged action")
+	secureAnchorSetCmd.Flags().StringVar(&secureSignerID, "signer-id", "", "trusted signer ID to anchor for this repo")
+	secureAnchorSetCmd.Flags().BoolVar(&secureYes, "yes", false, "skip interactive confirmation prompt")
+
 	secureCmd.AddCommand(secureUnlockCmd)
 	secureCmd.AddCommand(secureLockCmd)
 	secureCmd.AddCommand(secureStatusCmd)
 	secureCmd.AddCommand(secureApproveCmd)
+	secureCmd.AddCommand(secureAnchorSetCmd)
 	rootCmd.AddCommand(secureCmd)
 }
