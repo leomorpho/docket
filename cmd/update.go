@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/claim"
+	docketgit "github.com/leomorpho/docket/internal/git"
+	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/vcs"
@@ -103,6 +106,11 @@ var updateCmd = &cobra.Command{
 				}
 			}
 			newState := ticket.State(nextState)
+			if newState == "in-review" || newState == "done" {
+				if err := enforceManagedRunCommitLinkage(t.ID, newState); err != nil {
+					return err
+				}
+			}
 			if newState == "done" || newState == "archived" {
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
 					return err
@@ -403,4 +411,33 @@ func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id
 		}
 	}
 	return out, nil
+}
+
+func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error {
+	ns := security.NewRepoNamespaceStore(docketHome)
+	run, ok, err := ns.GetRunManifest(repo, ticketID)
+	if err != nil {
+		return fmt.Errorf("reading run manifest for %s: %w", ticketID, err)
+	}
+	if !ok {
+		return nil
+	}
+	if err := ns.VerifyRunContext(repo, ticketID, "", "", "", ""); err != nil {
+		if errors.Is(err, security.ErrRunManifestMissing) {
+			return nil
+		}
+		return fmt.Errorf("run manifest validation failed for %s: %w", ticketID, err)
+	}
+	ref := strings.TrimSpace(run.Branch)
+	if ref == "" {
+		ref = "HEAD"
+	}
+	hasLinkedCommit, err := docketgit.HasTicketTrailerSince(repo, ref, ticketID, run.StartedAt)
+	if err != nil {
+		return fmt.Errorf("checking commit linkage for %s: %w", ticketID, err)
+	}
+	if !hasLinkedCommit {
+		return fmt.Errorf("managed run %s cannot advance to %s: no commit on %s references Ticket: %s", ticketID, target, ref, ticketID)
+	}
+	return nil
 }

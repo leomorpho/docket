@@ -335,6 +335,71 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	}
 }
 
+func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
+
+	cfg := ticket.DefaultConfig()
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-198",
+		Seq:         198,
+		Title:       "Managed run linkage",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Handoff:     "handoff",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	ns := security.NewRepoNamespaceStore(tmpHome)
+	if err := ns.RecordRunStart(tmpDir, "TKT-198", "agent:test", tmpDir, "HEAD", "hash-198"); err != nil {
+		t.Fatalf("RecordRunStart failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "in-review"})
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no commit on HEAD references Ticket: TKT-198") {
+		t.Fatalf("expected commit-linkage rejection, got: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "work.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("write file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "feat: managed run linkage\n\nTicket: TKT-198")
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "in-review"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected in-review transition after linked commit, got: %v", err)
+	}
+}
+
 func TestUpdateCmd_RejectsEmptyTitle(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

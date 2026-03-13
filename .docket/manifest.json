@@ -1025,7 +1025,7 @@
     },
     "TKT-198": {
       "title": "Enforce commit-to-ticket linkage for Docket-managed runs before review or QA",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-176"
     },
