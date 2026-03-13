@@ -23,3 +23,23 @@ Each privileged command requires:
 3. Explicit confirmation (interactive prompt or `--yes`).
 
 If secure mode is inactive, privileged commands fail with `secure mode is inactive`.
+
+## Hook Events
+
+Docket now exposes internal lifecycle hook points with two modes:
+
+- `advisory`: emits warnings/messages but does not block.
+- `enforcement`: blocks lifecycle progression when validation fails.
+
+Current core hook events:
+
+- `run.start`
+- `ticket.review`
+- `ticket.qa`
+- `ticket.privileged`
+
+Current core enforcement hooks:
+
+- Dedicated worktree enforcement for managed runs (`run.start`, `ticket.review`).
+- Commit-linkage enforcement for managed review transitions (`ticket.review`).
+- Privileged authorization enforcement (`ticket.privileged`).

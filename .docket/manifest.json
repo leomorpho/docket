@@ -1031,7 +1031,7 @@
     },
     "TKT-199": {
       "title": "Add Docket-native enforcement hooks for worktree review QA and privileged gates",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-176"
     },

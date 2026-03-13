@@ -376,7 +376,11 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	}
 
 	ns := security.NewRepoNamespaceStore(tmpHome)
-	if err := ns.RecordRunStart(tmpDir, "TKT-198", "agent:test", tmpDir, "HEAD", "hash-198"); err != nil {
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-198")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree path failed: %v", err)
+	}
+	if err := ns.RecordRunStart(tmpDir, "TKT-198", "agent:test", worktreePath, "HEAD", "hash-198"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
 

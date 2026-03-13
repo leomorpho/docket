@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -74,6 +76,23 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		}
 		if worktreePath == "" {
 			worktreePath = repo
+		}
+		hookManager := hooks.NewManager()
+		hooks.RegisterCoreHooks(hookManager)
+		advisory, hookErr := hookManager.Run(hooks.EventRunStart, hooks.Context{
+			Repo:         repo,
+			TicketID:     t.ID,
+			Actor:        actor,
+			ManagedRun:   strings.HasPrefix(actor, "agent:"),
+			WorktreePath: worktreePath,
+			Branch:       "docket/" + t.ID,
+			TargetState:  "in-progress",
+		})
+		for _, msg := range advisory {
+			fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
+		}
+		if hookErr != nil {
+			return fmt.Errorf("start hook failed: %w", hookErr)
 		}
 		if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
 			return fmt.Errorf("recording run manifest: %w", err)

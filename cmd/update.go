@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/claim"
-	docketgit "github.com/leomorpho/docket/internal/git"
+	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -113,6 +113,9 @@ var updateCmd = &cobra.Command{
 			}
 			if newState == "done" || newState == "archived" {
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
+					return err
+				}
+				if err := runPrivilegedHooks(cmd, t.ID, string(newState)); err != nil {
 					return err
 				}
 			}
@@ -428,16 +431,41 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error 
 		}
 		return fmt.Errorf("run manifest validation failed for %s: %w", ticketID, err)
 	}
-	ref := strings.TrimSpace(run.Branch)
-	if ref == "" {
-		ref = "HEAD"
+
+	manager := hooks.NewManager()
+	hooks.RegisterCoreHooks(manager)
+	advisory, hookErr := manager.Run(hooks.EventReviewGate, hooks.Context{
+		Repo:         repo,
+		TicketID:     ticketID,
+		ManagedRun:   true,
+		TargetState:  string(target),
+		WorktreePath: run.WorktreePath,
+		Branch:       run.Branch,
+		RunStartedAt: run.StartedAt,
+	})
+	if hookErr != nil {
+		return fmt.Errorf("managed run %s cannot advance to %s: %w", ticketID, target, hookErr)
 	}
-	hasLinkedCommit, err := docketgit.HasTicketTrailerSince(repo, ref, ticketID, run.StartedAt)
+	for _, msg := range advisory {
+		fmt.Printf("hook advisory: %s\n", msg)
+	}
+	return nil
+}
+
+func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string) error {
+	manager := hooks.NewManager()
+	hooks.RegisterCoreHooks(manager)
+	advisory, err := manager.Run(hooks.EventPrivileged, hooks.Context{
+		Repo:                 repo,
+		TicketID:             ticketID,
+		TargetState:          targetState,
+		PrivilegedAuthorized: true,
+	})
+	for _, msg := range advisory {
+		fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
+	}
 	if err != nil {
-		return fmt.Errorf("checking commit linkage for %s: %w", ticketID, err)
-	}
-	if !hasLinkedCommit {
-		return fmt.Errorf("managed run %s cannot advance to %s: no commit on %s references Ticket: %s", ticketID, target, ref, ticketID)
+		return fmt.Errorf("privileged hook failed: %w", err)
 	}
 	return nil
 }
