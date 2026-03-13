@@ -959,7 +959,7 @@
     },
     "TKT-187": {
       "title": "Add reserved workflow semantics for review verification and terminal states",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-174"
     },

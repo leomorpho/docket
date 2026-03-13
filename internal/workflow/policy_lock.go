@@ -44,6 +44,18 @@ type WorkflowLock struct {
 	Policy        json.RawMessage   `json:"policy"`
 }
 
+type workflowProposal struct {
+	States    map[string][]string `json:"states"`
+	Semantics *proposalSemantics  `json:"semantics,omitempty"`
+}
+
+type proposalSemantics struct {
+	Review           []string `json:"review,omitempty"`
+	Verification     []string `json:"verification,omitempty"`
+	Closure          []string `json:"closure,omitempty"`
+	HumanOnlyClosure bool     `json:"human_only_closure"`
+}
+
 type WorkflowSigner interface {
 	DevicePublicKey() (ed25519.PublicKey, error)
 	SignDevice(message []byte) ([]byte, error)
@@ -67,6 +79,9 @@ func GenerateWorkflowLock(repoRoot, proposalPath, signerID string, signer Workfl
 	var proposalPayload json.RawMessage
 	if err := json.Unmarshal(proposalBytes, &proposalPayload); err != nil {
 		return WorkflowLock{}, fmt.Errorf("%w: invalid proposal JSON", ErrWorkflowLockMalformed)
+	}
+	if err := validateProposalSemantics(proposalPayload); err != nil {
+		return WorkflowLock{}, err
 	}
 	canonicalProposal, err := canonicalJSON(proposalPayload)
 	if err != nil {
@@ -153,6 +168,9 @@ func ValidateWorkflowLock(repoRoot string, lock WorkflowLock) error {
 	if err := json.Unmarshal(proposalBytes, &proposalPayload); err != nil {
 		return fmt.Errorf("%w: invalid proposal JSON", ErrWorkflowLockMalformed)
 	}
+	if err := validateProposalSemantics(proposalPayload); err != nil {
+		return err
+	}
 	canonicalProposal, err := canonicalJSON(proposalPayload)
 	if err != nil {
 		return err
@@ -230,4 +248,64 @@ func canonicalJSON(v any) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(out)
+}
+
+func validateProposalSemantics(payload json.RawMessage) error {
+	var proposal workflowProposal
+	if err := json.Unmarshal(payload, &proposal); err != nil {
+		return fmt.Errorf("%w: invalid proposal structure", ErrWorkflowLockMalformed)
+	}
+	if len(proposal.States) == 0 {
+		return fmt.Errorf("%w: states are required", ErrWorkflowLockMalformed)
+	}
+	if proposal.Semantics == nil {
+		return nil
+	}
+
+	sem := proposal.Semantics
+	if !sem.HumanOnlyClosure {
+		return fmt.Errorf("%w: semantics.human_only_closure must be true", ErrWorkflowLockMalformed)
+	}
+	if len(sem.Closure) == 0 {
+		return fmt.Errorf("%w: semantics.closure must declare at least one closure state", ErrWorkflowLockMalformed)
+	}
+	if len(sem.Review) == 0 && len(sem.Verification) == 0 {
+		return fmt.Errorf("%w: semantics must declare review or verification states", ErrWorkflowLockMalformed)
+	}
+
+	for _, state := range append(append([]string{}, sem.Review...), append(sem.Verification, sem.Closure...)...) {
+		if _, ok := proposal.States[state]; !ok {
+			return fmt.Errorf("%w: semantic state %q is not declared in states", ErrWorkflowLockMalformed, state)
+		}
+	}
+
+	incoming := map[string][]string{}
+	for from, next := range proposal.States {
+		for _, to := range next {
+			incoming[to] = append(incoming[to], from)
+		}
+	}
+	allowedClosurePredecessor := map[string]bool{}
+	for _, s := range sem.Review {
+		allowedClosurePredecessor[s] = true
+	}
+	for _, s := range sem.Verification {
+		allowedClosurePredecessor[s] = true
+	}
+	for _, s := range sem.Closure {
+		allowedClosurePredecessor[s] = true
+	}
+
+	for _, closureState := range sem.Closure {
+		preds := incoming[closureState]
+		if len(preds) == 0 {
+			return fmt.Errorf("%w: closure state %q has no incoming transitions", ErrWorkflowLockMalformed, closureState)
+		}
+		for _, pred := range preds {
+			if !allowedClosurePredecessor[pred] {
+				return fmt.Errorf("%w: closure state %q is reachable from non-review/non-verification state %q", ErrWorkflowLockMalformed, closureState, pred)
+			}
+		}
+	}
+	return nil
 }

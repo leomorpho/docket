@@ -112,3 +112,66 @@ func TestValidateWorkflowLockRejectsInvalidSignature(t *testing.T) {
 		t.Fatalf("expected signature validation error, got: %v", err)
 	}
 }
+
+func TestWorkflowLockSemanticsSupportsCustomVerificationState(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	proposalPath := filepath.Join(repo, DefaultWorkflowPolicy)
+	proposal := `{
+		"states":{
+			"todo":["doing"],
+			"doing":["ready-for-qa"],
+			"ready-for-qa":["closed"],
+			"closed":[]
+		},
+		"semantics":{
+			"review":["ready-for-qa"],
+			"verification":["ready-for-qa"],
+			"closure":["closed"],
+			"human_only_closure":true
+		}
+	}`
+	if err := os.WriteFile(proposalPath, []byte(proposal), 0o644); err != nil {
+		t.Fatalf("write proposal failed: %v", err)
+	}
+	signer := newTestSigner(t)
+	lock, err := GenerateWorkflowLock(repo, DefaultWorkflowPolicy, "signer-local", signer)
+	if err != nil {
+		t.Fatalf("generate lock failed: %v", err)
+	}
+	if err := ValidateWorkflowLock(repo, lock); err != nil {
+		t.Fatalf("validate lock failed: %v", err)
+	}
+}
+
+func TestWorkflowLockSemanticsRejectsInvariantViolations(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	proposalPath := filepath.Join(repo, DefaultWorkflowPolicy)
+	proposal := `{
+		"states":{
+			"todo":["doing"],
+			"doing":["closed"],
+			"ready-for-qa":["closed"],
+			"closed":[]
+		},
+		"semantics":{
+			"review":["ready-for-qa"],
+			"verification":["ready-for-qa"],
+			"closure":["closed"],
+			"human_only_closure":false
+		}
+	}`
+	if err := os.WriteFile(proposalPath, []byte(proposal), 0o644); err != nil {
+		t.Fatalf("write proposal failed: %v", err)
+	}
+	signer := newTestSigner(t)
+	_, err := GenerateWorkflowLock(repo, DefaultWorkflowPolicy, "signer-local", signer)
+	if !errors.Is(err, ErrWorkflowLockMalformed) {
+		t.Fatalf("expected malformed lock error for semantic invariant violation, got: %v", err)
+	}
+}
