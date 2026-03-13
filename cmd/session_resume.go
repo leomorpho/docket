@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/security"
 	"github.com/spf13/cobra"
 )
 
@@ -42,6 +44,22 @@ var sessionResumeCmd = &cobra.Command{
 			rel, relErr := filepath.Rel(absWT, absCWD)
 			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 				return fmt.Errorf("agent-managed resume must run inside bound worktree: %s", absWT)
+			}
+
+			ns := security.NewRepoNamespaceStore(docketHome)
+			activeWorkflowHash, active, err := ns.GetActiveWorkflowHash(repo)
+			if err != nil {
+				return fmt.Errorf("checking active workflow lock: %w", err)
+			}
+			expectedWorkflow := ""
+			if active {
+				expectedWorkflow = activeWorkflowHash
+			}
+			if err := ns.VerifyRunContext(repo, id, actor, cl.Worktree, "docket/"+id, expectedWorkflow); err != nil {
+				if errors.Is(err, security.ErrRunManifestMissing) {
+					return fmt.Errorf("agent-managed resume requires run manifest for %s", id)
+				}
+				return err
 			}
 		}
 

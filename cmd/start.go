@@ -68,11 +68,14 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 			actor = "agent:" + agentID
 		}
 
-		t, _, err = wf.StartTask(ctx, t.ID, actor, cfg)
+		t, worktreePath, err := wf.StartTask(ctx, t.ID, actor, cfg)
 		if err != nil {
 			return err
 		}
-		if err := ns.RecordRunStart(repo, t.ID, activeWorkflowHash); err != nil {
+		if worktreePath == "" {
+			worktreePath = repo
+		}
+		if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
 			return fmt.Errorf("recording run manifest: %w", err)
 		}
 

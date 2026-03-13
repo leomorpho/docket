@@ -3,10 +3,12 @@ package security
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,9 +34,20 @@ type workflowActivationFile struct {
 type RunManifest struct {
 	RepoID       string `json:"repo_id"`
 	TicketID     string `json:"ticket_id"`
+	Actor        string `json:"actor"`
+	ActorType    string `json:"actor_type"`
+	WorktreePath string `json:"worktree_path"`
+	Branch       string `json:"branch"`
 	WorkflowHash string `json:"workflow_hash"`
 	StartedAt    string `json:"started_at"`
 }
+
+var (
+	ErrRunManifestMissing = errors.New("run manifest missing")
+	ErrRunManifestStale   = errors.New("run manifest stale")
+	ErrRunContextMismatch = errors.New("run context mismatch")
+	DefaultRunManifestTTL = 24 * time.Hour
+)
 
 type RepoNamespaceStore struct {
 	docketHome string
@@ -153,9 +166,29 @@ func (s *RepoNamespaceStore) GetActiveWorkflowHash(repoRoot string) (string, boo
 	return rec.WorkflowHash, true, nil
 }
 
-func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, workflowHash string) error {
+func actorType(actor string) string {
+	switch {
+	case strings.HasPrefix(actor, "agent:"):
+		return "agent"
+	case strings.HasPrefix(actor, "human:"):
+		return "human"
+	default:
+		return "unknown"
+	}
+}
+
+func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {
 	if ticketID == "" {
 		return fmt.Errorf("ticket ID is required")
+	}
+	if actor == "" {
+		return fmt.Errorf("actor is required")
+	}
+	if worktreePath == "" {
+		return fmt.Errorf("worktree path is required")
+	}
+	if branch == "" {
+		return fmt.Errorf("branch is required")
 	}
 	if workflowHash == "" {
 		return fmt.Errorf("workflow hash is required")
@@ -167,6 +200,10 @@ func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, workflowHash str
 	rec := RunManifest{
 		RepoID:       repoID,
 		TicketID:     ticketID,
+		Actor:        actor,
+		ActorType:    actorType(actor),
+		WorktreePath: worktreePath,
+		Branch:       branch,
 		WorkflowHash: workflowHash,
 		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
 	}
@@ -199,6 +236,42 @@ func (s *RepoNamespaceStore) GetRunManifest(repoRoot, ticketID string) (RunManif
 		return RunManifest{}, false, err
 	}
 	return rec, true, nil
+}
+
+func (s *RepoNamespaceStore) VerifyRunContext(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {
+	rec, ok, err := s.GetRunManifest(repoRoot, ticketID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrRunManifestMissing, ticketID)
+	}
+
+	startedAt, err := time.Parse(time.RFC3339Nano, rec.StartedAt)
+	if err != nil {
+		return fmt.Errorf("%w: invalid started_at for %s", ErrRunManifestStale, ticketID)
+	}
+	if time.Since(startedAt) > DefaultRunManifestTTL {
+		return fmt.Errorf("%w: %s started at %s", ErrRunManifestStale, ticketID, rec.StartedAt)
+	}
+
+	if actor != "" && rec.Actor != actor {
+		return fmt.Errorf("%w: actor mismatch (expected %s, got %s)", ErrRunContextMismatch, rec.Actor, actor)
+	}
+	if worktreePath != "" {
+		expAbs, _ := filepath.Abs(rec.WorktreePath)
+		gotAbs, _ := filepath.Abs(worktreePath)
+		if expAbs != gotAbs {
+			return fmt.Errorf("%w: worktree mismatch (expected %s, got %s)", ErrRunContextMismatch, rec.WorktreePath, worktreePath)
+		}
+	}
+	if branch != "" && rec.Branch != branch {
+		return fmt.Errorf("%w: branch mismatch (expected %s, got %s)", ErrRunContextMismatch, rec.Branch, branch)
+	}
+	if workflowHash != "" && rec.WorkflowHash != workflowHash {
+		return fmt.Errorf("%w: workflow hash mismatch (expected %s, got %s)", ErrRunContextMismatch, rec.WorkflowHash, workflowHash)
+	}
+	return nil
 }
 
 func HashFile(path string) (string, error) {

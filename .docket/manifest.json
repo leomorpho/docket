@@ -1019,7 +1019,7 @@
     },
     "TKT-197": {
       "title": "Add run manifests that bind ticket actor worktree and workflow hash",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-176"
     },
