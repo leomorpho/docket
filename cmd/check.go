@@ -90,7 +90,7 @@ func runDoctor(ctx context.Context, s *local.Store) ([]ck.Finding, error) {
 
 	for id, errs := range allErrs {
 		for _, e := range errs {
-			sev := ck.SeverityWarning
+			sev := ck.SeverityWarn
 			if e.Field == "signature" || e.Field == "format" {
 				sev = ck.SeverityError
 			}
