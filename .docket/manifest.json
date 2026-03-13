@@ -857,10 +857,10 @@
       "parent": "TKT-162"
     },
     "TKT-170": {
-      "title": "Improve Ticket Quality: Add creation-time hints and templates",
+      "title": "Add authoring-time guidance and templates that help tickets satisfy the Ready Contract",
       "state": "backlog",
       "priority": 10,
-      "parent": "TKT-162"
+      "parent": "TKT-177"
     },
     "TKT-171": {
       "title": "Implement docket start: Autonomous Agentic Workflow",
