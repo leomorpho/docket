@@ -947,7 +947,7 @@
     },
     "TKT-185": {
       "title": "Split docket into agent-safe and secure/admin capability surfaces",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-174"
     },

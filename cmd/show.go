@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -221,10 +222,30 @@ func ticketRelationsLine(id string) string {
 
 func aggregateDescendantAC(ctx context.Context, s *local.Store, id string) acAggregate {
 	idx, err := s.BuildRelationshipIndex(ctx)
-	if err != nil {
-		return acAggregate{}
+	var desc []*ticket.Ticket
+	if err == nil {
+		desc = idx.Descendants(id)
+	} else {
+		// Fallback path: derive descendants from full ticket list when index access is unavailable.
+		all, listErr := s.ListTickets(ctx, store.Filter{IncludeArchived: true})
+		if listErr != nil {
+			return acAggregate{}
+		}
+		children := map[string][]*ticket.Ticket{}
+		for _, t := range all {
+			if t.Parent != "" {
+				children[t.Parent] = append(children[t.Parent], t)
+			}
+		}
+		stack := append([]*ticket.Ticket{}, children[id]...)
+		for len(stack) > 0 {
+			n := len(stack) - 1
+			cur := stack[n]
+			stack = stack[:n]
+			desc = append(desc, cur)
+			stack = append(stack, children[cur.ID]...)
+		}
 	}
-	desc := idx.Descendants(id)
 	if len(desc) == 0 {
 		return acAggregate{}
 	}

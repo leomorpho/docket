@@ -14,6 +14,8 @@ var worktreeCmd = &cobra.Command{
 	Short: "Manage ticket worktrees and scope locks",
 }
 var worktreeForce bool
+var worktreeStopTicket string
+var worktreeStopYes bool
 
 var worktreeStartCmd = &cobra.Command{
 	Use:   "start <TKT-NNN> <path>",
@@ -58,6 +60,9 @@ var worktreeStopCmd = &cobra.Command{
 	Short: "Release lock for a ticket worktree",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requirePrivilegedSurface(cmd, worktreeStopTicket, "stop worktree "+args[0], worktreeStopYes); err != nil {
+			return err
+		}
 		if err := releaseLockForTicket(repo, args[0]); err != nil {
 			return err
 		}
@@ -68,6 +73,8 @@ var worktreeStopCmd = &cobra.Command{
 
 func init() {
 	worktreeStartCmd.Flags().BoolVar(&worktreeForce, "force", false, "allow worktree start even when relation checks warn")
+	worktreeStopCmd.Flags().StringVar(&worktreeStopTicket, "ticket", "", "ticket ID authorizing this privileged worktree stop")
+	worktreeStopCmd.Flags().BoolVar(&worktreeStopYes, "yes", false, "skip interactive confirmation prompt")
 	worktreeCmd.AddCommand(worktreeStartCmd)
 	worktreeCmd.AddCommand(worktreeStopCmd)
 	rootCmd.AddCommand(worktreeCmd)

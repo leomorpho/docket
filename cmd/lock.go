@@ -11,6 +11,11 @@ var lockCmd = &cobra.Command{
 	Short: "Inspect and manage ticket file locks",
 }
 
+var (
+	lockReleaseTicket string
+	lockReleaseYes    bool
+)
+
 var lockStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show active file claims by ticket",
@@ -38,6 +43,9 @@ var lockReleaseCmd = &cobra.Command{
 	Short: "Release lock for a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requirePrivilegedSurface(cmd, lockReleaseTicket, "release lock "+args[0], lockReleaseYes); err != nil {
+			return err
+		}
 		if err := releaseLockForTicket(repo, args[0]); err != nil {
 			return err
 		}
@@ -47,6 +55,8 @@ var lockReleaseCmd = &cobra.Command{
 }
 
 func init() {
+	lockReleaseCmd.Flags().StringVar(&lockReleaseTicket, "ticket", "", "ticket ID authorizing this privileged lock release")
+	lockReleaseCmd.Flags().BoolVar(&lockReleaseYes, "yes", false, "skip interactive confirmation prompt")
 	lockCmd.AddCommand(lockStatusCmd)
 	lockCmd.AddCommand(lockReleaseCmd)
 	rootCmd.AddCommand(lockCmd)
