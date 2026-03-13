@@ -745,7 +745,7 @@
     },
     "TKT-149": {
       "title": "Enhance pre-commit validation with 'Tutor' feedback",
-      "state": "todo",
+      "state": "done",
       "priority": 3,
       "parent": "TKT-173"
     },
