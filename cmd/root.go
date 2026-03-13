@@ -20,6 +20,9 @@ var rootCmd = &cobra.Command{
 	Short: "git-native ticket system for AI-assisted development",
 	Long:  `A git-native ticket system built for human + LLM agentic workflows.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := ensureDocketHome(); err != nil {
+			return err
+		}
 		prepareVersionNotice(cmd)
 
 		// Tamper detection is non-blocking but runs on command startup.

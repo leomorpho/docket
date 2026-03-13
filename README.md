@@ -35,6 +35,10 @@ backlog → todo → in-progress → [blocked*] → in-review → done → archi
 
 `blocked` is computed automatically from unresolved `blocked-by` dependencies.
 
+## DOCKET_HOME
+
+Docket keeps its secure metadata in a repository-isolated root defined by `DOCKET_HOME`. Set `DOCKET_HOME` to an absolute, writable directory (for example, `DOCKET_HOME=$HOME/.docket-home`) before running commands. The CLI fails immediately if the variable is unset or if the path cannot be used, forcing secure storage to be configured up front.
+
 ## Quick start
 
 ```bash

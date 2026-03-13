@@ -16,9 +16,16 @@ var (
 	installVSCode bool
 )
 
+const installLongDesc = `Install docket-managed git hook and CLAUDE.md instructions.
+
+Secure workflows rely on DOCKET_HOME to keep trusted artifacts outside the repository.
+Set DOCKET_HOME to an absolute folder you control (for example: DOCKET_HOME=/home/alice/.docket-home) before running this command.
+`
+
 var installCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install docket-managed git hook and CLAUDE.md instructions",
+	Long:  installLongDesc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if installSkill {
 			return installGeminiSkill(cmd)
@@ -59,6 +66,8 @@ var installCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Installed docket artifacts.\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  hook: %s\n", preCommitHookPath(repo))
 		fmt.Fprintf(cmd.OutOrStdout(), "  manifest: %s\n", installManifestPath(repo))
+		fmt.Fprintf(cmd.OutOrStdout(), "  secure storage (DOCKET_HOME): %s\n", docketHome)
+		fmt.Fprintf(cmd.OutOrStdout(), "    Set DOCKET_HOME to a different writable directory if you prefer (example: DOCKET_HOME=%s)\n", filepath.Join(os.TempDir(), "docket-home"))
 		return nil
 	},
 }
@@ -72,7 +81,7 @@ func init() {
 
 func installCursorRules(cmd *cobra.Command) error {
 	path := filepath.Join(repo, ".cursorrules")
-	
+
 	rules := `
 # Docket Rules for Cursor Agents
 
