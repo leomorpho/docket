@@ -28,16 +28,24 @@
 		onUpdateState,
 		onUpdateTitle,
 		onUpdateDescription,
-		onUpdateAC
+		onUpdateAC,
+		relations = [],
+		onSelect
 	} = $props<{
 		ticket: Ticket | null;
 		open: boolean;
 		stateOptions: StateOption[];
+		relations: Relation[];
 		onUpdateState: (ticketID: string, state: string) => Promise<MutationResult>;
 		onUpdateTitle: (ticketID: string, title: string) => Promise<MutationResult>;
 		onUpdateDescription: (ticketID: string, description: string) => Promise<MutationResult>;
 		onUpdateAC: (ticketID: string, acDesc: string, evidence: string) => Promise<MutationResult>;
+		onSelect?: (e: CustomEvent<{ id: string }>) => void;
 	}>();
+
+	import type { Relation } from '$lib/types';
+	import { createEventDispatcher } from 'svelte';
+	const dispatch = createEventDispatcher();
 
 	const html = $derived(ticket ? marked.parse(ticket.body, { gfm: true }) : '');
 
@@ -241,6 +249,46 @@
 					<article class="markdown max-w-none text-sm leading-relaxed text-slate-800">
 						{@html html}
 					</article>
+
+					<div class="mt-8 border-t border-slate-100 pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Relations</p>
+						<div class="grid gap-4 sm:grid-cols-2">
+							<div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+								<p class="mb-2 text-xs font-semibold text-slate-500">Blockers</p>
+								<div class="flex flex-wrap gap-2">
+									{#each relations.filter((r) => r.from === ticket.id && r.relation === 'blocked_by') as rel}
+										<Button
+											variant="outline"
+											size="sm"
+											class="h-7 px-2 font-mono text-xs"
+											onclick={() => onSelect?.(new CustomEvent('select', { detail: { id: rel.to } }))}
+										>
+											{rel.to}
+										</Button>
+									{:else}
+										<span class="text-xs text-slate-400 italic">None</span>
+									{/each}
+								</div>
+							</div>
+							<div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+								<p class="mb-2 text-xs font-semibold text-slate-500">Dependents</p>
+								<div class="flex flex-wrap gap-2">
+									{#each relations.filter((r) => r.to === ticket.id && r.relation === 'blocked_by') as rel}
+										<Button
+											variant="outline"
+											size="sm"
+											class="h-7 px-2 font-mono text-xs"
+											onclick={() => onSelect?.(new CustomEvent('select', { detail: { id: rel.from } }))}
+										>
+											{rel.from}
+										</Button>
+									{:else}
+										<span class="text-xs text-slate-400 italic">None</span>
+									{/each}
+								</div>
+							</div>
+						</div>
+					</div>
 				</ScrollArea>
 			</div>
 		{/if}

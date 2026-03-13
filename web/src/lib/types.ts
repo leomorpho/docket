@@ -19,6 +19,12 @@ export type Project = {
 	registeredAt: string;
 };
 
+export type Relation = {
+	from: string;
+	to: string;
+	relation: string;
+};
+
 export type AcceptanceCriterion = {
 	description: string;
 	done: boolean;

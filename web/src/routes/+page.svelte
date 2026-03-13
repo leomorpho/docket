@@ -328,9 +328,14 @@
 		ticket={selectedTicket}
 		bind:open={sheetOpen}
 		stateOptions={allStates}
+		relations={data.relations}
 		onUpdateState={updateState}
 		onUpdateTitle={updateTitle}
 		onUpdateDescription={updateDescription}
 		onUpdateAC={updateAC}
+		onSelect={(e) => {
+			const t = data.tickets.find((t) => t.id === e.detail.id);
+			if (t) onCardSelect(t);
+		}}
 	/>
 </main>

@@ -138,20 +138,21 @@ function parseTicketFile(content: string): Ticket | null {
 	};
 }
 
-export function readTickets(projectId?: string): Ticket[] {
-	const dir = path.join(docketRoot(projectId), '.docket', 'tickets');
-	if (!fs.existsSync(dir)) {
+export type Relation = {
+	from: string;
+	to: string;
+	relation: string;
+};
+
+export function readRelations(projectId?: string): Relation[] {
+	const p = path.join(docketRoot(projectId), '.docket', 'relations.json');
+	if (!fs.existsSync(p)) {
 		return [];
 	}
-	const out: Ticket[] = [];
-	for (const file of fs.readdirSync(dir)) {
-		if (!file.endsWith('.md')) continue;
-		const full = path.join(dir, file);
-		const stat = fs.statSync(full);
-		if (!stat.isFile()) continue;
-		const parsed = parseTicketFile(fs.readFileSync(full, 'utf8'));
-		if (parsed) out.push(parsed);
+	try {
+		const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+		return raw.relations ?? [];
+	} catch {
+		return [];
 	}
-	out.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
-	return out;
 }
