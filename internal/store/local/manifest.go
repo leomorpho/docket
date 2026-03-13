@@ -163,7 +163,12 @@ func (s *Store) DetectTamperingAll(ctx context.Context) ([]TamperChange, error) 
 		if !ok {
 			continue
 		}
-		out = append(out, diffManifestTicket(t.ID, entry, s.manifestEntryFromTicket(t))...)
+		// Load from file to get latest direct edits
+		latest, err := s.GetTicket(ctx, t.ID)
+		if err != nil || latest == nil {
+			continue
+		}
+		out = append(out, diffManifestTicket(t.ID, entry, s.manifestEntryFromTicket(latest))...)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].ID == out[j].ID {
@@ -206,14 +211,24 @@ func (s *Store) ReconcileTampering(ctx context.Context) ([]ReconcileResult, erro
 			continue
 		}
 
+		// Filter out signature errors for reconciliation purposes (TKT-147)
+		var nonSigErrs []store.ValidationError
+		for _, e := range schemaErrs {
+			if e.Field != "signature" {
+				nonSigErrs = append(nonSigErrs, e)
+			}
+		}
+
 		result := ReconcileResult{
 			ID:      id,
 			Changes: ticketChanges,
 			Errors:  schemaErrs,
 		}
 
-		if len(schemaErrs) == 0 {
+		if len(nonSigErrs) == 0 {
 			// Schema-valid: accept the direct edit by updating the manifest
+			// (The signature error will still be reported by ValidateFile,
+			// prompting the user to run 'docket fix' or use the CLI)
 			t, err := s.GetTicket(ctx, id)
 			if err == nil && t != nil {
 				entry := s.manifestEntryFromTicket(t)

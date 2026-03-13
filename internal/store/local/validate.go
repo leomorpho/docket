@@ -18,6 +18,20 @@ func wordCount(s string) int {
 
 // Validate checks whether a ticket is schema-valid for this backend.
 func (s *Store) Validate(ctx context.Context, id string) ([]store.ValidationError, error) {
+	if id == "" {
+		allErrs, _, err := s.ValidateAll(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var out []store.ValidationError
+		for tktID, errs := range allErrs {
+			for _, e := range errs {
+				e.Field = tktID + "." + e.Field
+				out = append(out, e)
+			}
+		}
+		return out, nil
+	}
 	errs, _, err := s.ValidateFile(id)
 	return errs, err
 }
@@ -164,6 +178,9 @@ func (s *Store) ValidateAll(ctx context.Context) (map[string][]store.ValidationE
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
 			id := strings.TrimSuffix(entry.Name(), ".md")
+			if id == "" {
+				continue
+			}
 			errs, warns, err := s.ValidateFile(id)
 			if err != nil {
 				return nil, nil, err

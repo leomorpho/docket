@@ -50,9 +50,11 @@ func TestValidateCmd_PrescriptiveForDirectEdit(t *testing.T) {
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
+	showWarns = false
+	strict = false
 	rootCmd.SetArgs([]string{"validate", "TKT-001", "--warn"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected schema-valid direct edit to be accepted, got: %v", err)
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("expected validation failure due to signature mismatch")
 	}
 	out := b.String()
 	if !strings.Contains(out, "accepted schema-valid direct edit") || !strings.Contains(out, "docket update TKT-001 --priority 2") {
@@ -97,8 +99,11 @@ func TestValidateCmd_RevertsInvalidDirectEdit(t *testing.T) {
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
+	showWarns = false
+	strict = false
 	rootCmd.SetArgs([]string{"validate", "TKT-001"})
 	if err := rootCmd.Execute(); err == nil {
+		t.Logf("Output: %s", b.String())
 		t.Fatal("expected validate to fail once and report rejected invalid direct edit")
 	}
 
@@ -138,8 +143,37 @@ func TestValidateCmd_StrictFailsOnWarnings(t *testing.T) {
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
+	showWarns = false
+	strict = false
 	rootCmd.SetArgs([]string{"validate", "TKT-001", "--strict"})
 	if err := rootCmd.Execute(); err == nil {
 		t.Fatal("expected strict mode to fail due warnings")
+	}
+}
+
+func TestValidateAll(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	desc := "Has twenty words or more in the description to pass the quality check easily and without any issues whatsoever."
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", CreatedBy: "me", CreatedAt: now, UpdatedAt: now, Description: desc, AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "todo", CreatedBy: "me", CreatedAt: now, UpdatedAt: now, Description: desc, AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	showWarns = false
+	strict = false
+	rootCmd.SetArgs([]string{"validate"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("validate all failed: %v", err)
+	}
+	if !strings.Contains(b.String(), "All tickets valid.") {
+		t.Errorf("expected clean output, got: %s", b.String())
 	}
 }

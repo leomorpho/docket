@@ -206,3 +206,54 @@ func TestValidateFile_HandoffSectionsConfigDriven(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Valid ticket
+	t1 := &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		Description: "This is a long description so it passes validation quality checks easily and without any issues.",
+		AC: []ticket.AcceptanceCriterion{{Description: "A"}},
+	}
+	s.CreateTicket(ctx, t1)
+
+	// 1. Validate specific ticket
+	errs, err := s.Validate(ctx, "TKT-001")
+	if err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+	if len(errs) > 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+
+	// 2. Validate all (alias for ValidateAll)
+	errs, err = s.Validate(ctx, "")
+	if err != nil {
+		t.Fatalf("Validate all failed: %v", err)
+	}
+}
+
+func TestValidateAll(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+
+	allErrs, allWarns, err := s.ValidateAll(ctx)
+	if err != nil {
+		t.Fatalf("ValidateAll failed: %v", err)
+	}
+	if len(allErrs) != 2 {
+		t.Errorf("expected errors for 2 tickets, got %d", len(allErrs))
+	}
+	if len(allWarns) != 2 {
+		t.Errorf("expected warnings for 2 tickets, got %d", len(allWarns))
+	}
+}

@@ -122,7 +122,7 @@ func isBinaryFile(path string) (bool, error) {
 }
 
 func isSkippedPath(rel string) bool {
-	prefixes := []string{".git/", ".docket/", "vendor/", "node_modules/"}
+	prefixes := []string{".git/", ".docket/", "vendor/", "node_modules/", ".svelte-kit/", "build/", "dist/"}
 	for _, p := range prefixes {
 		if len(rel) >= len(p) && rel[:len(p)] == p {
 			return true

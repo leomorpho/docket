@@ -64,3 +64,11 @@ func runGitCtx(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(out))
 	}
 }
+
+func TestBlameFileError(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, err := BlameFile(tmpDir, "missing.txt", 0, 0)
+	if err == nil {
+		t.Error("expected error for missing file")
+	}
+}

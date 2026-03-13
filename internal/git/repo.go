@@ -23,6 +23,15 @@ func GetGitCommonDir(repoRoot string) (string, error) {
 	return filepath.Abs(filepath.Join(repoRoot, rel))
 }
 
+// GetRepoRoot returns the absolute path to the root of the git repository.
+func GetRepoRoot(repoRoot string) (string, error) {
+	out, err := runGit(repoRoot, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("getting git repo root: %w", err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // IsWorktree returns true if the given directory is a git worktree.
 func IsWorktree(repoRoot string) (bool, error) {
 	out, err := runGit(repoRoot, "rev-parse", "--is-inside-work-tree")

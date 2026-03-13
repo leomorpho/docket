@@ -81,6 +81,11 @@ var checkCmd = &cobra.Command{
 	},
 }
 
+func resetCheckGlobals() {
+	checkFix = false
+	checkDoctor = false
+}
+
 func runDoctor(ctx context.Context, s *local.Store) ([]ck.Finding, error) {
 	var findings []ck.Finding
 	allErrs, _, err := s.ValidateAll(ctx)

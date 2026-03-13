@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leomorpho/docket/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -191,21 +192,31 @@ func resolveWebDir() (string, error) {
 		if hasWebPackage(env) {
 			return env, nil
 		}
-		return "", fmt.Errorf("DOCKET_UI_DIR=%q does not contain web/package.json", env)
+		return "", fmt.Errorf("DOCKET_UI_DIR=%q does not contain web/package.json (docket-ui)", env)
 	}
 
+	// 1. Try from the binary executable location (for installed binaries)
 	if exe, err := os.Executable(); err == nil {
 		if p := walkForWeb(filepath.Dir(exe)); p != "" {
 			return p, nil
 		}
 	}
+
+	// 2. Try from the Git root of the repo being run (if it's the docket repo)
+	if root, err := git.GetRepoRoot(repo); err == nil {
+		if p := walkForWeb(root); p != "" {
+			return p, nil
+		}
+	}
+
+	// 3. Fallback to walking up from current working directory
 	if cwd, err := os.Getwd(); err == nil {
 		if p := walkForWeb(cwd); p != "" {
 			return p, nil
 		}
 	}
 
-	return "", fmt.Errorf("web UI directory not found. Set DOCKET_UI_DIR to the web/ path")
+	return "", fmt.Errorf("web UI directory not found. Please set DOCKET_UI_DIR to the web/ path of the Docket source repo")
 }
 
 func walkForWeb(start string) string {
@@ -225,8 +236,18 @@ func walkForWeb(start string) string {
 }
 
 func hasWebPackage(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, "package.json"))
-	return err == nil && !info.IsDir()
+	path := filepath.Join(dir, "package.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var pkg struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false
+	}
+	return pkg.Name == "docket-ui"
 }
 
 func isInteractiveStdin() bool {
@@ -295,4 +316,3 @@ func init() {
 	uiCmd.Flags().BoolVar(&uiNoOpen, "no-open", false, "do not prompt to open the UI URL")
 	rootCmd.AddCommand(uiCmd)
 }
-

@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
+	_ "modernc.org/sqlite"
 )
 
 type Store struct {
@@ -39,11 +41,25 @@ func New(repoRoot string) *Store {
 	return s
 }
 
+func (s *Store) openDB() (*sql.DB, error) {
+	dbPath := s.IndexPath()
+	// Ensure the directory exists
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+		return nil, err
+	}
+	// Add busy timeout and WAL mode to handle concurrent access
+	dsn := fmt.Sprintf("file:%s?_busy_timeout=5000&_journal_mode=WAL", dbPath)
+	return sql.Open("sqlite", dsn)
+}
+
 func (s *Store) ticketPath(id string) string {
 	return filepath.Join(s.RepoRoot, ".docket", "tickets", id+".md")
 }
 
 func (s *Store) CreateTicket(ctx context.Context, t *ticket.Ticket) error {
+	if t.ID == "" {
+		return fmt.Errorf("ticket ID is required")
+	}
 	path := s.ticketPath(t.ID)
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("ticket %s already exists", t.ID)

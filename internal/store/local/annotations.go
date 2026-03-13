@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 type Annotation struct {
@@ -16,12 +14,7 @@ type Annotation struct {
 }
 
 func (s *Store) UpsertAnnotations(ctx context.Context, annotations []Annotation) error {
-	dbPath := s.IndexPath()
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return err
-	}
-
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
@@ -57,10 +50,7 @@ func (s *Store) UpsertAnnotations(ctx context.Context, annotations []Annotation)
 }
 
 func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]Annotation, error) {
-	if err := os.MkdirAll(filepath.Dir(s.IndexPath()), 0755); err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite", s.IndexPath())
+	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
@@ -88,10 +78,7 @@ func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]
 }
 
 func (s *Store) GetAnnotationsByFile(ctx context.Context, filePath string) ([]Annotation, error) {
-	if err := os.MkdirAll(filepath.Dir(s.IndexPath()), 0755); err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite", s.IndexPath())
+	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}

@@ -30,6 +30,9 @@ func TestCheckCmd_R001AndR006AndFix(t *testing.T) {
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
+	
+	checkDoctor = false
+	checkFix = false
 	rootCmd.SetArgs([]string{"check", "TKT-001"})
 	err := rootCmd.Execute()
 	if !errors.Is(err, errCheckFindings) {
@@ -43,6 +46,8 @@ func TestCheckCmd_R001AndR006AndFix(t *testing.T) {
 	}
 
 	b.Reset()
+	checkDoctor = false
+	checkFix = false
 	rootCmd.SetArgs([]string{"check", "TKT-001", "--fix"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("check --fix failed: %v", err)
@@ -58,20 +63,38 @@ func TestCheckCmd_R001AndR006AndFix(t *testing.T) {
 
 func TestCheckCmd_JSONAndAllClean(t *testing.T) {
 	tmpDir := t.TempDir()
+	oldRepo := repo
 	repo = tmpDir
+	defer func() { repo = oldRepo }()
 	format = "json"
 
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-010", Seq: 10, Title: "Clean", State: ticket.State("todo"), Priority: 2, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	
+	longDesc := "This is a long description that has more than twenty words so that it passes the validation check without any warnings."
+	
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-010", Seq: 10, Title: "Clean", State: ticket.State("todo"), Priority: 2, 
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", 
+		Description: longDesc, 
+		AC: []ticket.AcceptanceCriterion{{Description: "Criteria 1"}, {Description: "Criteria 2"}},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-011", Seq: 11, Title: "Done", State: ticket.State("done"), Priority: 2, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-011", Seq: 11, Title: "Done", State: ticket.State("done"), Priority: 2, 
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", 
+		Description: longDesc, 
+		AC: []ticket.AcceptanceCriterion{{Description: "Criteria 1"}, {Description: "Criteria 2"}},
+		Handoff: "## Current state\nDone\n## Decisions made\nNone\n## Files touched\nNone\n## Remaining work\nNone\n## AC status\nDone",
+	}); err != nil {
 		t.Fatal(err)
 	}
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
+	checkDoctor = false
+	checkFix = false
 	rootCmd.SetArgs([]string{"check", "--format", "json"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("check json failed: %v", err)
@@ -84,12 +107,15 @@ func TestCheckCmd_JSONAndAllClean(t *testing.T) {
 	if payload["checked"] == nil {
 		t.Fatalf("missing checked field")
 	}
+	// default check should only include TKT-010
 	if payload["checked"].(float64) != 1 {
 		t.Fatalf("expected default check scope to exclude done tickets, checked=%v", payload["checked"])
 	}
 
 	format = "human"
 	b.Reset()
+	checkDoctor = false
+	checkFix = false
 	rootCmd.SetArgs([]string{"check"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("check clean failed: %v", err)

@@ -805,6 +805,65 @@
       "title": "Fixed Title",
       "state": "backlog",
       "priority": 11
+    },
+    "TKT-162": {
+      "title": "[Epic] Refactor Architecture for Agent-First Workflow",
+      "state": "backlog",
+      "priority": 10
+    },
+    "TKT-163": {
+      "title": "Extract WorkflowManager Domain Service",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-164": {
+      "title": "Abstract Git Operations into vcs.Provider Interface",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-165": {
+      "title": "Abstract Claims into claim.Manager Interface",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-166": {
+      "title": "Refactor MCP Handlers for Dependency Injection",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-167": {
+      "title": "Implement Command Pattern for Ticket Mutations",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-168": {
+      "title": "Dependency Injection Wiring in CLI",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-169": {
+      "title": "Improve DX: Add shorthand command aliases (ls, st, bd)",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-170": {
+      "title": "Improve Ticket Quality: Add creation-time hints and templates",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
+    },
+    "TKT-171": {
+      "title": "Implement docket start: Autonomous Agentic Workflow",
+      "state": "backlog",
+      "priority": 10,
+      "parent": "TKT-162"
     }
   }
 }

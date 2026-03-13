@@ -2,7 +2,6 @@ package local
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
-	_ "modernc.org/sqlite"
 )
 
 func (s *Store) IndexPath() string {
@@ -49,12 +47,7 @@ func (s *Store) ensureIndex(ctx context.Context) error {
 }
 
 func (s *Store) SyncIndex(ctx context.Context) error {
-	dbPath := s.IndexPath()
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return err
-	}
-
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
@@ -140,6 +133,9 @@ func (s *Store) SyncIndex(ctx context.Context) error {
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".md" {
 			id := entry.Name()[:len(entry.Name())-3]
+			if id == "" {
+				continue
+			}
 			t, err := s.GetTicket(ctx, id)
 			if err != nil {
 				continue
@@ -183,7 +179,7 @@ func (s *Store) queryTickets(ctx context.Context, f store.Filter) ([]*ticket.Tic
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", s.IndexPath())
+	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}

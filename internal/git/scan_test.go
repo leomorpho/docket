@@ -18,6 +18,9 @@ func TestScanAnnotations_FindsAndSkips(t *testing.T) {
 	mustWrite(t, filepath.Join(repo, ".docket", "x.go"), "// [TKT-999] ignored\n")
 	mustWrite(t, filepath.Join(repo, "vendor", "x.go"), "// [TKT-999] ignored\n")
 	mustWrite(t, filepath.Join(repo, "node_modules", "x.js"), "// [TKT-999] ignored\n")
+	mustWrite(t, filepath.Join(repo, ".svelte-kit", "x.js"), "// [TKT-999] ignored\n")
+	mustWrite(t, filepath.Join(repo, "build", "x.js"), "// [TKT-999] ignored\n")
+	mustWrite(t, filepath.Join(repo, "dist", "x.js"), "// [TKT-999] ignored\n")
 
 	anns, err := ScanAnnotations(repo)
 	if err != nil {

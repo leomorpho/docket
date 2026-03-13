@@ -35,6 +35,11 @@ var validateCmd = &cobra.Command{
 	},
 }
 
+func resetValidateGlobals() {
+	showWarns = false
+	strict = false
+}
+
 func runValidateOne(cmd *cobra.Command, s *local.Store, id string, reconcileByID map[string]local.ReconcileResult) error {
 	errs, warns, err := s.ValidateFile(id)
 	if err != nil {

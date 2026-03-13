@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -189,5 +191,182 @@ func TestActivityBumpsUpdatedAt(t *testing.T) {
 	}
 	if !afterCommit.UpdatedAt.After(beforeCommit) {
 		t.Fatalf("expected updated_at bump after link commit: %s <= %s", afterCommit.UpdatedAt, beforeCommit)
+	}
+}
+
+func TestMatches(t *testing.T) {
+	tkt := &ticket.Ticket{
+		ID:       "TKT-001",
+		State:    "todo",
+		Labels:   []string{"bug", "ui"},
+		Priority: 2,
+	}
+
+	s := &Store{} // Store used for calling matches (receiver ignored currently)
+
+	tests := []struct {
+		f        store.Filter
+		expected bool
+	}{
+		{store.Filter{}, true},
+		{store.Filter{States: []ticket.State{"todo"}}, true},
+		{store.Filter{States: []ticket.State{"done"}}, false},
+		{store.Filter{Labels: []string{"bug"}}, true},
+		{store.Filter{Labels: []string{"feature"}}, false},
+		{store.Filter{MaxPriority: 3}, true},
+		{store.Filter{MaxPriority: 1}, false},
+	}
+
+	for i, tt := range tests {
+		if got := s.matches(tkt, tt.f); got != tt.expected {
+			t.Errorf("test %d failed: matches=%v, want %v", i, got, tt.expected)
+		}
+	}
+}
+
+func TestNextID(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+
+	// Must have config to use NextID
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	id1, seq1, err := s.NextID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id1 != "TKT-001" || seq1 != 1 {
+		t.Errorf("expected TKT-001/1, got %s/%d", id1, seq1)
+	}
+
+	id2, seq2, _ := s.NextID(ctx)
+	if id2 != "TKT-002" || seq2 != 2 {
+		t.Errorf("expected TKT-002/2, got %s/%d", id2, seq2)
+	}
+}
+
+func TestGetRawMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	raw, err := s.GetRaw(context.Background(), "TKT-MISSING")
+	if err != nil {
+		t.Fatalf("expected no error for missing ticket, got %v", err)
+	}
+	if raw != "" {
+		t.Errorf("expected empty string for missing ticket, got %q", raw)
+	}
+}
+
+func TestSyncIndex(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Create a ticket file manually
+	ticketDir := filepath.Join(tmpDir, ".docket", "tickets")
+	os.MkdirAll(ticketDir, 0755)
+	tkt := &ticket.Ticket{
+		ID: "TKT-001", Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		Labels: []string{"L1"}, BlockedBy: []string{"TKT-002"}, LinkedCommits: []string{"abc"},
+	}
+	signTicket(tkt)
+	content, _ := render(tkt)
+	os.WriteFile(filepath.Join(ticketDir, "TKT-001.md"), []byte(content), 0644)
+
+	// Sync index
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex failed: %v", err)
+	}
+
+	// Verify it's in the index
+	res, _ := s.ListTickets(ctx, store.Filter{})
+	if len(res) != 1 {
+		t.Fatal("ticket not found in index after sync")
+	}
+}
+
+func TestStoreFilterUnblocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "T1", State: "todo"})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "T2", State: "todo", BlockedBy: []string{"TKT-001"}})
+
+	res, _ := s.ListTickets(ctx, store.Filter{OnlyUnblocked: true})
+	if len(res) != 1 || res[0].ID != "TKT-001" {
+		t.Errorf("expected only TKT-001 (unblocked), got %v", res)
+	}
+}
+
+func TestGetTicketCorrupt(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	
+	ticketDir := filepath.Join(tmpDir, ".docket", "tickets")
+	os.MkdirAll(ticketDir, 0755)
+	// Invalid frontmatter
+	os.WriteFile(filepath.Join(ticketDir, "TKT-001.md"), []byte("---\ninvalid\n---\n# Title"), 0644)
+	
+	_, err := s.GetTicket(context.Background(), "TKT-001")
+	if err == nil {
+		t.Error("expected error for corrupt ticket")
+	}
+}
+
+func TestLinkCommitMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	err := s.LinkCommit(context.Background(), "TKT-MISSING", "sha")
+	if err == nil {
+		t.Error("expected error linking commit to missing ticket")
+	}
+}
+
+func TestAddCommentMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	err := s.AddComment(context.Background(), "TKT-MISSING", ticket.Comment{})
+	if err == nil {
+		t.Error("expected error adding comment to missing ticket")
+	}
+}
+
+func TestCreateTicketAlreadyExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	tkt := &ticket.Ticket{ID: "TKT-001", Title: "T1"}
+	s.CreateTicket(ctx, tkt)
+	err := s.CreateTicket(ctx, tkt)
+	if err == nil {
+		t.Error("expected error creating already existing ticket")
+	}
+}
+
+func TestUpdateTransitions(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	tkt := &ticket.Ticket{ID: "TKT-001", Title: "T1", State: "todo", CreatedAt: now, UpdatedAt: now, CreatedBy: "me"}
+	s.CreateTicket(ctx, tkt)
+
+	// 1. Transition to in-progress
+	tkt.State = "in-progress"
+	s.UpdateTicket(ctx, tkt)
+	res, _ := s.GetTicket(ctx, "TKT-001")
+	if res.StartedAt.IsZero() {
+		t.Error("expected StartedAt to be set")
+	}
+
+	// 2. Transition to done
+	tkt.State = "done"
+	s.UpdateTicket(ctx, tkt)
+	res, _ = s.GetTicket(ctx, "TKT-001")
+	if res.CompletedAt.IsZero() {
+		t.Error("expected CompletedAt to be set")
 	}
 }

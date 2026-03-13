@@ -7,6 +7,9 @@ import (
 
 // CommitAll stages all changes and commits them with the given message.
 func CommitAll(repoRoot, message string) error {
+	if strings.TrimSpace(message) == "" {
+		return fmt.Errorf("commit message is required")
+	}
 	// Stage all changes
 	_, err := runGit(repoRoot, "add", ".")
 	if err != nil {
