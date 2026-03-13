@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -226,10 +226,27 @@ func aggregateDescendantAC(ctx context.Context, s *local.Store, id string) acAgg
 	if err == nil {
 		desc = idx.Descendants(id)
 	} else {
-		// Fallback path: derive descendants from full ticket list when index access is unavailable.
-		all, listErr := s.ListTickets(ctx, store.Filter{IncludeArchived: true})
-		if listErr != nil {
+		// Fallback path: derive descendants by scanning ticket markdown files directly.
+		dir := filepath.Join(s.RepoRoot, ".docket", "tickets")
+		entries, readErr := os.ReadDir(dir)
+		if readErr != nil {
 			return acAggregate{}
+		}
+		var all []*ticket.Ticket
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			ticketID := strings.TrimSuffix(entry.Name(), ".md")
+			raw, rawErr := s.GetRaw(ctx, ticketID)
+			if rawErr != nil || raw == "" {
+				continue
+			}
+			tkt, parseErr := local.Parse(raw)
+			if parseErr != nil || tkt == nil {
+				continue
+			}
+			all = append(all, tkt)
 		}
 		children := map[string][]*ticket.Ticket{}
 		for _, t := range all {

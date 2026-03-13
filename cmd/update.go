@@ -30,6 +30,8 @@ var (
 	updateCascade      bool
 	updateDesc         string
 	updateHandoff      string
+	updatePrivTicket   string
+	updatePrivYes      bool
 )
 
 var updateCmd = &cobra.Command{
@@ -101,11 +103,16 @@ var updateCmd = &cobra.Command{
 				}
 			}
 			newState := ticket.State(nextState)
+			if newState == "done" || newState == "archived" {
+				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
+					return err
+				}
+			}
 			if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
-			
+
 			// Use WorkflowManager for complex transitions (in-progress, done, etc.)
 			vcsProv := vcs.NewGitProvider(repo)
 			claimMgr := claim.NewLocalClaimManager(repo)
@@ -322,6 +329,8 @@ func resetUpdateGlobals() {
 	updateCascade = false
 	updateDesc = ""
 	updateHandoff = ""
+	updatePrivTicket = ""
+	updatePrivYes = false
 }
 
 func resetUpdateFlagChanges(cmd *cobra.Command) {
@@ -338,6 +347,8 @@ func resetUpdateFlagChanges(cmd *cobra.Command) {
 		"parent",
 		"cascade",
 		"desc",
+		"ticket",
+		"yes",
 	}
 	for _, name := range flagNames {
 		if f := cmd.Flags().Lookup(name); f != nil {
@@ -370,6 +381,8 @@ func init() {
 	updateCmd.Flags().StringVar(&updateParent, "parent", "", "set parent ticket ID (use 'none' to clear)")
 	updateCmd.Flags().BoolVar(&updateCascade, "cascade", false, "cascade state change to open descendants when required")
 	updateCmd.Flags().StringVar(&updateDesc, "desc", "", "new description (use - for stdin)")
+	updateCmd.Flags().StringVar(&updatePrivTicket, "ticket", "", "ticket ID authorizing privileged terminal transitions")
+	updateCmd.Flags().BoolVar(&updatePrivYes, "yes", false, "skip interactive confirmation for privileged terminal transitions")
 
 	rootCmd.AddCommand(updateCmd)
 }

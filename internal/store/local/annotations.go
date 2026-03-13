@@ -13,16 +13,32 @@ type Annotation struct {
 	Context  string
 }
 
+func (s *Store) ensureAnnotationSchemaReady(ctx context.Context) error {
+	s.annotationSchemaOnce.Do(func() {
+		db, err := s.openDB()
+		if err != nil {
+			s.annotationSchemaErr = err
+			return
+		}
+		defer db.Close()
+		s.annotationSchemaErr = ensureAnnotationSchema(db)
+	})
+	return s.annotationSchemaErr
+}
+
 func (s *Store) UpsertAnnotations(ctx context.Context, annotations []Annotation) error {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+
+	if err := s.ensureAnnotationSchemaReady(ctx); err != nil {
+		return err
+	}
+
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-
-	if err := ensureAnnotationSchema(db); err != nil {
-		return err
-	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -50,15 +66,18 @@ func (s *Store) UpsertAnnotations(ctx context.Context, annotations []Annotation)
 }
 
 func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]Annotation, error) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+
+	if err := s.ensureAnnotationSchemaReady(ctx); err != nil {
+		return nil, err
+	}
+
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
-
-	if err := ensureAnnotationSchema(db); err != nil {
-		return nil, err
-	}
 
 	rows, err := db.QueryContext(ctx, `SELECT ticket_id, file_path, line_num, context FROM annotations WHERE ticket_id = ? ORDER BY file_path ASC, line_num ASC`, ticketID)
 	if err != nil {
@@ -78,15 +97,18 @@ func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]
 }
 
 func (s *Store) GetAnnotationsByFile(ctx context.Context, filePath string) ([]Annotation, error) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+
+	if err := s.ensureAnnotationSchemaReady(ctx); err != nil {
+		return nil, err
+	}
+
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
-
-	if err := ensureAnnotationSchema(db); err != nil {
-		return nil, err
-	}
 
 	rows, err := db.QueryContext(ctx, `SELECT ticket_id, file_path, line_num, context FROM annotations WHERE file_path = ? ORDER BY line_num ASC`, filePath)
 	if err != nil {

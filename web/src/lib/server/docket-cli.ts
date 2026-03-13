@@ -59,6 +59,9 @@ function validateMutation(id: string, mutation: TicketMutation, allowedStates: S
 		const next = mutation.value.trim();
 		if (!next) return 'State is required.';
 		if (!allowedStates.has(next)) return `State "${next}" is not valid.`;
+		if (next === 'done' || next === 'archived') {
+			return `State "${next}" is privileged. Use the secure/admin workflow path instead.`;
+		}
 	}
 	if (mutation.kind === 'title' && !mutation.value.trim()) {
 		return 'Title cannot be empty.';

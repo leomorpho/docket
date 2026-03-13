@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -269,6 +271,67 @@ func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
 	}
 	if child.State != ticket.State("stale") {
 		t.Fatalf("child state = %s, want stale", child.State)
+	}
+}
+
+func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	cfg := ticket.DefaultConfig()
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-186",
+		Seq:         186,
+		Title:       "Privileged transition",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- y\n\n**AC status:**\n- done",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-186", "--state", "done"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatalf("expected privileged rejection for done transition without secure surface")
+	}
+
+	rootCmd.SetArgs([]string{"secure", "unlock", "--password", "pw-1", "--ttl", "5m"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("secure unlock failed: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"update", "TKT-186", "--state", "done", "--ticket", "TKT-186", "--yes"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("secure done transition failed: %v", err)
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-186")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != "done" {
+		t.Fatalf("expected done state, got %s", got.State)
+	}
+
+	session := security.NewSessionManager(tmpHome)
+	if err := session.RequireActive(tmpDir); err != nil {
+		t.Fatalf("expected secure session to remain active, got: %v", err)
 	}
 }
 

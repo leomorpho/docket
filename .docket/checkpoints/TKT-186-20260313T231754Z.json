@@ -1,0 +1,20 @@
+{
+  "ticket_id": "TKT-186",
+  "created_at": "2026-03-13T23:17:54Z",
+  "ac_done": 1,
+  "ac_total": 3,
+  "changed_files": [
+    ".docket/manifest.json",
+    ".docket/tickets/TKT-186.md",
+    "cmd/show.go",
+    "cmd/update.go",
+    "cmd/update_test.go",
+    "internal/store/local/annotations.go",
+    "internal/store/local/store.go",
+    "web/src/lib/server/docket-cli.ts"
+  ],
+  "last_comments": [],
+  "branch": "main",
+  "worktree_path": "/workspace/project",
+  "summary": "AC completion checkpoint"
+}

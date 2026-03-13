@@ -953,7 +953,7 @@
     },
     "TKT-186": {
       "title": "Enforce human-only done and other privileged state transitions",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-174"
     },

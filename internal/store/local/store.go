@@ -16,9 +16,13 @@ import (
 
 type Store struct {
 	RepoRoot string
-	
-	mu    sync.RWMutex
+
+	mu     sync.RWMutex
 	relIdx *RelationshipIndex
+
+	annotationSchemaOnce sync.Once
+	annotationSchemaErr  error
+	annotationMu         sync.Mutex
 }
 
 var (
@@ -28,14 +32,14 @@ var (
 
 func New(repoRoot string) *Store {
 	absRepo, _ := filepath.Abs(repoRoot)
-	
+
 	storesMu.Lock()
 	defer storesMu.Unlock()
-	
+
 	if s, ok := stores[absRepo]; ok {
 		return s
 	}
-	
+
 	s := &Store{RepoRoot: absRepo}
 	stores[absRepo] = s
 	return s
@@ -96,6 +100,28 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 	}
 	if existing == nil {
 		return fmt.Errorf("ticket %s not found", t.ID)
+	}
+
+	// Preserve lifecycle timestamps by default, and stamp them on forward transitions.
+	if t.StartedAt.IsZero() {
+		t.StartedAt = existing.StartedAt
+	}
+	if t.CompletedAt.IsZero() {
+		t.CompletedAt = existing.CompletedAt
+	}
+	if existing.State != t.State {
+		now := time.Now().UTC().Truncate(time.Second)
+		if t.State == ticket.State("in-progress") && t.StartedAt.IsZero() {
+			t.StartedAt = now
+		}
+		if t.State == ticket.State("done") {
+			if t.StartedAt.IsZero() {
+				t.StartedAt = now
+			}
+			if t.CompletedAt.IsZero() {
+				t.CompletedAt = now
+			}
+		}
 	}
 	if err := s.validateParentRef(ctx, t); err != nil {
 		return err
