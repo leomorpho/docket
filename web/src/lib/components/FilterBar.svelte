@@ -9,13 +9,15 @@
 		labelOptions,
 		selectedStates,
 		selectedLabel,
-		maxPriority
+		maxPriority,
+		searchQuery = $bindable('')
 	} = $props<{
 		stateOptions: { key: string; label: string }[];
 		labelOptions: string[];
 		selectedStates: Set<string>;
 		selectedLabel: string;
 		maxPriority: number;
+		searchQuery?: string;
 	}>();
 
 	const dispatch = createEventDispatcher<{
@@ -24,6 +26,12 @@
 		priority: { value: number };
 		clear: undefined;
 	}>();
+
+	let searchInput = $state<HTMLInputElement | null>(null);
+
+	export function focusSearch() {
+		searchInput?.focus();
+	}
 
 	function labelDisplayText(): string {
 		return selectedLabel || 'All labels';
@@ -36,6 +44,15 @@
 
 <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
 	<div class="flex flex-wrap items-center gap-2">
+		<div class="relative flex-1 min-w-[240px]">
+			<input
+				bind:this={searchInput}
+				type="text"
+				placeholder="Search tickets... (/)"
+				class="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+				bind:value={searchQuery}
+			/>
+		</div>
 		{#each stateOptions as state}
 			<Button
 				variant={selectedStates.has(state.key) ? 'secondary' : 'outline'}

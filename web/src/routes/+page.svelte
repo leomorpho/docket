@@ -53,12 +53,37 @@
 	let sheetOpen = $state(false);
 	let sortBy = $state<SortKey>('priority');
 	let sortDir = $state<'asc' | 'desc'>('asc');
+	let searchQuery = $state('');
+	let filterBar = $state<ReturnType<typeof FilterBar> | null>(null);
 
 	onMount(() => {
+		const handleKeydown = (e: KeyboardEvent) => {
+			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+				if (e.key === 'Escape') {
+					(e.target as HTMLElement).blur();
+				}
+				return;
+			}
+
+			if (e.key === 'b') mode = 'board';
+			if (e.key === 'l') mode = 'list';
+			if (e.key === 'h') mode = 'health';
+			if (e.key === '/') {
+				e.preventDefault();
+				filterBar?.focusSearch();
+			}
+			if (e.key === 'Escape' && sheetOpen) {
+				sheetOpen = false;
+			}
+		};
+		window.addEventListener('keydown', handleKeydown);
+
 		const persisted = localStorage.getItem('docket_active_project');
 		if (persisted && !data.activeProjectId && data.projects.some((p) => p.id === persisted)) {
 			switchProject(persisted);
 		}
+
+		return () => window.removeEventListener('keydown', handleKeydown);
 	});
 
 	$effect(() => {
@@ -117,12 +142,22 @@
 		selectedTicket = refreshed;
 	});
 
-	const filtered = $derived(data.tickets.filter((t: Ticket) => {
-		if (!selectedStates.has(t.state)) return false;
-		if (selectedLabel && !t.labels.includes(selectedLabel)) return false;
-		if (maxPriority > 0 && t.priority > maxPriority) return false;
-		return true;
-	}));
+	const filtered = $derived(
+		data.tickets.filter((t: Ticket) => {
+			if (!selectedStates.has(t.state)) return false;
+			if (selectedLabel && !t.labels.includes(selectedLabel)) return false;
+			if (maxPriority > 0 && t.priority > maxPriority) return false;
+			if (searchQuery) {
+				const q = searchQuery.toLowerCase();
+				return (
+					t.id.toLowerCase().includes(q) ||
+					t.title.toLowerCase().includes(q) ||
+					t.body.toLowerCase().includes(q)
+				);
+			}
+			return true;
+		})
+	);
 
 	const columns = $derived(openStateEntries.map(([key, st]) => ({
 		key,
@@ -278,6 +313,8 @@
 			</CardHeader>
 			<CardContent>
 				<FilterBar
+					bind:this={filterBar}
+					bind:searchQuery
 					{stateOptions}
 					{labelOptions}
 					{selectedStates}
