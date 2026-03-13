@@ -861,8 +861,8 @@
     },
     "TKT-171": {
       "title": "Implement docket start: Autonomous Agentic Workflow",
-      "state": "backlog",
-      "priority": 10,
+      "state": "done",
+      "priority": 1,
       "parent": "TKT-162"
     }
   }
