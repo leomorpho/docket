@@ -197,8 +197,10 @@ func resolveWebDir() (string, error) {
 
 	// 1. Try from the binary executable location (for installed binaries)
 	if exe, err := os.Executable(); err == nil {
-		if p := walkForWeb(filepath.Dir(exe)); p != "" {
-			return p, nil
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			if p := walkForWeb(filepath.Dir(resolved)); p != "" {
+				return p, nil
+			}
 		}
 	}
 
@@ -209,7 +211,14 @@ func resolveWebDir() (string, error) {
 		}
 	}
 
-	// 3. Fallback to walking up from current working directory
+	// 3. Try using runtime.Caller (works if built from source on this machine)
+	if _, filename, _, ok := runtime.Caller(0); ok {
+		if p := walkForWeb(filepath.Dir(filename)); p != "" {
+			return p, nil
+		}
+	}
+
+	// 4. Fallback to walking up from current working directory
 	if cwd, err := os.Getwd(); err == nil {
 		if p := walkForWeb(cwd); p != "" {
 			return p, nil
