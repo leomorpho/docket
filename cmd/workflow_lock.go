@@ -106,6 +106,54 @@ var workflowLockValidateCmd = &cobra.Command{
 	},
 }
 
+var workflowLockActivateCmd = &cobra.Command{
+	Use:   "activate",
+	Short: "Approve workflow.lock as active runtime policy (secure mode required)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if workflowTicketID == "" {
+			return fmt.Errorf("--ticket is required")
+		}
+		session := security.NewSessionManager(docketHome)
+		if err := session.RequireActive(repo); err != nil {
+			return err
+		}
+
+		action := "activate workflow.lock"
+		if !workflowConfirmYes {
+			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, workflowTicketID, action)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("privileged action cancelled")
+			}
+		}
+
+		lock, err := workflow.ParseWorkflowLock(repo)
+		if err != nil {
+			return err
+		}
+		if err := workflow.ValidateWorkflowLock(repo, lock); err != nil {
+			return err
+		}
+		lockHash, err := workflow.WorkflowLockHash(lock)
+		if err != nil {
+			return err
+		}
+
+		ns := security.NewRepoNamespaceStore(docketHome)
+		repoID, err := ns.SetActiveWorkflowHash(repo, lockHash, detectActor())
+		if err != nil {
+			return err
+		}
+		if err := session.RecordPrivilegedAction(repo, workflowTicketID, action); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Activated workflow.lock for %s (hash: %s)\n", repoID, lockHash)
+		return nil
+	},
+}
+
 func init() {
 	workflowLockGenerateCmd.Flags().StringVar(&workflowProposalPath, "proposal", workflow.DefaultWorkflowPolicy, "path to editable workflow proposal file")
 	workflowLockGenerateCmd.Flags().StringVar(&workflowSignerID, "signer-id", "", "signer identifier for lock metadata")
@@ -113,9 +161,12 @@ func init() {
 	workflowLockGenerateCmd.Flags().BoolVar(&workflowConfirmYes, "yes", false, "skip interactive confirmation prompt")
 
 	workflowLockValidateCmd.Flags().StringVar(&workflowProposalPath, "proposal", workflow.DefaultWorkflowPolicy, "reserved for compatibility; lock stores proposal path")
+	workflowLockActivateCmd.Flags().StringVar(&workflowTicketID, "ticket", "", "ticket ID authorizing activation")
+	workflowLockActivateCmd.Flags().BoolVar(&workflowConfirmYes, "yes", false, "skip interactive confirmation prompt")
 
 	workflowLockCmd.AddCommand(workflowLockGenerateCmd)
 	workflowLockCmd.AddCommand(workflowLockValidateCmd)
+	workflowLockCmd.AddCommand(workflowLockActivateCmd)
 	workflowCmd.AddCommand(workflowLockCmd)
 	rootCmd.AddCommand(workflowCmd)
 }

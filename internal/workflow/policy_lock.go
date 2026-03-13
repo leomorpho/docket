@@ -181,6 +181,15 @@ func ValidateWorkflowLock(repoRoot string, lock WorkflowLock) error {
 	return nil
 }
 
+func WorkflowLockHash(lock WorkflowLock) (string, error) {
+	b, err := canonicalJSON(lock)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 func signingPayload(lock WorkflowLock) ([]byte, error) {
 	unsigned := struct {
 		Version       int             `json:"version"`

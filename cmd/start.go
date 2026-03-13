@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -31,6 +32,14 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
+		}
+		ns := security.NewRepoNamespaceStore(docketHome)
+		activeWorkflowHash, active, err := ns.GetActiveWorkflowHash(repo)
+		if err != nil {
+			return fmt.Errorf("checking active workflow policy: %w", err)
+		}
+		if !active {
+			return fmt.Errorf("no active workflow.lock is approved for this repo. Run `docket workflow lock activate --ticket TKT-NNN` in secure mode")
 		}
 
 		// 1. Select the next ticket
@@ -63,11 +72,14 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		if err != nil {
 			return err
 		}
+		if err := ns.RecordRunStart(repo, t.ID, activeWorkflowHash); err != nil {
+			return fmt.Errorf("recording run manifest: %w", err)
+		}
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{
-				"ticket":           t,
+				"ticket":            t,
 				"agent_instruction": "Analyze the requirements and implement the changes. Use 'docket' tools to track your progress.",
 			})
 			return nil

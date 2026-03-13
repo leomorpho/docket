@@ -941,7 +941,7 @@
     },
     "TKT-184": {
       "title": "Gate workflow activation behind secure mode and pin runs to approved lock hashes",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-174"
     },
