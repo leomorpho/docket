@@ -29,6 +29,7 @@
 		onUpdateTitle,
 		onUpdateDescription,
 		onUpdateAC,
+		onAddComment,
 		relations = [],
 		onSelect
 	} = $props<{
@@ -40,6 +41,7 @@
 		onUpdateTitle: (ticketID: string, title: string) => Promise<MutationResult>;
 		onUpdateDescription: (ticketID: string, description: string) => Promise<MutationResult>;
 		onUpdateAC: (ticketID: string, acDesc: string, evidence: string) => Promise<MutationResult>;
+		onAddComment: (ticketID: string, body: string) => Promise<MutationResult>;
 		onSelect?: (e: CustomEvent<{ id: string }>) => void;
 	}>();
 
@@ -131,6 +133,21 @@
 			return;
 		}
 		successMessage = 'Description updated.';
+	}
+
+	let newCommentBody = $state('');
+	let savingComment = $state(false);
+
+	async function addComment() {
+		if (!ticket || !newCommentBody.trim() || savingComment) return;
+		savingComment = true;
+		const result = await onAddComment(ticket.id, newCommentBody.trim());
+		savingComment = false;
+		if (result.ok) {
+			newCommentBody = '';
+		} else {
+			errorMessage = result.error ?? 'Failed to add comment.';
+		}
 	}
 </script>
 
@@ -249,6 +266,36 @@
 					<article class="markdown max-w-none text-sm leading-relaxed text-slate-800">
 						{@html html}
 					</article>
+
+					<div class="mt-8 border-t border-slate-100 pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Comments</p>
+						<div class="space-y-4">
+							{#each ticket.comments || [] as comment}
+								<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
+									<div class="mb-2 flex items-center justify-between gap-2">
+										<span class="text-xs font-semibold text-slate-700">{comment.author}</span>
+										<span class="text-[10px] text-slate-400"
+											>{new Date(comment.at).toLocaleString()}</span
+										>
+									</div>
+									<div class="markdown text-sm text-slate-800">
+										{@html marked.parse(comment.body, { gfm: true })}
+									</div>
+								</div>
+							{/each}
+
+							<div class="mt-4 space-y-2">
+								<textarea
+									class="min-h-24 w-full rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+									placeholder="Add a comment... (Markdown supported)"
+									bind:value={newCommentBody}
+								></textarea>
+								<Button size="sm" onclick={addComment} disabled={savingComment || !newCommentBody.trim()}>
+									{savingComment ? 'Adding...' : 'Add Comment'}
+								</Button>
+							</div>
+						</div>
+					</div>
 
 					<div class="mt-8 border-t border-slate-100 pt-6">
 						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Relations</p>

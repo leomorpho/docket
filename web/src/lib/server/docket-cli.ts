@@ -12,7 +12,8 @@ export type TicketMutation =
 	| { kind: 'state'; value: string }
 	| { kind: 'title'; value: string }
 	| { kind: 'desc'; value: string }
-	| { kind: 'ac-complete'; value: string; evidence?: string };
+	| { kind: 'ac-complete'; value: string; evidence?: string }
+	| { kind: 'comment'; value: string };
 
 export type MutationResult = {
 	ok: true;
@@ -85,6 +86,8 @@ export async function runTicketMutation(
 		if (mutation.evidence) {
 			args.push('--evidence', mutation.evidence);
 		}
+	} else if (mutation.kind === 'comment') {
+		args = ['comment', id, '--body', mutation.value, '--format', 'json'];
 	} else {
 		args = ['update', id, '--format', 'json'];
 		if (mutation.kind === 'state') {

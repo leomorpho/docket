@@ -37,6 +37,12 @@ export type PlanStep = {
 	notes?: string;
 };
 
+export type Comment = {
+	author: string;
+	at: string;
+	body: string;
+};
+
 export type Ticket = {
 	id: string;
 	seq: number;
@@ -51,6 +57,7 @@ export type Ticket = {
 	completed_at?: string;
 	ac: AcceptanceCriterion[];
 	plan: PlanStep[];
+	comments: Comment[];
 	handoff?: string;
 	body: string;
 };

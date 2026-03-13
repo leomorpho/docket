@@ -121,6 +121,18 @@ function parseTicketFile(content: string): Ticket | null {
 	const handoffMatch = body.match(/## Handoff([\s\S]*?)$/);
 	const handoff = handoffMatch ? handoffMatch[1].trim() : undefined;
 
+	const comments: Comment[] = [];
+	const commentsSection = body.match(/## Comments([\s\S]*?)(##|$)/);
+	if (commentsSection) {
+		const blocks = commentsSection[1].split(/\n(?=\d{4}-\d{2}-\d{2}T)/);
+		for (const block of blocks) {
+			const m = block.trim().match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) — (.*)\n([\s\S]*)$/);
+			if (m) {
+				comments.push({ at: m[1], author: m[2], body: m[3].trim() });
+			}
+		}
+	}
+
 	return {
 		id: String(fm.id ?? ''),
 		seq: Number(fm.seq ?? 0),
@@ -133,6 +145,7 @@ function parseTicketFile(content: string): Ticket | null {
 		updated_at: String(fm.updated_at ?? ''),
 		ac,
 		plan,
+		comments,
 		handoff,
 		body
 	};

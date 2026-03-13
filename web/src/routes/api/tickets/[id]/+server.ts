@@ -4,7 +4,7 @@ import { readConfig } from '$lib/server/docket';
 import { runTicketMutation, type TicketMutation } from '$lib/server/docket-cli';
 
 type MutationBody = {
-	kind?: 'state' | 'title' | 'desc' | 'ac-complete';
+	kind?: 'state' | 'title' | 'desc' | 'ac-complete' | 'comment';
 	value?: string;
 	evidence?: string;
 	projectId?: string;
