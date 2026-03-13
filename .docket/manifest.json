@@ -929,7 +929,7 @@
     },
     "TKT-182": {
       "title": "Add key enrollment, rotation, and recovery primitives for local-first identities",
-      "state": "backlog",
+      "state": "done",
       "priority": 3,
       "parent": "TKT-173"
     },
