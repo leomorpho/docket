@@ -808,13 +808,13 @@
     },
     "TKT-162": {
       "title": "[Epic] Refactor Architecture for Agent-First Workflow",
-      "state": "backlog",
+      "state": "todo",
       "priority": 10
     },
     "TKT-163": {
       "title": "Extract WorkflowManager Domain Service",
-      "state": "backlog",
-      "priority": 10,
+      "state": "in-progress",
+      "priority": 1,
       "parent": "TKT-162"
     },
     "TKT-164": {
