@@ -2,10 +2,17 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/vcs"
+	"github.com/leomorpho/docket/internal/workflow"
 )
 
 type Request struct {
@@ -22,6 +29,14 @@ type Response struct {
 }
 
 func ServeMCP(in io.Reader, out io.Writer, repoRoot string) error {
+	deps, err := buildDispatchDeps(repoRoot)
+	if err != nil {
+		return err
+	}
+	return ServeMCPWithDeps(in, out, deps)
+}
+
+func ServeMCPWithDeps(in io.Reader, out io.Writer, deps *DispatchDeps) error {
 	s := bufio.NewScanner(in)
 	w := bufio.NewWriter(out)
 	defer w.Flush()
@@ -41,7 +56,7 @@ func ServeMCP(in io.Reader, out io.Writer, repoRoot string) error {
 			continue
 		}
 
-		result, err := Dispatch(req.Action, req.Args, repoRoot)
+		result, err := Dispatch(req.Action, req.Args, deps)
 		resp := Response{ID: req.ID}
 		if err != nil {
 			resp.OK = false
@@ -59,6 +74,37 @@ func ServeMCP(in io.Reader, out io.Writer, repoRoot string) error {
 		return err
 	}
 	return nil
+}
+
+type claimLookupAdapter struct {
+	manager *claim.LocalClaimManager
+}
+
+func (a *claimLookupAdapter) GetClaim(ctx context.Context, ticketID string) (*ClaimMetadata, error) {
+	cl, err := a.manager.GetClaim(ctx, ticketID)
+	if err != nil || cl == nil {
+		return nil, err
+	}
+	return &ClaimMetadata{
+		AgentID:  cl.AgentID,
+		Worktree: cl.Worktree,
+	}, nil
+}
+
+func buildDispatchDeps(repoRoot string) (*DispatchDeps, error) {
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	s := local.New(repoRoot)
+	claimMgr := claim.NewLocalClaimManager(repoRoot)
+	return &DispatchDeps{
+		RepoRoot: repoRoot,
+		Store:    s,
+		Workflow: workflow.NewManager(s, vcs.NewGitProvider(repoRoot), claimMgr),
+		Claimer:  &claimLookupAdapter{manager: claimMgr},
+		Config:   cfg,
+	}, nil
 }
 
 func writeResponse(w *bufio.Writer, resp Response) error {

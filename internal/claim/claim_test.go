@@ -1,6 +1,7 @@
 package claim
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,5 +134,41 @@ func TestGetClaimsDir(t *testing.T) {
 	}
 	if actual != expected {
 		t.Errorf("expected %s, got %s", expected, actual)
+	}
+}
+
+func TestLocalClaimManager(t *testing.T) {
+	repo := t.TempDir()
+	// Initialize git repo
+	c := exec.Command("git", "-C", repo, "init")
+	_ = c.Run()
+
+	m := NewLocalClaimManager(repo)
+	ctx := context.Background()
+
+	// 1. Claim
+	err := m.Claim(ctx, "TKT-001", repo, "agent-1")
+	if err != nil {
+		t.Fatalf("Claim failed: %v", err)
+	}
+
+	// 2. Get
+	cl, err := m.GetClaim(ctx, "TKT-001")
+	if err != nil {
+		t.Fatalf("GetClaim failed: %v", err)
+	}
+	if cl == nil || cl.AgentID != "agent-1" {
+		t.Errorf("expected agent-1, got %v", cl)
+	}
+
+	// 3. Release
+	err = m.Release(ctx, "TKT-001")
+	if err != nil {
+		t.Fatalf("Release failed: %v", err)
+	}
+
+	cl, _ = m.GetClaim(ctx, "TKT-001")
+	if cl != nil {
+		t.Error("expected nil claim after release")
 	}
 }

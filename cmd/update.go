@@ -12,6 +12,8 @@ import (
 	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/vcs"
+	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -103,22 +105,34 @@ var updateCmd = &cobra.Command{
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
-			oldState := t.State
-			t.State = newState
-			updatedFields = append(updatedFields, "state")
+			
+			// Use WorkflowManager for complex transitions (in-progress, done, etc.)
+			vcsProv := vcs.NewGitProvider(repo)
+			claimMgr := claim.NewLocalClaimManager(repo)
+			wf := workflow.NewManager(s, vcsProv, claimMgr)
 
-			// Handle transitions (Claims/Releases)
-			if t.State == "in-progress" && oldState != "in-progress" {
+			if newState == "in-progress" {
 				actor := detectActor()
 				if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
 					actor = "agent:" + agentID
 				}
-				if err := claim.Claim(repo, t.ID, repo, actor); err != nil {
-					return fmt.Errorf("conflict: %w", err)
+				_, _, err := wf.StartTask(ctx, t.ID, actor, cfg)
+				if err != nil {
+					return fmt.Errorf("starting task: %w", err)
 				}
-			} else if (string(t.State) == "done" || string(t.State) == "archived") && (string(oldState) != "done" && string(oldState) != "archived") {
-				_ = claim.Release(repo, t.ID)
+				// Reload ticket after StartTask
+				t, _ = s.GetTicket(ctx, t.ID)
+			} else if newState == "done" || newState == "archived" {
+				_, err := wf.FinishTask(ctx, t.ID, cfg)
+				if err != nil {
+					return fmt.Errorf("finishing task: %w", err)
+				}
+				// Reload ticket after FinishTask
+				t, _ = s.GetTicket(ctx, t.ID)
+			} else {
+				t.State = newState
 			}
+			updatedFields = append(updatedFields, "state")
 
 			if newState == ticket.State("in-review") || newState == ticket.State("done") {
 				_ = releaseLockForTicket(repo, t.ID)

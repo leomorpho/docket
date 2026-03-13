@@ -12,6 +12,32 @@ import (
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
+type mockWorkflowRunner struct {
+	startCalls  int
+	finishCalls int
+	startTicket *ticket.Ticket
+	startPath   string
+}
+
+func (m *mockWorkflowRunner) StartTask(ctx context.Context, ticketID, agentID string, cfg *ticket.Config) (*ticket.Ticket, string, error) {
+	m.startCalls++
+	if m.startTicket != nil {
+		return m.startTicket, m.startPath, nil
+	}
+	return &ticket.Ticket{ID: ticketID, State: "in-progress"}, m.startPath, nil
+}
+
+func (m *mockWorkflowRunner) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
+	m.finishCalls++
+	return &ticket.Ticket{ID: ticketID, State: "done"}, nil
+}
+
+type mockClaimLookup struct{}
+
+func (m *mockClaimLookup) GetClaim(ctx context.Context, ticketID string) (*ClaimMetadata, error) {
+	return nil, nil
+}
+
 func TestServeMCP_ListCreateAndUnknown(t *testing.T) {
 	repo := t.TempDir()
 	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
@@ -69,7 +95,7 @@ func TestServeMCP_ShowUpdateCommentAndInvalidTransition(t *testing.T) {
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("backlog"), Priority: 1,
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("todo"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
@@ -115,5 +141,51 @@ func TestServeMCP_ShowUpdateCommentAndInvalidTransition(t *testing.T) {
 	}
 	if r4["ok"] != true {
 		t.Fatalf("valid transition should pass: %v", r4)
+	}
+}
+
+func TestServeMCPWithDeps_DelegatesStartTask(t *testing.T) {
+	repo := t.TempDir()
+	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("seed ticket: %v", err)
+	}
+
+	mockWF := &mockWorkflowRunner{
+		startTicket: &ticket.Ticket{ID: "TKT-001", State: "in-progress", Priority: 1},
+		startPath:   "/tmp/wt-TKT-001",
+	}
+	deps := &DispatchDeps{
+		RepoRoot: repo,
+		Store:    s,
+		Workflow: mockWF,
+		Claimer:  &mockClaimLookup{},
+		Config:   ticket.DefaultConfig(),
+	}
+
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"in-progress"}}` + "\n")
+	var out bytes.Buffer
+	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
+		t.Fatalf("ServeMCPWithDeps failed: %v", err)
+	}
+
+	if mockWF.startCalls != 1 {
+		t.Fatalf("StartTask calls = %d, want 1", mockWF.startCalls)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp["ok"] != true {
+		t.Fatalf("response not ok: %v", resp)
 	}
 }

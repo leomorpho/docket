@@ -12,6 +12,9 @@ type VCSProvider interface {
 	RemoveWorktree(ctx context.Context, path string) error
 	GetAgentWorktreeDir(ctx context.Context, ticketID string) (string, error)
 	GetRepoRoot(ctx context.Context) (string, error)
+	CommitAll(ctx context.Context, worktreePath, message string) error
+	MergeBranch(ctx context.Context, branch string) error
+	DeleteBranch(ctx context.Context, branch string) error
 }
 
 // ClaimManager defines the operations for ticket ownership.

@@ -29,3 +29,15 @@ func (p *GitProvider) GetAgentWorktreeDir(ctx context.Context, ticketID string) 
 func (p *GitProvider) GetRepoRoot(ctx context.Context) (string, error) {
 	return git.GetRepoRoot(p.repoRoot)
 }
+
+func (p *GitProvider) CommitAll(ctx context.Context, worktreePath, message string) error {
+	return git.CommitAll(worktreePath, message)
+}
+
+func (p *GitProvider) MergeBranch(ctx context.Context, branch string) error {
+	return git.MergeBranch(p.repoRoot, branch)
+}
+
+func (p *GitProvider) DeleteBranch(ctx context.Context, branch string) error {
+	return git.DeleteBranch(p.repoRoot, branch)
+}

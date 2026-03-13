@@ -813,7 +813,7 @@
     },
     "TKT-163": {
       "title": "Extract WorkflowManager Domain Service",
-      "state": "in-progress",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-162"
     },

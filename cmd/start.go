@@ -59,7 +59,7 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 			actor = "agent:" + agentID
 		}
 
-		t, err = wf.StartTask(ctx, t.ID, actor, cfg)
+		t, _, err = wf.StartTask(ctx, t.ID, actor, cfg)
 		if err != nil {
 			return err
 		}
