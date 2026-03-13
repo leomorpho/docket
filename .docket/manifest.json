@@ -808,7 +808,7 @@
     },
     "TKT-162": {
       "title": "[Epic] Refactor Architecture for Agent-First Workflow",
-      "state": "todo",
+      "state": "in-progress",
       "priority": 10
     },
     "TKT-163": {

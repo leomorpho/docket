@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/leomorpho/docket/internal/claim"
-	"github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/vcs"
+	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -49,8 +49,18 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 			return fmt.Errorf("loading ticket details: %w", err)
 		}
 
-		// 2. Start the ticket
-		if err := startTicket(ctx, s, cfg, t); err != nil {
+		// 2. Start the ticket using WorkflowManager
+		vcsProv := vcs.NewGitProvider(repo)
+		claimMgr := claim.NewLocalClaimManager(repo)
+		wf := workflow.NewManager(s, vcsProv, claimMgr)
+
+		actor := detectActor()
+		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
+			actor = "agent:" + agentID
+		}
+
+		t, err = wf.StartTask(ctx, t.ID, actor, cfg)
+		if err != nil {
 			return err
 		}
 
@@ -109,51 +119,6 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 	}
 
 	return nil, nil
-}
-
-func startTicket(ctx context.Context, s *local.Store, cfg *ticket.Config, t *ticket.Ticket) error {
-	oldState := t.State
-	newState := ticket.State("in-progress")
-
-	if !cfg.IsValidState(string(newState)) {
-		return fmt.Errorf("state 'in-progress' is not defined in config")
-	}
-
-	if err := ticket.ValidateTransition(cfg, oldState, newState); err != nil {
-		return fmt.Errorf("invalid transition for %s: %w", t.ID, err)
-	}
-
-	t.State = newState
-	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
-	if t.StartedAt.IsZero() {
-		t.StartedAt = t.UpdatedAt
-	}
-
-	// Logic for Claims/Worktrees
-	actor := detectActor()
-	if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
-		actor = "agent:" + agentID
-	}
-
-	// Try to create a worktree if this is an agent (or always?)
-	// For now let's follow the MCP logic but make it robust for CLI use
-	wtPath, wtErr := git.GetAgentWorktreeDir(t.ID)
-	if wtErr == nil {
-		branch := "docket/" + t.ID
-		if err := git.CreateWorktree(repo, t.ID, branch, wtPath); err == nil {
-			_ = claim.Claim(repo, t.ID, wtPath, actor)
-			fmt.Printf("Claimed %s in worktree: %s\n", t.ID, wtPath)
-		} else {
-			// Fallback to current worktree
-			_ = claim.Claim(repo, t.ID, repo, actor)
-			fmt.Printf("Claimed %s in current directory (worktree creation failed: %v)\n", t.ID, err)
-		}
-	} else {
-		_ = claim.Claim(repo, t.ID, repo, actor)
-		fmt.Printf("Claimed %s in current directory\n", t.ID)
-	}
-
-	return s.UpdateTicket(ctx, t)
 }
 
 func init() {
