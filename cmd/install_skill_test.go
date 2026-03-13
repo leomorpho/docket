@@ -14,13 +14,15 @@ func TestInstallSkill(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", originalHome)
 
+	// Reset global flags
+	installSkill = false
+	installCursor = false
+	installVSCode = false
+
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
 	rootCmd.SetArgs([]string{"install", "--skill"})
 	
-	// Reset flags because they are global
-	installSkill = false 
-
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("install --skill failed: %v", err)
 	}

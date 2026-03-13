@@ -36,7 +36,7 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 		return nil, nil, fmt.Errorf("failed to read ticket file %s: %w", path, err)
 	}
 
-	t, parseErr := parse(string(data))
+	t, parseErr := Parse(string(data))
 	if parseErr != nil {
 		errs = append(errs, store.ValidationError{Field: "format", Message: parseErr.Error()})
 		return errs, warns, nil

@@ -1,6 +1,541 @@
 {
   "_warning": "DO NOT EDIT .docket/tickets/*.md OR .docket/manifest.json DIRECTLY. Use `docket` commands only.",
   "tickets": {
+    "TKT-001": {
+      "title": "Bootstrap docket to track itself",
+      "state": "done",
+      "priority": 23
+    },
+    "TKT-002": {
+      "title": "Project scaffolding",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-003": {
+      "title": "Core data types",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-004": {
+      "title": "Sequential ID generation",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-005": {
+      "title": "Backend interface + local markdown store",
+      "state": "done",
+      "priority": 4
+    },
+    "TKT-006": {
+      "title": "Schema validator (`docket validate`)",
+      "state": "done",
+      "priority": 5
+    },
+    "TKT-007": {
+      "title": "`docket init` command",
+      "state": "done",
+      "priority": 6
+    },
+    "TKT-008": {
+      "title": "`docket create` command",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-009": {
+      "title": "`docket list` command",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-010": {
+      "title": "`docket show` command",
+      "state": "done",
+      "priority": 9
+    },
+    "TKT-011": {
+      "title": "`docket update` command",
+      "state": "done",
+      "priority": 10
+    },
+    "TKT-012": {
+      "title": "`docket comment` command",
+      "state": "done",
+      "priority": 11
+    },
+    "TKT-013": {
+      "title": "SQLite index cache",
+      "state": "done",
+      "priority": 12
+    },
+    "TKT-014": {
+      "title": "`docket board` — bubbletea TUI kanban",
+      "state": "done",
+      "priority": 13
+    },
+    "TKT-015": {
+      "title": "Git blame integration",
+      "state": "done",
+      "priority": 14
+    },
+    "TKT-016": {
+      "title": "Inline annotation scan + refs",
+      "state": "done",
+      "priority": 15
+    },
+    "TKT-017": {
+      "title": "`docket context` command",
+      "state": "done",
+      "priority": 16
+    },
+    "TKT-018": {
+      "title": "Session management",
+      "state": "done",
+      "priority": 17
+    },
+    "TKT-019": {
+      "title": "Acceptance criteria commands",
+      "state": "done",
+      "priority": 18
+    },
+    "TKT-020": {
+      "title": "`docket check` — staleness and consistency",
+      "state": "done",
+      "priority": 19
+    },
+    "TKT-021": {
+      "title": "`docket help-json` — machine-readable manifest",
+      "state": "done",
+      "priority": 20
+    },
+    "TKT-022": {
+      "title": "MCP server",
+      "state": "done",
+      "priority": 21
+    },
+    "TKT-023": {
+      "title": "lefthook config + CLAUDE.md template",
+      "state": "done",
+      "priority": 22
+    },
+    "TKT-024": {
+      "title": "`docket check --fix` skips other rules after autofix",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-025": {
+      "title": "MCP update must enforce state transitions",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-026": {
+      "title": "Comments and linked commits should bump updated_at",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-027": {
+      "title": "Validate handoff structure for in-review and done tickets",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-028": {
+      "title": "Limit default `docket check` scope to open tickets",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-029": {
+      "title": "Suppress Cobra usage text on expected quality-gate failures",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-030": {
+      "title": "Update README to match markdown ticket architecture",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-031": {
+      "title": "Increase coverage on high-risk TUI and MCP paths",
+      "state": "done",
+      "priority": 4
+    },
+    "TKT-032": {
+      "title": "Add semantic config keys to the config model",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-033": {
+      "title": "Add semantic config defaults",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-034": {
+      "title": "Add semantic config environment overrides",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-035": {
+      "title": "Add semantic provider interface",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-036": {
+      "title": "Add semantic provider registry",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-037": {
+      "title": "Add uv provider skeleton",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-038": {
+      "title": "Define Python embedding input schema",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-039": {
+      "title": "Define Python embedding output schema",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-040": {
+      "title": "Add Python bridge script file",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-041": {
+      "title": "Add uv invocation wrapper",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-042": {
+      "title": "Add uv availability check",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-043": {
+      "title": "Add provider cache environment wiring",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-044": {
+      "title": "Add sentence-transformers dependency pinning",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-045": {
+      "title": "Add model name plumbing",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-046": {
+      "title": "Add real embedding call in Python bridge",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-047": {
+      "title": "Add provider timeout handling",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-048": {
+      "title": "Add provider stderr and error parsing",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-049": {
+      "title": "Define semantic ticket chunk types",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-050": {
+      "title": "Define semantic chunk ID format",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-051": {
+      "title": "Define semantic chunk hash format",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-052": {
+      "title": "Implement semantic ticket chunker",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-053": {
+      "title": "Add semantic chunker unit tests",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-054": {
+      "title": "Add semantic metadata store schema",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-055": {
+      "title": "Add semantic metadata store read and write",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-056": {
+      "title": "Add chromem-go dependency",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-057": {
+      "title": "Add vector collection initialization",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-058": {
+      "title": "Add vector upsert operation",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-059": {
+      "title": "Add vector delete operation",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-060": {
+      "title": "Add vector query operation",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-061": {
+      "title": "Add semantic index path configuration",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-062": {
+      "title": "Add semantic gitignore entries",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-063": {
+      "title": "Add full-scan ticket enumerator",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-064": {
+      "title": "Add incremental semantic diff detector",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-065": {
+      "title": "Add incremental semantic indexer",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-066": {
+      "title": "Add full semantic rebuild path",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-067": {
+      "title": "Add semantic index version tracking",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-068": {
+      "title": "Add semantic freshness check",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-069": {
+      "title": "Add semantic status command shell",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-070": {
+      "title": "Add provider details to semantic status",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-071": {
+      "title": "Add cache paths to semantic status",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-072": {
+      "title": "Add index stats to semantic status",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-073": {
+      "title": "Add semantic rebuild command shell",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-074": {
+      "title": "Add incremental rebuild execution",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-075": {
+      "title": "Add full rebuild flag",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-076": {
+      "title": "Add lexical scorer extraction",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-077": {
+      "title": "Add vector scorer",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-078": {
+      "title": "Add hybrid score combiner",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-079": {
+      "title": "Add field weighting rules",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-080": {
+      "title": "Add graph boost input model",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-081": {
+      "title": "Add graph boost calculation",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-082": {
+      "title": "Add related command shell",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-083": {
+      "title": "Add semantic mode flag handling",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-084": {
+      "title": "Add related lexical-only execution",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-085": {
+      "title": "Add related hybrid execution",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-086": {
+      "title": "Add related unavailable-provider behavior",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-087": {
+      "title": "Add semantic warnings in CLI output",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-088": {
+      "title": "Add semantic config docs",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-089": {
+      "title": "Add local cache docs",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-090": {
+      "title": "Add uv requirement docs",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-091": {
+      "title": "Add semantic rebuild workflow docs",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-092": {
+      "title": "Add provider unit tests",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-093": {
+      "title": "Add metadata-store unit tests",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-094": {
+      "title": "Add vector-store unit tests",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-095": {
+      "title": "Add semantic status CLI tests",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-096": {
+      "title": "Add semantic rebuild CLI tests",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-097": {
+      "title": "Add related command CLI tests",
+      "state": "done",
+      "priority": 8
+    },
+    "TKT-098": {
+      "title": "Add semantic ranking tests",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-099": {
+      "title": "Add end-to-end semantic indexing test with fake provider",
+      "state": "done",
+      "priority": 7
+    },
+    "TKT-100": {
+      "title": "Redesign config schema: rich state objects with transitions, column order, and open classification",
+      "state": "done",
+      "priority": 1
+    },
+    "TKT-101": {
+      "title": "Remove hardcoded state constants and ValidStates slice; derive from config",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-102": {
+      "title": "Make state transition rules config-driven; remove hardcoded validTransitions map",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-103": {
+      "title": "Make board columns config-driven: order, labels, and column assignment from config",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-104": {
+      "title": "Make --state open filter and list defaults config-driven",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-105": {
+      "title": "Make default_state and default_priority config-driven in create command and board",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-106": {
+      "title": "Make handoff section structure config-driven with template support",
+      "state": "done",
+      "priority": 4
+    },
+    "TKT-107": {
+      "title": "Add parent/child ticket relationships (epics)",
+      "state": "done",
+      "priority": 2
+    },
     "TKT-108": {
       "title": "Read-only Svelte board UI for docket",
       "state": "done",
@@ -168,7 +703,7 @@
     },
     "TKT-141": {
       "title": "Spike: multi-repo support in docket ui via shared port and project selector",
-      "state": "in-progress",
+      "state": "done",
       "priority": 3
     },
     "TKT-142": {
@@ -181,6 +716,36 @@
       "state": "done",
       "priority": 2
     },
+    "TKT-144": {
+      "title": "Implement `docket install --skill` for Gemini CLI integration",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-145": {
+      "title": "Expand docket install to support Cursor and VS Code",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-146": {
+      "title": "Optimize MCP tools for large payloads via temporary files",
+      "state": "done",
+      "priority": 2
+    },
+    "TKT-147": {
+      "title": "Force MCP Usage: Implement signature-based write protection",
+      "state": "todo",
+      "priority": 2
+    },
+    "TKT-148": {
+      "title": "Implement `docket fix` to repair ticket signatures and teach agents",
+      "state": "done",
+      "priority": 3
+    },
+    "TKT-149": {
+      "title": "Enhance pre-commit validation with 'Tutor' feedback",
+      "state": "todo",
+      "priority": 3
+    },
     "TKT-150": {
       "title": "Transparent Isolation: Automatically create Git worktrees for agents",
       "state": "done",
@@ -191,40 +756,55 @@
       "state": "done",
       "priority": 2
     },
+    "TKT-152": {
+      "title": "Deprecate and hide the TUI Kanban board",
+      "state": "done",
+      "priority": 3
+    },
     "TKT-153": {
       "title": "Divergent Work Prevention: Force agents to check for existing tickets",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-154": {
       "title": "Ecosystem Analytics: Track and visualize ticket lead time",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-155": {
       "title": "Enforcement: Implement DOCKET_AGENT_MODE for contextual validation",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-156": {
       "title": "Observability: Implement docket ps to track active worktrees and claims",
-      "state": "backlog",
+      "state": "done",
       "priority": 2
     },
     "TKT-157": {
       "title": "Continuity: Implement docket resume for seamless context handover",
-      "state": "backlog",
+      "state": "done",
       "priority": 1
     },
     "TKT-158": {
       "title": "DX: Implement common command aliases (ls, st, up, cr)",
-      "state": "backlog",
+      "state": "done",
       "priority": 3
     },
     "TKT-159": {
       "title": "Infrastructure: Implement a robust integration testing rig for Git/Process coordination",
-      "state": "backlog",
+      "state": "done",
       "priority": 1
+    },
+    "TKT-160": {
+      "title": "Signature Test",
+      "state": "backlog",
+      "priority": 10
+    },
+    "TKT-161": {
+      "title": "Fixed Title",
+      "state": "backlog",
+      "priority": 11
     }
   }
 }

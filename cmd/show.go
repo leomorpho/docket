@@ -3,11 +3,16 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
+)
+
+var (
+	showWeb bool
 )
 
 var showCmd = &cobra.Command{
@@ -18,6 +23,10 @@ var showCmd = &cobra.Command{
 		id := args[0]
 		s := local.New(repo)
 		ctx := context.Background()
+
+		if showWeb {
+			return openTicketInWeb(cmd, id)
+		}
 
 		if format == "md" {
 			raw, err := s.GetRaw(ctx, id)
@@ -236,5 +245,22 @@ func aggregateDescendantAC(ctx context.Context, s *local.Store, id string) acAgg
 }
 
 func init() {
+	showCmd.Flags().BoolVar(&showWeb, "web", false, "open ticket in web UI")
 	rootCmd.AddCommand(showCmd)
+}
+
+func openTicketInWeb(cmd *cobra.Command, id string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	hubURL := fmt.Sprintf("http://127.0.0.1:%d", uiHubPort)
+	projectID, ok := registerWithHub(hubURL, cwd)
+	if !ok {
+		return fmt.Errorf("Docket UI server not running or project not registered. Run `docket ui` first.")
+	}
+
+	ticketURL := fmt.Sprintf("%s/%s/ticket/%s", hubURL, projectID, id)
+	fmt.Fprintf(cmd.OutOrStdout(), "Opening %s in browser...\n", ticketURL)
+	return openBrowser(ticketURL)
 }

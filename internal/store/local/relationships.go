@@ -17,8 +17,31 @@ type RelationshipIndex struct {
 	DescDepth map[string]int
 }
 
+// InvalidateRelationshipIndex clears the cached relationship index.
+func (s *Store) InvalidateRelationshipIndex() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.relIdx = nil
+}
+
 // BuildRelationshipIndex loads tickets and constructs a reverse parent→children map.
+// This is cached in memory.
 func (s *Store) BuildRelationshipIndex(ctx context.Context) (*RelationshipIndex, error) {
+	s.mu.RLock()
+	if s.relIdx != nil {
+		defer s.mu.RUnlock()
+		return s.relIdx, nil
+	}
+	s.mu.RUnlock()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// Double-check if it was built while we were waiting for the lock
+	if s.relIdx != nil {
+		return s.relIdx, nil
+	}
+
 	all, err := s.ListTickets(ctx, store.Filter{IncludeArchived: true})
 	if err != nil {
 		return nil, err
@@ -51,6 +74,7 @@ func (s *Store) BuildRelationshipIndex(ctx context.Context) (*RelationshipIndex,
 		})
 	}
 
+	s.relIdx = idx
 	return idx, nil
 }
 
