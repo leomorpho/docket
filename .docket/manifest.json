@@ -917,7 +917,7 @@
     },
     "TKT-180": {
       "title": "Add password-based secure mode with TTL and explicit privileged confirmations",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-173"
     },
