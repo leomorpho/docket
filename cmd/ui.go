@@ -195,6 +195,12 @@ func resolveWebDir() (string, error) {
 		return "", fmt.Errorf("DOCKET_UI_DIR=%q does not contain web/package.json (docket-ui)", env)
 	}
 
+	if cwd, err := os.Getwd(); err == nil {
+		if p := walkForWeb(cwd); p != "" {
+			return p, nil
+		}
+	}
+
 	// 1. Try from the binary executable location (for installed binaries)
 	if exe, err := os.Executable(); err == nil {
 		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
