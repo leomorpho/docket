@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import BoardView from '$lib/components/BoardView.svelte';
+	import CreateTicketModal from '$lib/components/CreateTicketModal.svelte';
 	import DetailSheet from '$lib/components/DetailSheet.svelte';
 	import FilterBar from '$lib/components/FilterBar.svelte';
 	import HealthView from '$lib/components/HealthView.svelte';
@@ -55,6 +56,7 @@
 	let sortDir = $state<'asc' | 'desc'>('asc');
 	let searchQuery = $state('');
 	let filterBar = $state<ReturnType<typeof FilterBar> | null>(null);
+	let createModalOpen = $state(false);
 
 	onMount(() => {
 		const handleKeydown = (e: KeyboardEvent) => {
@@ -68,12 +70,17 @@
 			if (e.key === 'b') mode = 'board';
 			if (e.key === 'l') mode = 'list';
 			if (e.key === 'h') mode = 'health';
+			if (e.key === 'n') {
+				e.preventDefault();
+				createModalOpen = true;
+			}
 			if (e.key === '/') {
 				e.preventDefault();
 				filterBar?.focusSearch();
 			}
-			if (e.key === 'Escape' && sheetOpen) {
-				sheetOpen = false;
+			if (e.key === 'Escape') {
+				if (sheetOpen) sheetOpen = false;
+				if (createModalOpen) createModalOpen = false;
 			}
 		};
 		window.addEventListener('keydown', handleKeydown);
@@ -309,6 +316,9 @@
 						</Button>
 					</div>
 					<Badge variant="secondary">{openStates.length} workflow states</Badge>
+					<Button size="sm" class="bg-indigo-600 hover:bg-indigo-700 text-white" onclick={() => (createModalOpen = true)}>
+						Add Ticket (n)
+					</Button>
 				</div>
 			</CardHeader>
 			<CardContent>
@@ -373,6 +383,15 @@
 		onSelect={(e) => {
 			const t = data.tickets.find((t) => t.id === e.detail.id);
 			if (t) onCardSelect(t);
+		}}
+	/>
+
+	<CreateTicketModal
+		bind:open={createModalOpen}
+		config={data.config}
+		projectId={data.activeProjectId}
+		onCreate={async (t) => {
+			onCardSelect(t);
 		}}
 	/>
 </main>
