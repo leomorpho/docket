@@ -733,7 +733,7 @@
     },
     "TKT-147": {
       "title": "Force MCP Usage: Implement signature-based write protection",
-      "state": "todo",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-173"
     },

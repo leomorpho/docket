@@ -92,7 +92,7 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 	if sigErr != nil {
 		errs = append(errs, store.ValidationError{Field: "signature", Message: fmt.Sprintf("validation failed: %v", sigErr)})
 	} else if !valid {
-		errs = append(errs, store.ValidationError{Field: "signature", Message: "Direct file mutation detected. You must use Docket's MCP tools or CLI to update tickets."})
+		errs = append(errs, store.ValidationError{Field: "signature", Message: "Direct file mutation detected. You must use Docket's MCP tools to update tickets."})
 	}
 
 	// 2. Consistency
