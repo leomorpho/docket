@@ -137,6 +137,33 @@
 
 	let newCommentBody = $state('');
 	let savingComment = $state(false);
+	let relatedTickets = $state<any[]>([]);
+	let loadingRelated = $state(false);
+
+	$effect(() => {
+		if (ticket && open) {
+			fetchRelated();
+		} else {
+			relatedTickets = [];
+		}
+	});
+
+	async function fetchRelated() {
+		if (!ticket) return;
+		loadingRelated = true;
+		try {
+			const url = `/api/tickets/${ticket.id}/related`;
+			const response = await fetch(url);
+			const data = await response.json();
+			if (data.ok) {
+				relatedTickets = data.related || [];
+			}
+		} catch {
+			relatedTickets = [];
+		} finally {
+			loadingRelated = false;
+		}
+	}
 
 	async function addComment() {
 		if (!ticket || !newCommentBody.trim() || savingComment) return;
@@ -295,6 +322,30 @@
 								</Button>
 							</div>
 						</div>
+					</div>
+
+					<div class="mt-8 border-t border-slate-100 pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Related Tickets</p>
+						{#if loadingRelated}
+							<p class="text-xs text-slate-400 animate-pulse">Finding similar tickets...</p>
+						{:else if relatedTickets.length === 0}
+							<p class="text-xs text-slate-400 italic">No similar tickets found.</p>
+						{:else}
+							<div class="space-y-2">
+								{#each relatedTickets as rel}
+									<button
+										class="w-full text-left rounded-lg border border-slate-200 bg-white p-3 shadow-xs hover:border-indigo-300 hover:bg-indigo-50 transition-colors group"
+										onclick={() => onSelect?.(new CustomEvent('select', { detail: { id: rel.id } }))}
+									>
+										<div class="flex items-center justify-between gap-2">
+											<span class="text-xs font-mono font-bold text-slate-500 group-hover:text-indigo-600">{rel.id}</span>
+											<Badge variant="outline" class="text-[10px] scale-90 origin-right">Score: {rel.score.toFixed(2)}</Badge>
+										</div>
+										<p class="mt-1 text-sm font-medium text-slate-800 line-clamp-1">{rel.title}</p>
+									</button>
+								{/each}
+							</div>
+						{/if}
 					</div>
 
 					<div class="mt-8 border-t border-slate-100 pt-6">

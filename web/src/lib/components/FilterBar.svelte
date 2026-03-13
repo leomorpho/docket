@@ -10,7 +10,8 @@
 		selectedStates,
 		selectedLabel,
 		maxPriority,
-		searchQuery = $bindable('')
+		searchQuery = $bindable(''),
+		semanticSearch = $bindable(false)
 	} = $props<{
 		stateOptions: { key: string; label: string }[];
 		labelOptions: string[];
@@ -18,6 +19,7 @@
 		selectedLabel: string;
 		maxPriority: number;
 		searchQuery?: string;
+		semanticSearch?: boolean;
 	}>();
 
 	const dispatch = createEventDispatcher<{
@@ -44,7 +46,7 @@
 
 <div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
 	<div class="flex flex-wrap items-center gap-2">
-		<div class="relative flex-1 min-w-[240px]">
+		<div class="relative flex-1 min-w-[240px] flex items-center gap-2">
 			<input
 				bind:this={searchInput}
 				type="text"
@@ -52,6 +54,10 @@
 				class="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
 				bind:value={searchQuery}
 			/>
+			<div class="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md h-9 shrink-0">
+				<input type="checkbox" id="semantic-toggle" bind:checked={semanticSearch} class="h-4 w-4 rounded border-slate-300 text-indigo-600" />
+				<label for="semantic-toggle" class="text-xs font-medium text-slate-600 cursor-pointer select-none">Semantic</label>
+			</div>
 		</div>
 		{#each stateOptions as state}
 			<Button
