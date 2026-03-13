@@ -858,7 +858,7 @@
     },
     "TKT-170": {
       "title": "Add authoring-time guidance and templates that help tickets satisfy the Ready Contract",
-      "state": "backlog",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-177"
     },
@@ -965,7 +965,7 @@
     },
     "TKT-188": {
       "title": "Extend ticket acceptance criteria for human verification preserved behavior and applicability",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-174"
     },

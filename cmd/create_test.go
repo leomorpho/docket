@@ -156,6 +156,36 @@ func TestCreateCmd_WarnsOnShortDescription(t *testing.T) {
 	}
 }
 
+func TestCreateCmd_ReadyContractHints(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(errOut)
+	rootCmd.SetArgs([]string{"create", "--title", "Needs guidance", "--desc", "This description is intentionally long enough to avoid the short-description warning but omits readiness sections for guidance checks."})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	got := strings.ToLower(errOut.String())
+	if !strings.Contains(got, "likely paths") || !strings.Contains(got, "verify commands") || !strings.Contains(got, "out of scope") {
+		t.Fatalf("expected ready-contract guidance warnings, got: %s", errOut.String())
+	}
+
+	errOut.Reset()
+	rootCmd.SetArgs([]string{"create", "--title", "Has guidance", "--desc", "Likely paths: cmd/create.go.\nVerify commands: go test ./cmd/...\nOut of scope: scheduler behavior.\nAdditional implementation context to satisfy authoring expectations."})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed with guidance sections: %v", err)
+	}
+	got = strings.ToLower(errOut.String())
+	if strings.Contains(got, "likely paths") || strings.Contains(got, "verify commands") || strings.Contains(got, "out of scope") {
+		t.Fatalf("did not expect guidance warnings when sections are present, got: %s", errOut.String())
+	}
+}
+
 func TestCreateCmd_AutoInjectACDefaultsTypescript(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

@@ -76,6 +76,9 @@ var createCmd = &cobra.Command{
 		if len(strings.TrimSpace(desc)) < 50 {
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: description is under 50 characters. Add more context so another agent can execute this without clarification.\n")
 		}
+		for _, hint := range readyContractHints(desc) {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", hint)
+		}
 
 		// 4. Parse labels
 		var labelList []string
@@ -148,6 +151,21 @@ func resetCreateGlobals() {
 	createAC = nil
 	noACDefaults = false
 	acTemplate = ""
+}
+
+func readyContractHints(description string) []string {
+	lower := strings.ToLower(description)
+	var hints []string
+	if !strings.Contains(lower, "likely paths") {
+		hints = append(hints, "add a 'Likely paths:' section to point implementers at expected files")
+	}
+	if !strings.Contains(lower, "verify command") && !strings.Contains(lower, "verify commands") {
+		hints = append(hints, "add 'Verify commands:' with explicit checks (for example `go test ./...`)")
+	}
+	if !strings.Contains(lower, "out of scope") {
+		hints = append(hints, "add an 'Out of scope:' section to prevent requirement drift")
+	}
+	return hints
 }
 
 func resetCreateFlagChanges(cmd *cobra.Command) {
