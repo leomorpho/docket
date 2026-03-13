@@ -911,7 +911,7 @@
     },
     "TKT-179": {
       "title": "Add a keystore provider interface with an encrypted file backend",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-173"
     },
