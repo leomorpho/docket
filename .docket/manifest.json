@@ -734,17 +734,20 @@
     "TKT-147": {
       "title": "Force MCP Usage: Implement signature-based write protection",
       "state": "todo",
-      "priority": 2
+      "priority": 2,
+      "parent": "TKT-173"
     },
     "TKT-148": {
       "title": "Implement `docket fix` to repair ticket signatures and teach agents",
       "state": "done",
-      "priority": 3
+      "priority": 3,
+      "parent": "TKT-173"
     },
     "TKT-149": {
       "title": "Enhance pre-commit validation with 'Tutor' feedback",
       "state": "todo",
-      "priority": 3
+      "priority": 3,
+      "parent": "TKT-173"
     },
     "TKT-150": {
       "title": "Transparent Isolation: Automatically create Git worktrees for agents",
@@ -864,6 +867,221 @@
       "state": "done",
       "priority": 1,
       "parent": "TKT-162"
+    },
+    "TKT-172": {
+      "title": "[Epic] Harden local trust, workflow governance, and agent execution",
+      "state": "backlog",
+      "priority": 1
+    },
+    "TKT-173": {
+      "title": "[Epic] Build the local trust anchor and secure mode",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-172"
+    },
+    "TKT-174": {
+      "title": "[Epic] Govern workflow policy and privileged state transitions",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-172"
+    },
+    "TKT-175": {
+      "title": "[Epic] Add repo-native signed state and rollback recovery",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-172"
+    },
+    "TKT-176": {
+      "title": "[Epic] Enforce agent worktrees and execution traceability",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-172"
+    },
+    "TKT-177": {
+      "title": "[Epic] Improve AI orchestration, context discipline, and docs",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-172"
+    },
+    "TKT-178": {
+      "title": "Require DOCKET_HOME and define the Docket home contract",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-173"
+    },
+    "TKT-179": {
+      "title": "Add a keystore provider interface with an encrypted file backend",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-173"
+    },
+    "TKT-180": {
+      "title": "Add password-based secure mode with TTL and explicit privileged confirmations",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-173"
+    },
+    "TKT-181": {
+      "title": "Namespace per-repo trust anchors under stable repo IDs in DOCKET_HOME",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-173"
+    },
+    "TKT-182": {
+      "title": "Add key enrollment, rotation, and recovery primitives for local-first identities",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-173"
+    },
+    "TKT-183": {
+      "title": "Add a signed workflow.lock format for approved runtime policy",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-184": {
+      "title": "Gate workflow activation behind secure mode and pin runs to approved lock hashes",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-185": {
+      "title": "Split docket into agent-safe and secure/admin capability surfaces",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-186": {
+      "title": "Enforce human-only done and other privileged state transitions",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-187": {
+      "title": "Add reserved workflow semantics for review verification and terminal states",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-188": {
+      "title": "Extend ticket acceptance criteria for human verification preserved behavior and applicability",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-189": {
+      "title": "Move privileged UI mutations onto the secure or admin surface",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-190": {
+      "title": "Build semantic diff views for workflow and state transitions",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-191": {
+      "title": "Define a signed event ledger format and append rules for privileged runtime events",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-175"
+    },
+    "TKT-192": {
+      "title": "Verify ledger chain integrity and signatures on privileged mutations",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-175"
+    },
+    "TKT-193": {
+      "title": "Store the trusted ledger head outside the repo and detect rollback",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-175"
+    },
+    "TKT-194": {
+      "title": "Build repair and re-anchor tooling from Git history and valid signed events",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-175"
+    },
+    "TKT-195": {
+      "title": "Audit why existing automatic worktree behavior is not visible in normal agent flows",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-176"
+    },
+    "TKT-196": {
+      "title": "Require Docket-created worktrees for agent-managed runs and fail closed without fallback",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-176"
+    },
+    "TKT-197": {
+      "title": "Add run manifests that bind ticket actor worktree and workflow hash",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-176"
+    },
+    "TKT-198": {
+      "title": "Enforce commit-to-ticket linkage for Docket-managed runs before review or QA",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-176"
+    },
+    "TKT-199": {
+      "title": "Add Docket-native enforcement hooks for worktree review QA and privileged gates",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-176"
+    },
+    "TKT-200": {
+      "title": "Add capability-tier model routing and a provider adapter contract",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-201": {
+      "title": "Map provider models to tiers and route work by task size risk and failure count",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-202": {
+      "title": "Reset context on ticket worktree and run boundaries and persist structured resume artifacts",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-203": {
+      "title": "Generate Docket-managed instruction packs from approved workflow policy",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-204": {
+      "title": "Add lightweight learning capture with human approval and scoped replay",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-177"
+    },
+    "TKT-205": {
+      "title": "Document the security model DOCKET_HOME setup workflow governance and recovery",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-206": {
+      "title": "Evaluate modes versus specialized agents after hooks and instruction packs land",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-177"
+    },
+    "TKT-207": {
+      "title": "Spike: design a ticket-scope security audit hook and artifact",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-177"
     }
   }
 }
