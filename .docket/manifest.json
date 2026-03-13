@@ -971,7 +971,7 @@
     },
     "TKT-189": {
       "title": "Move privileged UI mutations onto the secure or admin surface",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-174"
     },

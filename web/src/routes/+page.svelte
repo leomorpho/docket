@@ -45,6 +45,8 @@
 	);
 
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
+	type MutationResult = { ok: boolean; error?: string };
+	type StateUpdateOptions = { approvalTicket?: string; confirmed?: boolean };
 	let selectedStates = $state(new Set<string>());
 	let selectedStatesInitialized = $state(false);
 	let selectedLabel = $state('');
@@ -57,6 +59,9 @@
 	let searchQuery = $state('');
 	let filterBar = $state<ReturnType<typeof FilterBar> | null>(null);
 	let createModalOpen = $state(false);
+	let secureActive = $state(false);
+	let secureExpiresAt = $state('');
+	let secureStatusError = $state('');
 
 	onMount(() => {
 		const handleKeydown = (e: KeyboardEvent) => {
@@ -97,6 +102,10 @@
 		if (data.activeProjectId) {
 			localStorage.setItem('docket_active_project', data.activeProjectId);
 		}
+	});
+
+	$effect(() => {
+		void refreshSecureStatus();
 	});
 
 	$effect(() => {
@@ -237,13 +246,49 @@
 	}
 
 	type MutationKind = 'state' | 'title' | 'desc';
-	type MutationResult = { ok: boolean; error?: string };
 
-	async function mutateTicket(ticketID: string, kind: MutationKind, value: string): Promise<MutationResult> {
-		const response = await fetch(`/api/tickets/${ticketID}`, {
-			method: 'PATCH',
+	async function refreshSecureStatus() {
+		const query = data.activeProjectId ? `?projectId=${encodeURIComponent(data.activeProjectId)}` : '';
+		try {
+			const response = await fetch(`/api/secure/status${query}`);
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok || !payload.ok || !payload.secure) {
+				secureActive = false;
+				secureExpiresAt = '';
+				secureStatusError = payload.error ?? 'Unable to read secure mode status.';
+				return;
+			}
+			secureActive = Boolean(payload.secure.active);
+			secureExpiresAt = typeof payload.secure.expiresAt === 'string' ? payload.secure.expiresAt : '';
+			secureStatusError = typeof payload.secure.error === 'string' ? payload.secure.error : '';
+		} catch (err: any) {
+			secureActive = false;
+			secureExpiresAt = '';
+			secureStatusError = err?.message ?? 'Unable to read secure mode status.';
+		}
+	}
+
+	async function mutateTicket(
+		ticketID: string,
+		kind: MutationKind,
+		value: string,
+		options?: StateUpdateOptions
+	): Promise<MutationResult> {
+		const privileged = kind === 'state' && (value === 'done' || value === 'archived');
+		const endpoint = privileged ? `/api/tickets/${ticketID}/privileged` : `/api/tickets/${ticketID}`;
+		const method = privileged ? 'POST' : 'PATCH';
+		const body = privileged
+			? {
+					state: value,
+					approvalTicket: options?.approvalTicket ?? ticketID,
+					confirm: Boolean(options?.confirmed),
+					projectId: data.activeProjectId
+				}
+			: { kind, value, projectId: data.activeProjectId };
+		const response = await fetch(endpoint, {
+			method,
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ kind, value, projectId: data.activeProjectId })
+			body: JSON.stringify(body)
 		});
 		const payload = (await response.json().catch(() => ({}))) as MutationResult;
 		if (!response.ok || !payload.ok) {
@@ -252,11 +297,12 @@
 		const url = new URL($page.url);
 		if (data.activeProjectId) url.searchParams.set('project', data.activeProjectId);
 		await goto(url.toString(), { invalidateAll: true });
+		await refreshSecureStatus();
 		return { ok: true };
 	}
 
-	function updateState(ticketID: string, value: string) {
-		return mutateTicket(ticketID, 'state', value);
+	function updateState(ticketID: string, value: string, options?: StateUpdateOptions) {
+		return mutateTicket(ticketID, 'state', value, options);
 	}
 
 	function updateTitle(ticketID: string, value: string) {
@@ -285,6 +331,7 @@
 		const url = new URL($page.url);
 		if (data.activeProjectId) url.searchParams.set('project', data.activeProjectId);
 		await goto(url.toString(), { invalidateAll: true });
+		await refreshSecureStatus();
 		return { ok: true };
 	}
 
@@ -305,6 +352,7 @@
 		const url = new URL($page.url);
 		if (data.activeProjectId) url.searchParams.set('project', data.activeProjectId);
 		await goto(url.toString(), { invalidateAll: true });
+		await refreshSecureStatus();
 		return { ok: true };
 	}
 </script>
@@ -401,6 +449,9 @@
 		onUpdateDescription={updateDescription}
 		onUpdateAC={updateAC}
 		onAddComment={addComment}
+		secureActive={secureActive}
+		secureExpiresAt={secureExpiresAt}
+		secureStatusError={secureStatusError}
 		onSelect={(e) => {
 			const t = data.tickets.find((t) => t.id === e.detail.id);
 			if (t) onCardSelect(t);

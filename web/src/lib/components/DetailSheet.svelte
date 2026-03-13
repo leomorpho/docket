@@ -20,6 +20,7 @@
 
 	type MutationResult = { ok: boolean; error?: string };
 	type StateOption = { key: string; label: string };
+	type StateUpdateOptions = { approvalTicket?: string; confirmed?: boolean };
 
 	let {
 		ticket,
@@ -30,6 +31,9 @@
 		onUpdateDescription,
 		onUpdateAC,
 		onAddComment,
+		secureActive = false,
+		secureExpiresAt = '',
+		secureStatusError = '',
 		relations = [],
 		onSelect
 	} = $props<{
@@ -37,11 +41,14 @@
 		open: boolean;
 		stateOptions: StateOption[];
 		relations: Relation[];
-		onUpdateState: (ticketID: string, state: string) => Promise<MutationResult>;
+		onUpdateState: (ticketID: string, state: string, options?: StateUpdateOptions) => Promise<MutationResult>;
 		onUpdateTitle: (ticketID: string, title: string) => Promise<MutationResult>;
 		onUpdateDescription: (ticketID: string, description: string) => Promise<MutationResult>;
 		onUpdateAC: (ticketID: string, acDesc: string, evidence: string) => Promise<MutationResult>;
 		onAddComment: (ticketID: string, body: string) => Promise<MutationResult>;
+		secureActive?: boolean;
+		secureExpiresAt?: string;
+		secureStatusError?: string;
 		onSelect?: (e: CustomEvent<{ id: string }>) => void;
 	}>();
 
@@ -59,6 +66,8 @@
 	let savingDescription = $state(false);
 	let errorMessage = $state('');
 	let successMessage = $state('');
+	let approvalTicket = $state('');
+	let confirmPrivileged = $state(false);
 
 	$effect(() => {
 		if (!ticket) {
@@ -70,9 +79,13 @@
 		stateDraft = ticket.state;
 		titleDraft = ticket.title;
 		descriptionDraft = extractDescription(ticket.body);
+		approvalTicket = ticket.id;
+		confirmPrivileged = false;
 		errorMessage = '';
 		successMessage = '';
 	});
+
+	const stateIsPrivileged = $derived(stateDraft === 'done' || stateDraft === 'archived');
 
 	function extractDescription(markdown: string): string {
 		const lines = markdown.split('\n');
@@ -85,10 +98,28 @@
 
 	async function saveState() {
 		if (!ticket || !stateDraft || stateDraft === ticket.state || savingState) return;
+		if (stateIsPrivileged) {
+			if (!confirmPrivileged) {
+				errorMessage = 'Privileged transition requires explicit confirmation.';
+				successMessage = '';
+				return;
+			}
+			if (!approvalTicket.trim()) {
+				errorMessage = 'Approval ticket is required for privileged transitions.';
+				successMessage = '';
+				return;
+			}
+		}
 		savingState = true;
 		errorMessage = '';
 		successMessage = '';
-		const result = await onUpdateState(ticket.id, stateDraft);
+		const result = await onUpdateState(
+			ticket.id,
+			stateDraft,
+			stateIsPrivileged
+				? { approvalTicket: approvalTicket.trim(), confirmed: confirmPrivileged }
+				: undefined
+		);
 		savingState = false;
 		if (!result.ok) {
 			errorMessage = result.error ?? 'Failed to update state.';
@@ -222,8 +253,41 @@
 							</SelectContent>
 						</Select>
 						<Button size="sm" variant="secondary" onclick={saveState} disabled={savingState}>
-							{savingState ? 'Updating...' : 'Update state'}
+							{savingState ? 'Updating...' : stateIsPrivileged ? 'Request privileged update' : 'Update state'}
 						</Button>
+					</div>
+					{#if stateIsPrivileged}
+						<div class="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+							<p class="font-medium text-amber-900">Privileged transition required</p>
+							<p class="mt-1 text-amber-800">
+								This change must run through secure mode with explicit approval.
+							</p>
+							<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+								<input
+									class="h-9 rounded-md border border-amber-200 bg-white px-3 text-sm"
+									value={approvalTicket}
+									oninput={(e) => (approvalTicket = (e.currentTarget as HTMLInputElement).value)}
+									placeholder="Approval ticket (TKT-###)"
+								/>
+								<label class="flex items-center gap-2 text-xs font-medium text-amber-900">
+									<input
+										type="checkbox"
+										checked={confirmPrivileged}
+										onchange={(e) => (confirmPrivileged = (e.currentTarget as HTMLInputElement).checked)}
+									/>
+									I explicitly approve this privileged transition.
+								</label>
+							</div>
+						</div>
+					{/if}
+					<div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+						<p>
+							Secure mode: <span class={secureActive ? 'text-emerald-700' : 'text-red-700'}>{secureActive ? 'active' : 'inactive'}</span>
+							{#if secureActive && secureExpiresAt} (expires: {secureExpiresAt}){/if}
+						</p>
+						{#if secureStatusError}
+							<p class="mt-1 text-red-700">{secureStatusError}</p>
+						{/if}
 					</div>
 					{#if errorMessage}
 						<p class="text-xs text-red-600">{errorMessage}</p>

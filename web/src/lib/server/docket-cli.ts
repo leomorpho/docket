@@ -24,6 +24,19 @@ export type MutationResult = {
 	error: string;
 };
 
+export type SecureStatus = {
+	active: boolean;
+	expiresAt?: string;
+	error?: string;
+};
+
+type ExecResult = {
+	stdout: string;
+	stderr: string;
+};
+
+type ExecRunner = (docketBin: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }) => Promise<ExecResult>;
+
 function docketRoot(projectId?: string): string {
 	if (projectId) {
 		const project = getProject(projectId);
@@ -51,6 +64,10 @@ function safeErrorMessage(stdout: string, stderr: string, fallback: string): str
 	return firstLine.length > 220 ? `${firstLine.slice(0, 220)}...` : firstLine;
 }
 
+function isPrivilegedState(next: string): boolean {
+	return next === 'done' || next === 'archived';
+}
+
 function validateMutation(id: string, mutation: TicketMutation, allowedStates: Set<string>): string | null {
 	if (!ticketIDRe.test(id)) {
 		return 'Invalid ticket ID.';
@@ -59,7 +76,7 @@ function validateMutation(id: string, mutation: TicketMutation, allowedStates: S
 		const next = mutation.value.trim();
 		if (!next) return 'State is required.';
 		if (!allowedStates.has(next)) return `State "${next}" is not valid.`;
-		if (next === 'done' || next === 'archived') {
+		if (isPrivilegedState(next)) {
 			return `State "${next}" is privileged. Use the secure/admin workflow path instead.`;
 		}
 	}
@@ -67,6 +84,56 @@ function validateMutation(id: string, mutation: TicketMutation, allowedStates: S
 		return 'Title cannot be empty.';
 	}
 	return null;
+}
+
+let execRunner: ExecRunner = async (docketBin, args, opts) =>
+	execFileAsync(docketBin, args, {
+		cwd: opts.cwd,
+		timeout: 10_000,
+		maxBuffer: 1024 * 1024,
+		env: opts.env
+	});
+
+async function runDocket(root: string, args: string[]): Promise<ExecResult> {
+	const docketBin = resolveDocketBinary(root);
+	return execRunner(docketBin, args, { cwd: root, env: { ...process.env, DOCKET_DIR: root } });
+}
+
+export function __setDocketExecRunnerForTests(next: ExecRunner): void {
+	execRunner = next;
+}
+
+export function __resetDocketExecRunnerForTests(): void {
+	execRunner = async (docketBin, args, opts) =>
+		execFileAsync(docketBin, args, {
+			cwd: opts.cwd,
+			timeout: 10_000,
+			maxBuffer: 1024 * 1024,
+			env: opts.env
+		});
+}
+
+export async function getSecureModeStatus(projectId?: string): Promise<SecureStatus> {
+	const root = docketRoot(projectId);
+	try {
+		const { stdout } = await runDocket(root, ['secure', 'status']);
+		const out = stdout.trim();
+		if (/inactive/i.test(out)) {
+			return { active: false };
+		}
+		const match = out.match(/\(expires:\s*([^)]+)\)/i);
+		return {
+			active: /active/i.test(out),
+			expiresAt: match?.[1]?.trim()
+		};
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+		const msg = safeErrorMessage(err.stdout ?? '', err.stderr ?? '', 'Failed to query secure mode state.');
+		if (/inactive/i.test(msg)) {
+			return { active: false };
+		}
+		return { active: false, error: msg };
+	}
 }
 
 export async function runTicketMutation(
@@ -81,7 +148,6 @@ export async function runTicketMutation(
 	}
 
 	const root = docketRoot(projectId);
-	const docketBin = resolveDocketBinary(root);
 	let args: string[] = [];
 	
 	if (mutation.kind === 'ac-complete') {
@@ -105,12 +171,7 @@ export async function runTicketMutation(
 	}
 
 	try {
-		const { stdout, stderr } = await execFileAsync(docketBin, args, {
-			cwd: root,
-			timeout: 10_000,
-			maxBuffer: 1024 * 1024,
-			env: { ...process.env, DOCKET_DIR: root }
-		});
+		const { stdout } = await runDocket(root, args);
 		const parsed = JSON.parse(stdout) as { id?: string; updated_fields?: unknown };
 		const updatedFields = Array.isArray(parsed.updated_fields)
 			? parsed.updated_fields.filter((v): v is string => typeof v === 'string')
@@ -125,6 +186,70 @@ export async function runTicketMutation(
 		return {
 			ok: false,
 			error: safeErrorMessage(err.stdout ?? '', err.stderr ?? '', 'Failed to update ticket.')
+		};
+	}
+}
+
+export async function runPrivilegedStateMutation(
+	id: string,
+	state: string,
+	allowedStates: Set<string>,
+	approvalTicket: string,
+	approved: boolean,
+	projectId?: string
+): Promise<MutationResult> {
+	if (!ticketIDRe.test(id)) {
+		return { ok: false, error: 'Invalid ticket ID.' };
+	}
+	const next = state.trim();
+	if (!next) {
+		return { ok: false, error: 'State is required.' };
+	}
+	if (!allowedStates.has(next)) {
+		return { ok: false, error: `State "${next}" is not valid.` };
+	}
+	if (!isPrivilegedState(next)) {
+		return { ok: false, error: `State "${next}" is not privileged.` };
+	}
+	if (!ticketIDRe.test(approvalTicket)) {
+		return { ok: false, error: 'Invalid approval ticket ID.' };
+	}
+	if (!approved) {
+		return { ok: false, error: 'Privileged transition requires explicit confirmation.' };
+	}
+
+	const secure = await getSecureModeStatus(projectId);
+	if (!secure.active) {
+		return { ok: false, error: secure.error ?? 'Secure mode is inactive. Unlock secure mode before privileged changes.' };
+	}
+
+	const root = docketRoot(projectId);
+	try {
+		const { stdout } = await runDocket(root, [
+			'update',
+			id,
+			'--state',
+			next,
+			'--ticket',
+			approvalTicket,
+			'--yes',
+			'--format',
+			'json'
+		]);
+		const parsed = JSON.parse(stdout) as { id?: string; updated_fields?: unknown };
+		const updatedFields = Array.isArray(parsed.updated_fields)
+			? parsed.updated_fields.filter((v): v is string => typeof v === 'string')
+			: [];
+		return {
+			ok: true,
+			id: typeof parsed.id === 'string' ? parsed.id : id,
+			updatedFields
+		};
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+		return {
+			ok: false,
+			error: safeErrorMessage(err.stdout ?? '', err.stderr ?? '', 'Failed to run privileged mutation.')
 		};
 	}
 }
