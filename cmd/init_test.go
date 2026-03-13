@@ -11,7 +11,7 @@ import (
 
 func TestInitCmd(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Set global repo flag for the command
 	repo = tmpDir
 	format = "human"
@@ -26,6 +26,9 @@ func TestInitCmd(t *testing.T) {
 
 	if !strings.Contains(b.String(), "Initialized docket") {
 		t.Errorf("expected 'Initialized docket' in output, got: %s", b.String())
+	}
+	if !strings.Contains(b.String(), "DOCKET_HOME") {
+		t.Errorf("expected DOCKET_HOME setup hint in output, got: %s", b.String())
 	}
 
 	cfgPath := filepath.Join(tmpDir, ".docket", "config.json")
@@ -66,5 +69,17 @@ func TestInitCmd(t *testing.T) {
 	}
 	if res["status"] != "already initialized" {
 		t.Errorf("expected status 'already initialized', got: %s", res["status"])
+	}
+}
+
+func TestInitHelpMentionsDocketHome(t *testing.T) {
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"init", "--help"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("init --help failed: %v", err)
+	}
+	if !strings.Contains(b.String(), "DOCKET_HOME") {
+		t.Fatalf("expected init help to mention DOCKET_HOME, got: %s", b.String())
 	}
 }

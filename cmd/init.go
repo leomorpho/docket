@@ -14,6 +14,10 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize docket in a repository",
+	Long: `Initialize docket in a repository.
+
+Secure features require DOCKET_HOME to be set to a writable directory outside the repo,
+for example: DOCKET_HOME=$HOME/.docket-home`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfgPath := ticket.ConfigPath(repo)
 		if _, err := os.Stat(cfgPath); err == nil {
@@ -65,6 +69,7 @@ var initCmd = &cobra.Command{
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized docket in %s/\n\n", docketDir)
 			fmt.Fprintln(cmd.OutOrStdout(), "Next steps:")
+			fmt.Fprintln(cmd.OutOrStdout(), "  export DOCKET_HOME=$HOME/.docket-home")
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket create --title \"My first ticket\"")
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket board")
 		}

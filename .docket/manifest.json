@@ -905,7 +905,7 @@
     },
     "TKT-178": {
       "title": "Require DOCKET_HOME and define the Docket home contract",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-173"
     },
