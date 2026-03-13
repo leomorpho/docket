@@ -852,7 +852,7 @@
     },
     "TKT-169": {
       "title": "Improve DX: Add shorthand command aliases (ls, st, bd)",
-      "state": "backlog",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-162"
     },
@@ -1067,7 +1067,7 @@
     },
     "TKT-205": {
       "title": "Document the security model DOCKET_HOME setup workflow governance and recovery",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-177"
     },
