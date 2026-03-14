@@ -1037,7 +1037,7 @@
     },
     "TKT-200": {
       "title": "Add capability-tier model routing and a provider adapter contract",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-177"
     },
