@@ -870,12 +870,12 @@
     },
     "TKT-172": {
       "title": "[Epic] Harden local trust, workflow governance, and agent execution",
-      "state": "backlog",
+      "state": "todo",
       "priority": 1
     },
     "TKT-173": {
       "title": "[Epic] Build the local trust anchor and secure mode",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-172"
     },
