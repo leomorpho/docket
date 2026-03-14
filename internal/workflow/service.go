@@ -8,15 +8,16 @@ import (
 
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/vcs"
 )
 
 type WorkflowManager struct {
 	store   store.Backend
-	vcs     VCSProvider
+	vcs     vcs.Provider
 	claimer ClaimManager
 }
 
-func NewManager(s store.Backend, v VCSProvider, c ClaimManager) *WorkflowManager {
+func NewManager(s store.Backend, v vcs.Provider, c ClaimManager) *WorkflowManager {
 	return &WorkflowManager{
 		store:   s,
 		vcs:     v,

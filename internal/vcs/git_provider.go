@@ -10,6 +10,8 @@ type GitProvider struct {
 	repoRoot string
 }
 
+var _ Provider = (*GitProvider)(nil)
+
 func NewGitProvider(repoRoot string) *GitProvider {
 	return &GitProvider{repoRoot: repoRoot}
 }
