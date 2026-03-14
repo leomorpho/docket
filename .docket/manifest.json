@@ -875,7 +875,7 @@
     },
     "TKT-173": {
       "title": "[Epic] Build the local trust anchor and secure mode",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-172"
     },
