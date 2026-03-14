@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/leomorpho/docket/internal/mcp"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +18,13 @@ var serveCmd = &cobra.Command{
 		if !serveMCP {
 			return fmt.Errorf("currently only --mcp is supported")
 		}
-		return mcp.ServeMCP(os.Stdin, cmd.OutOrStdout(), repo)
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			return err
+		}
+		deps := newRuntimeDeps(repo)
+		mcpDeps := mcp.NewDispatchDeps(repo, deps.store, deps.workflow, deps.claimer, cfg)
+		return mcp.ServeMCPWithDeps(os.Stdin, cmd.OutOrStdout(), mcpDeps)
 	},
 }
 

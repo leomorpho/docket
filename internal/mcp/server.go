@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/vcs"
@@ -98,13 +99,17 @@ func buildDispatchDeps(repoRoot string) (*DispatchDeps, error) {
 	}
 	s := local.New(repoRoot)
 	claimMgr := claim.NewLocalClaimManager(repoRoot)
+	return NewDispatchDeps(repoRoot, s, workflow.NewManager(s, vcs.NewGitProvider(repoRoot), claimMgr), claimMgr, cfg), nil
+}
+
+func NewDispatchDeps(repoRoot string, s store.Backend, wf WorkflowRunner, claimMgr claim.Manager, cfg *ticket.Config) *DispatchDeps {
 	return &DispatchDeps{
 		RepoRoot: repoRoot,
 		Store:    s,
-		Workflow: workflow.NewManager(s, vcs.NewGitProvider(repoRoot), claimMgr),
+		Workflow: wf,
 		Claimer:  &claimLookupAdapter{manager: claimMgr},
 		Config:   cfg,
-	}, nil
+	}
 }
 
 func writeResponse(w *bufio.Writer, resp Response) error {

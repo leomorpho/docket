@@ -846,7 +846,7 @@
     },
     "TKT-168": {
       "title": "Dependency Injection Wiring in CLI",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 10,
       "parent": "TKT-162"
     },

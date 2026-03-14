@@ -6,14 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
-	"github.com/leomorpho/docket/internal/vcs"
-	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +25,8 @@ var startCmd = &cobra.Command{
 claims it, creates a worktree for it if needed, and transitions it to 'in-progress'.
 In --auto mode, it will continue to the next ticket after each completion.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		s := local.New(repo)
+		deps := newRuntimeDeps(repo)
+		s := deps.store
 		ctx := context.Background()
 
 		cfg, err := ticket.LoadConfig(repo)
@@ -60,17 +58,12 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 			return fmt.Errorf("loading ticket details: %w", err)
 		}
 
-		// 2. Start the ticket using WorkflowManager
-		vcsProv := vcs.NewGitProvider(repo)
-		claimMgr := claim.NewLocalClaimManager(repo)
-		wf := workflow.NewManager(s, vcsProv, claimMgr)
-
 		actor := detectActor()
 		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
 			actor = "agent:" + agentID
 		}
 
-		t, worktreePath, err := wf.StartTask(ctx, t.ID, actor, cfg)
+		t, worktreePath, err := deps.workflow.StartTask(ctx, t.ID, actor, cfg)
 		if err != nil {
 			return err
 		}

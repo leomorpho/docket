@@ -10,13 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
-	"github.com/leomorpho/docket/internal/vcs"
-	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -130,23 +127,21 @@ var updateCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
 
 			// Use WorkflowManager for complex transitions (in-progress, done, etc.)
-			vcsProv := vcs.NewGitProvider(repo)
-			claimMgr := claim.NewLocalClaimManager(repo)
-			wf := workflow.NewManager(s, vcsProv, claimMgr)
+			deps := newRuntimeDeps(repo)
 
 			if newState == "in-progress" {
 				actor := detectActor()
 				if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
 					actor = "agent:" + agentID
 				}
-				_, _, err := wf.StartTask(ctx, t.ID, actor, cfg)
+				_, _, err := deps.workflow.StartTask(ctx, t.ID, actor, cfg)
 				if err != nil {
 					return fmt.Errorf("starting task: %w", err)
 				}
 				// Reload ticket after StartTask
 				t, _ = s.GetTicket(ctx, t.ID)
 			} else if newState == "done" || newState == "archived" {
-				_, err := wf.FinishTask(ctx, t.ID, cfg)
+				_, err := deps.workflow.FinishTask(ctx, t.ID, cfg)
 				if err != nil {
 					return fmt.Errorf("finishing task: %w", err)
 				}
