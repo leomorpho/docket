@@ -822,25 +822,25 @@
     },
     "TKT-164": {
       "title": "Abstract Git Operations into vcs.Provider Interface",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-165": {
       "title": "Abstract Claims into claim.Manager Interface",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-166": {
       "title": "Refactor MCP Handlers for Dependency Injection",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-167": {
       "title": "Implement Command Pattern for Ticket Mutations",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 10,
       "parent": "TKT-162"
     },
@@ -1037,7 +1037,7 @@
     },
     "TKT-200": {
       "title": "Add capability-tier model routing and a provider adapter contract",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },
