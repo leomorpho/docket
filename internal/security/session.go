@@ -116,6 +116,10 @@ func (m *SessionManager) RequireActive(repoRoot string) error {
 	if !active {
 		return ErrSecureModeInactive
 	}
+	ns := NewRepoNamespaceStore(m.docketHome)
+	if err := ns.VerifyAndAdvanceTrustedLedgerHead(repoRoot); err != nil {
+		return fmt.Errorf("trusted ledger guard failed: %w", err)
+	}
 	return nil
 }
 

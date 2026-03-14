@@ -995,7 +995,7 @@
     },
     "TKT-193": {
       "title": "Store the trusted ledger head outside the repo and detect rollback",
-      "state": "todo",
+      "state": "in-review",
       "priority": 3,
       "parent": "TKT-175"
     },

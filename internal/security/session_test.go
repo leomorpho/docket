@@ -88,3 +88,56 @@ func TestConfirmPrivilegedAction(t *testing.T) {
 		t.Fatalf("expected prompt to identify ticket, got: %s", out.String())
 	}
 }
+
+func TestRequireActiveRejectsRolledBackLedger(t *testing.T) {
+	home := t.TempDir()
+	repoRoot := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	ks := NewFileKeystore(home)
+	if err := ks.Create("pw-1"); err != nil {
+		t.Fatalf("create keystore failed: %v", err)
+	}
+	ledger := NewEventLedger(repoRoot, ks, "dev-test")
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:   EventRunStarted,
+		RepoID: "drid_test",
+		Actor:  "agent:test",
+	}); err != nil {
+		t.Fatalf("append first event failed: %v", err)
+	}
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:   EventRunStopped,
+		RepoID: "drid_test",
+		Actor:  "agent:test",
+	}); err != nil {
+		t.Fatalf("append second event failed: %v", err)
+	}
+
+	ns := NewRepoNamespaceStore(home)
+	if err := ns.VerifyAndAdvanceTrustedLedgerHead(repoRoot); err != nil {
+		t.Fatalf("seed trusted head failed: %v", err)
+	}
+
+	data, err := os.ReadFile(LedgerPath(repoRoot))
+	if err != nil {
+		t.Fatalf("read ledger failed: %v", err)
+	}
+	lines := bytesSplitLines(data)
+	if len(lines) != 2 {
+		t.Fatalf("expected two ledger events, got %d", len(lines))
+	}
+	if err := os.WriteFile(LedgerPath(repoRoot), append(lines[0], '\n'), 0o644); err != nil {
+		t.Fatalf("write rolled-back ledger failed: %v", err)
+	}
+
+	mgr := NewSessionManager(home)
+	if err := mgr.Unlock(repoRoot, "pw-1", time.Second); err != nil {
+		t.Fatalf("unlock failed: %v", err)
+	}
+	if err := mgr.RequireActive(repoRoot); !errors.Is(err, ErrLedgerHeadRollback) {
+		t.Fatalf("expected rollback rejection in privileged flow, got: %v", err)
+	}
+}
