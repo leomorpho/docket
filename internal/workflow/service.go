@@ -38,14 +38,12 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 	}
 
 	newState := ticket.State("in-progress")
-	if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
-		return nil, "", fmt.Errorf("invalid transition: %w", err)
+	startCmd := UpdateStateCmd{
+		To:           newState,
+		SetStartedAt: true,
 	}
-
-	t.State = newState
-	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
-	if t.StartedAt.IsZero() {
-		t.StartedAt = t.UpdatedAt
+	if err := startCmd.Validate(t, cfg); err != nil {
+		return nil, "", fmt.Errorf("invalid transition: %w", err)
 	}
 
 	isAgentManaged := strings.HasPrefix(agentID, "agent:")
@@ -79,6 +77,7 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 		return nil, "", fmt.Errorf("agent-managed run for %s rejected: run is not bound to a dedicated worktree", t.ID)
 	}
 
+	startCmd.Apply(t, time.Now())
 	if err := m.store.UpdateTicket(ctx, t); err != nil {
 		return nil, "", fmt.Errorf("updating ticket: %w", err)
 	}
@@ -115,26 +114,12 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 		_ = m.vcs.DeleteBranch(ctx, branch)
 	}
 
-	// 2. Transition state
-	newState := ticket.State("done")
-	if !cfg.IsValidState(string(newState)) {
-		newState = ticket.State("completed")
+	// 2. Transition state through command validation.
+	finishCmd, err := buildFinishStateCmd(t, cfg)
+	if err != nil {
+		return nil, err
 	}
-
-	if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
-		reviewState := ticket.State("in-review")
-		if err2 := ticket.ValidateTransition(cfg, t.State, reviewState); err2 == nil {
-			newState = reviewState
-		} else {
-			return nil, fmt.Errorf("cannot transition %s from %s to done or in-review", ticketID, t.State)
-		}
-	}
-
-	t.State = newState
-	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
-	if t.CompletedAt.IsZero() && newState == "done" {
-		t.CompletedAt = t.UpdatedAt
-	}
+	finishCmd.Apply(t, time.Now())
 
 	if err := m.store.UpdateTicket(ctx, t); err != nil {
 		return nil, fmt.Errorf("updating ticket: %w", err)
@@ -144,4 +129,19 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 	_ = m.claimer.Release(ctx, t.ID)
 
 	return t, nil
+}
+
+func buildFinishStateCmd(t *ticket.Ticket, cfg *ticket.Config) (UpdateStateCmd, error) {
+	doneCmd := UpdateStateCmd{
+		To:             "done",
+		SetCompletedAt: true,
+	}
+	if err := doneCmd.Validate(t, cfg); err == nil {
+		return doneCmd, nil
+	}
+	reviewCmd := UpdateStateCmd{To: "in-review"}
+	if err := reviewCmd.Validate(t, cfg); err == nil {
+		return reviewCmd, nil
+	}
+	return UpdateStateCmd{}, fmt.Errorf("cannot transition %s from %s to done or in-review", t.ID, t.State)
 }

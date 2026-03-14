@@ -840,7 +840,7 @@
     },
     "TKT-167": {
       "title": "Implement Command Pattern for Ticket Mutations",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 10,
       "parent": "TKT-162"
     },
