@@ -39,8 +39,11 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		if err != nil {
 			return fmt.Errorf("checking active workflow policy: %w", err)
 		}
-		if !active {
-			return fmt.Errorf("no active workflow.lock is approved for this repo. Run `docket workflow lock activate --ticket TKT-NNN` in secure mode")
+		runtimePolicyMode := "unsecured"
+		runtimePolicyMessage := "No active workflow.lock is approved; privileged and terminal transitions remain blocked."
+		if active {
+			runtimePolicyMode = "approved-lock"
+			runtimePolicyMessage = fmt.Sprintf("Using approved workflow.lock %s.", activeWorkflowHash)
 		}
 
 		// 1. Select the next ticket
@@ -105,11 +108,14 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		// 3. Provide the Agent Prompt
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{
-				"ticket":            t,
-				"model_tier":        decision.SelectedTier,
-				"model_id":          model.ID,
-				"routing_rationale": decision.Rationale,
-				"agent_instruction": "Analyze the requirements and implement the changes. Use 'docket' tools to track your progress.",
+				"ticket":               t,
+				"model_tier":           decision.SelectedTier,
+				"model_id":             model.ID,
+				"routing_rationale":    decision.Rationale,
+				"runtime_policy_mode":  runtimePolicyMode,
+				"runtime_policy_note":  runtimePolicyMessage,
+				"active_workflow_hash": activeWorkflowHash,
+				"agent_instruction":    "Analyze the requirements and implement the changes. Use 'docket' tools to track your progress.",
 			})
 			return nil
 		}
@@ -119,6 +125,8 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		fmt.Fprintf(cmd.OutOrStdout(), "Title: %s\n", t.Title)
 		fmt.Fprintf(cmd.OutOrStdout(), "Description: %s\n", t.Description)
 		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
+		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
+		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
 		fmt.Fprintf(cmd.OutOrStdout(), "\nAcceptance Criteria:\n")
 		for _, ac := range t.AC {
 			status := "[ ]"

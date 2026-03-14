@@ -125,6 +125,29 @@ func TestRunManifestRecordAndVerify(t *testing.T) {
 	}
 }
 
+func TestRunManifestAllowsUnsecuredExecution(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-a")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	store := NewRepoNamespaceStore(home)
+	if err := store.RecordRunStart(repo, "TKT-199", "agent:test", "/tmp/wt-TKT-199", "docket/TKT-199", ""); err != nil {
+		t.Fatalf("record unsecured run manifest failed: %v", err)
+	}
+	rec, ok, err := store.GetRunManifest(repo, "TKT-199")
+	if err != nil || !ok {
+		t.Fatalf("get unsecured run manifest failed: ok=%v err=%v", ok, err)
+	}
+	if rec.WorkflowHash != "" {
+		t.Fatalf("expected empty workflow hash for unsecured run, got %q", rec.WorkflowHash)
+	}
+	if err := store.VerifyRunContext(repo, "TKT-199", "agent:test", "/tmp/wt-TKT-199", "docket/TKT-199", ""); err != nil {
+		t.Fatalf("verify unsecured run context failed: %v", err)
+	}
+}
+
 func TestRunManifestVerifyStaleAndMismatch(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(t.TempDir(), "repo-a")

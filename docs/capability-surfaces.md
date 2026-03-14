@@ -5,6 +5,8 @@ Docket is one binary with two authority levels:
 - Agent-safe surface: normal planning/execution commands (`list`, `show`, `create`, `comment`, `ac`, `start`, etc.) that do not require secure mode.
 - Secure/admin surface: privileged commands that mutate trust or governance state and require an active secure session plus explicit confirmation.
 
+If no approved `workflow.lock` is active, agent-safe execution still proceeds in unsecured mode. This allows `docket start` and normal implementation work to continue without a keystore or secure session, but privileged actions and terminal transitions remain blocked.
+
 ## Privileged command set
 
 The following commands currently enforce secure-mode checks:

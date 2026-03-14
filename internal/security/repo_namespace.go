@@ -204,9 +204,6 @@ func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, actor, worktreeP
 	if branch == "" {
 		return fmt.Errorf("branch is required")
 	}
-	if workflowHash == "" {
-		return fmt.Errorf("workflow hash is required")
-	}
 	repoID, dir, err := s.EnsureRepoNamespace(repoRoot)
 	if err != nil {
 		return err
