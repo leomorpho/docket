@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import { tick } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
@@ -30,8 +31,11 @@
 	}>();
 
 	let searchInput = $state<HTMLInputElement | null>(null);
+	let searchExpanded = $state(false);
 
-	export function focusSearch() {
+	export async function focusSearch() {
+		searchExpanded = true;
+		await tick();
 		searchInput?.focus();
 	}
 
@@ -42,23 +46,42 @@
 	function onLabelChange(value: string) {
 		dispatch('label', { value: value === '__all' ? '' : value });
 	}
+
+	$effect(() => {
+		if (searchQuery.trim() || semanticSearch) {
+			searchExpanded = true;
+		}
+	});
 </script>
 
-<div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
+<div class="rounded-xl border border-border bg-muted/40 p-3">
 	<div class="flex flex-wrap items-center gap-2">
-		<div class="relative flex-1 min-w-[240px] flex items-center gap-2">
-			<input
-				bind:this={searchInput}
-				type="text"
-				placeholder="Search tickets... (/)"
-				class="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
-				bind:value={searchQuery}
-			/>
-			<div class="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md h-9 shrink-0">
-				<input type="checkbox" id="semantic-toggle" bind:checked={semanticSearch} class="h-4 w-4 rounded border-slate-300 text-indigo-600" />
-				<label for="semantic-toggle" class="text-xs font-medium text-slate-600 cursor-pointer select-none">Semantic</label>
+		{#if searchExpanded}
+			<div class="relative flex-1 min-w-[240px] flex items-center gap-2">
+				<input
+					bind:this={searchInput}
+					type="text"
+					placeholder="Search tickets... (/)"
+					class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+					bind:value={searchQuery}
+				/>
+				<div class="flex items-center gap-1.5 px-2 py-1 bg-background border border-input rounded-md h-9 shrink-0">
+					<input type="checkbox" id="semantic-toggle" bind:checked={semanticSearch} class="h-4 w-4 rounded border-input text-primary" />
+					<label for="semantic-toggle" class="text-xs font-medium text-muted-foreground cursor-pointer select-none">Semantic</label>
+				</div>
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => {
+						if (!searchQuery.trim() && !semanticSearch) searchExpanded = false;
+					}}
+				>
+					Hide
+				</Button>
 			</div>
-		</div>
+		{:else}
+			<Button variant="outline" size="sm" onclick={focusSearch}>Search (/)</Button>
+		{/if}
 		{#each stateOptions as state}
 			<Button
 				variant={selectedStates.has(state.key) ? 'secondary' : 'outline'}
@@ -78,7 +101,7 @@
 				value={selectedLabel || '__all'}
 				onValueChange={(value: string) => onLabelChange(value || '__all')}
 			>
-				<SelectTrigger class="w-48 bg-white">{labelDisplayText()}</SelectTrigger>
+				<SelectTrigger class="w-48 bg-background">{labelDisplayText()}</SelectTrigger>
 				<SelectContent>
 					<SelectItem value="__all">All labels</SelectItem>
 					{#each labelOptions as label}
@@ -92,7 +115,7 @@
 			<p class="text-xs font-medium text-muted-foreground">Max Priority</p>
 			<ToggleGroup
 				type="single"
-				class="rounded-md bg-white p-1"
+				class="rounded-md bg-background p-1"
 				value={maxPriority === 0 ? 'all' : String(maxPriority)}
 				onValueChange={(value) =>
 					dispatch('priority', {
@@ -107,7 +130,7 @@
 		</div>
 
 		<div class="ml-auto">
-			<Button variant="outline" size="sm" class="bg-white" onclick={() => dispatch('clear')}>
+			<Button variant="outline" size="sm" class="bg-background" onclick={() => dispatch('clear')}>
 				Clear filters
 			</Button>
 		</div>

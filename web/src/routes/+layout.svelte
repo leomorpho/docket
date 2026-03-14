@@ -44,17 +44,17 @@
 </svelte:head>
 
 <div class="fixed top-4 right-4 z-50">
-	<div class="flex items-center gap-1 p-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full shadow-sm">
+	<div class="flex items-center gap-1 p-1 bg-card/80 backdrop-blur-sm border border-border rounded-full shadow-sm">
 		<button 
-			class="px-2 py-1 text-[10px] font-bold rounded-full transition-colors {theme === 'light' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}"
+			class="px-2 py-1 text-[10px] font-bold rounded-full transition-colors {theme === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}"
 			onclick={() => theme = 'light'}
 		>LIGHT</button>
 		<button 
-			class="px-2 py-1 text-[10px] font-bold rounded-full transition-colors {theme === 'dark' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}"
+			class="px-2 py-1 text-[10px] font-bold rounded-full transition-colors {theme === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}"
 			onclick={() => theme = 'dark'}
 		>DARK</button>
 		<button 
-			class="px-2 py-1 text-[10px] font-bold rounded-full transition-colors {theme === 'system' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}"
+			class="px-2 py-1 text-[10px] font-bold rounded-full transition-colors {theme === 'system' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}"
 			onclick={() => theme = 'system'}
 		>AUTO</button>
 	</div>

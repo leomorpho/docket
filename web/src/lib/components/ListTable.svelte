@@ -40,16 +40,16 @@
 	}
 </script>
 
-<Card class="border-slate-200 bg-white/90 shadow-sm">
+<Card class="border-border bg-card/90 shadow-sm">
 	<CardContent class="p-0">
 		<Table>
 			<TableHeader>
-				<TableRow class="bg-slate-50/70 hover:bg-slate-50/70">
+				<TableRow class="bg-muted/30 hover:bg-muted/30">
 					{#each keys as key}
 						<TableHead>
 							<button
 								type="button"
-								class="inline-flex w-full cursor-pointer items-center gap-1 text-left text-xs font-semibold tracking-wide uppercase text-slate-600"
+								class="inline-flex w-full cursor-pointer items-center gap-1 text-left text-xs font-semibold tracking-wide uppercase text-muted-foreground"
 								onclick={() => dispatch('sort', { by: key })}
 							>
 								{headerLabel(key)}
@@ -64,10 +64,10 @@
 			<TableBody>
 				{#each tickets as ticket}
 					<TableRow
-						class="cursor-pointer bg-white/70 transition hover:bg-slate-50"
+						class="cursor-pointer bg-card/70 transition hover:bg-muted/30"
 						onclick={() => dispatch('select', { ticket })}
 					>
-						<TableCell class="font-medium text-slate-700">{ticket.id}</TableCell>
+						<TableCell class="font-medium text-foreground">{ticket.id}</TableCell>
 						<TableCell class="max-w-[36ch] truncate">{ticket.title}</TableCell>
 						<TableCell><Badge variant="outline">{ticket.state}</Badge></TableCell>
 						<TableCell><Badge variant="secondary">P{ticket.priority}</Badge></TableCell>
