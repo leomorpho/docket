@@ -1055,7 +1055,7 @@
     },
     "TKT-203": {
       "title": "Generate Docket-managed instruction packs from approved workflow policy",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },

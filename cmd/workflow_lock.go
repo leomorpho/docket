@@ -15,6 +15,7 @@ var (
 	workflowSignerID     string
 	workflowTicketID     string
 	workflowConfirmYes   bool
+	workflowPackOutput   string
 )
 
 var workflowCmd = &cobra.Command{
@@ -154,6 +155,46 @@ var workflowLockActivateCmd = &cobra.Command{
 	},
 }
 
+var workflowPackCmd = &cobra.Command{
+	Use:   "pack",
+	Short: "Generate machine-readable instruction pack from active workflow lock",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		lock, err := workflow.ParseWorkflowLock(repo)
+		if err != nil {
+			return err
+		}
+		if err := workflow.ValidateWorkflowLock(repo, lock); err != nil {
+			return err
+		}
+		lockHash, err := workflow.WorkflowLockHash(lock)
+		if err != nil {
+			return err
+		}
+		ns := security.NewRepoNamespaceStore(docketHome)
+		activeHash, active, err := ns.GetActiveWorkflowHash(repo)
+		if err != nil {
+			return err
+		}
+		if !active {
+			return fmt.Errorf("no active workflow.lock is approved for this repo")
+		}
+		if activeHash != lockHash {
+			return fmt.Errorf("workflow.lock hash %s does not match active hash %s; activate lock first", lockHash, activeHash)
+		}
+
+		pack, err := workflow.GenerateInstructionPack(lock, lockHash)
+		if err != nil {
+			return err
+		}
+		path, err := workflow.WriteInstructionPack(repo, workflowPackOutput, pack)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Generated instruction pack: %s (workflow lock %s)\n", path, lockHash)
+		return nil
+	},
+}
+
 func init() {
 	workflowLockGenerateCmd.Flags().StringVar(&workflowProposalPath, "proposal", workflow.DefaultWorkflowPolicy, "path to editable workflow proposal file")
 	workflowLockGenerateCmd.Flags().StringVar(&workflowSignerID, "signer-id", "", "signer identifier for lock metadata")
@@ -167,6 +208,8 @@ func init() {
 	workflowLockCmd.AddCommand(workflowLockGenerateCmd)
 	workflowLockCmd.AddCommand(workflowLockValidateCmd)
 	workflowLockCmd.AddCommand(workflowLockActivateCmd)
+	workflowPackCmd.Flags().StringVar(&workflowPackOutput, "output", workflow.DefaultInstructionPack, "path to generated instruction pack")
 	workflowCmd.AddCommand(workflowLockCmd)
+	workflowCmd.AddCommand(workflowPackCmd)
 	rootCmd.AddCommand(workflowCmd)
 }

@@ -120,6 +120,7 @@ func commandExamples(name string) []string {
 		"check":            {"docket check", "docket check TKT-001 --fix"},
 		"install":          {"docket install"},
 		"upgrade":          {"docket upgrade", "docket upgrade --check"},
+		"workflow pack":    {"docket workflow pack", "docket workflow pack --output .docket/instruction-pack.json"},
 		"help-json":        {"docket help-json | jq .commands[].name"},
 	}
 	if v, ok := examples[name]; ok {

@@ -59,6 +59,7 @@ var updateCmd = &cobra.Command{
 		if cfgErr != nil {
 			return cfgErr
 		}
+		cascadeRequested := cmd.Flags().Changed("cascade") && updateCascade
 
 		var updatedFields []string
 
@@ -86,7 +87,7 @@ var updateCmd = &cobra.Command{
 				if err != nil {
 					return err
 				}
-				if len(openChildren) > 0 && !updateCascade {
+				if len(openChildren) > 0 && !cascadeRequested {
 					ids := make([]string, 0, len(openChildren))
 					for _, c := range openChildren {
 						ids = append(ids, c.ID)
@@ -94,7 +95,7 @@ var updateCmd = &cobra.Command{
 					sort.Strings(ids)
 					return fmt.Errorf("cannot set %s to stale while open child tickets exist: %s (use --cascade)", t.ID, strings.Join(ids, ", "))
 				}
-				if updateCascade {
+				if cascadeRequested {
 					for _, c := range openChildren {
 						if err := ticket.ValidateTransition(cfg, c.State, ticket.State(nextState)); err != nil {
 							return fmt.Errorf("cannot cascade state to %s: %w", c.ID, err)
@@ -288,7 +289,7 @@ var updateCmd = &cobra.Command{
 		if err := s.UpdateTicket(ctx, t); err != nil {
 			return fmt.Errorf("updating ticket: %w", err)
 		}
-		if strings.TrimSpace(updateState) == "stale" && updateCascade {
+		if strings.TrimSpace(updateState) == "stale" && cascadeRequested {
 			openChildren, err := openDescendants(ctx, s, cfg, t.ID)
 			if err != nil {
 				return err
