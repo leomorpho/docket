@@ -27,6 +27,7 @@ var (
 )
 
 const uiHubPort = 43173
+const projectRegisterPath = "/api/projects"
 
 var uiCmd = &cobra.Command{
 	Use:   "ui",
@@ -170,7 +171,7 @@ func registerWithHubRetry(hubURL, dir string, timeout time.Duration) (string, bo
 func postRegister(hubURL, dir string, timeout time.Duration) (string, bool) {
 	payload, _ := json.Marshal(map[string]string{"dir": dir})
 	client := &http.Client{Timeout: timeout}
-	resp, err := client.Post(hubURL+"/api/projects/register", "application/json", bytes.NewReader(payload))
+	resp, err := client.Post(hubURL+projectRegisterPath, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		return "", false
 	}

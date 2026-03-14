@@ -25,8 +25,8 @@
 			} else {
 				error = data.error || 'Failed to fetch health metrics.';
 			}
-		} catch (e: any) {
-			error = e.message;
+		} catch (e: unknown) {
+			error = e instanceof Error ? e.message : 'Failed to fetch health metrics.';
 		} finally {
 			loading = false;
 		}
@@ -105,12 +105,12 @@
 				<CardContent>
 					<div class="space-y-4">
 						<div class="flex justify-between items-center">
-							<span class="text-sm text-slate-600">Avg. Cycle Time</span>
+							<span class="text-sm text-muted-foreground">Avg. Cycle Time</span>
 							<span class="font-semibold">{health.avgCycleTime.toFixed(1)} days</span>
 						</div>
 						<div class="flex justify-between items-center">
-							<span class="text-sm text-slate-600">Tickets in Progress</span>
-							<Badge>{health.findings.filter(f => f.rule === 'V001' && f.message.includes('in-progress')).length}</Badge>
+							<span class="text-sm text-muted-foreground">Tickets in Progress</span>
+							<Badge>{health.findings.filter((f) => f.rule === 'V001' && (f.message ?? '').includes('in-progress')).length}</Badge>
 						</div>
 					</div>
 				</CardContent>
@@ -125,7 +125,7 @@
 				{#if health.findings.length === 0}
 					<p class="text-sm text-muted-foreground text-center py-8">No issues found. Your project is in perfect health!</p>
 				{:else}
-					<div class="divide-y divide-slate-100">
+					<div class="divide-y divide-border">
 						{#each health.findings as finding}
 							<div class="flex items-start justify-between py-3 gap-4">
 								<div class="space-y-1">
@@ -135,7 +135,7 @@
 										</Badge>
 										<span class="text-sm font-medium">{finding.rule}</span>
 									</div>
-									<p class="text-sm text-slate-600">{finding.message}</p>
+									<p class="text-sm text-muted-foreground">{finding.message}</p>
 								</div>
 								<Button variant="ghost" size="sm" onclick={() => dispatch('select', { id: finding.ticketId })}>
 									View

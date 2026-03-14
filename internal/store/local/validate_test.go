@@ -237,6 +237,27 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestValidateAll_SkipsNonTicketMarkdownFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+
+	ticketsDir := filepath.Join(tmpDir, ".docket", "tickets")
+	if err := os.MkdirAll(ticketsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ticketsDir, "README.md"), []byte("# Not a ticket\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	allErrs, _, err := s.ValidateAll(context.Background())
+	if err != nil {
+		t.Fatalf("ValidateAll failed: %v", err)
+	}
+	if _, ok := allErrs["README"]; ok {
+		t.Fatalf("expected README.md to be skipped, got errors: %v", allErrs["README"])
+	}
+}
+
 func TestValidateAll(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := New(tmpDir)

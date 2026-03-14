@@ -35,11 +35,13 @@ func TestSelectNextTicket(t *testing.T) {
 	// T2: priority 1, backlog (should be picked)
 	// T3: priority 1, backlog, blocked (should be skipped)
 	// T4: in-progress (should be skipped)
+	// T5: in-review (should be skipped)
 
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "backlog", Priority: 10})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "backlog", Priority: 1})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "T3", State: "backlog", Priority: 1, BlockedBy: []string{"TKT-001"}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Seq: 4, Title: "T4", State: "in-progress", Priority: 1})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-005", Seq: 5, Title: "T5", State: "in-review", Priority: 1})
 
 	if err := s.SyncIndex(ctx); err != nil {
 		t.Fatalf("SyncIndex failed: %v", err)
@@ -56,6 +58,65 @@ func TestSelectNextTicket(t *testing.T) {
 	}
 	if got.ID != "TKT-002" {
 		t.Errorf("expected TKT-002, got %s", got.ID)
+	}
+}
+
+func TestSelectNextTicket_SkipsEpics(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := local.New(tmpDir)
+	ctx := context.Background()
+
+	cfg := ticket.DefaultConfig()
+	backlog := cfg.States["backlog"]
+	backlog.Next = append(backlog.Next, "in-progress")
+	cfg.States["backlog"] = backlog
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-010",
+		Seq:         10,
+		Title:       "[Epic] Umbrella",
+		State:       "backlog",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Labels:      []string{"epic"},
+	}); err != nil {
+		t.Fatalf("CreateTicket epic failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-011",
+		Seq:         11,
+		Title:       "Actionable",
+		State:       "backlog",
+		Priority:    2,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket actionable failed: %v", err)
+	}
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected a ticket, got nil")
+	}
+	if got.ID != "TKT-011" {
+		t.Fatalf("expected non-epic ticket TKT-011, got %s", got.ID)
 	}
 }
 

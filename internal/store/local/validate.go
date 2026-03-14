@@ -204,6 +204,9 @@ func (s *Store) ValidateAll(ctx context.Context) (map[string][]store.ValidationE
 
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+			if !strings.HasPrefix(entry.Name(), "TKT-") {
+				continue
+			}
 			id := strings.TrimSuffix(entry.Name(), ".md")
 			if id == "" {
 				continue

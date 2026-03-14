@@ -21,6 +21,7 @@
 	type MutationResult = { ok: boolean; error?: string };
 	type StateOption = { key: string; label: string };
 	type StateUpdateOptions = { approvalTicket?: string; confirmed?: boolean };
+	type WorkflowStep = { key: string; label: string; at?: string; current?: boolean };
 
 	let {
 		ticket,
@@ -57,6 +58,23 @@
 	const dispatch = createEventDispatcher();
 
 	const html = $derived(ticket ? marked.parse(ticket.body, { gfm: true }) : '');
+	const workflowTimeline = $derived.by((): WorkflowStep[] => {
+		if (!ticket) return [];
+		const timelineMap: Record<string, string | undefined> = {
+			backlog: ticket.created_at,
+			'in-progress': ticket.started_at,
+			done: ticket.completed_at
+		};
+		if (ticket.state && ticket.updated_at) {
+			timelineMap[ticket.state] = ticket.updated_at;
+		}
+		return stateOptions.map((st: StateOption) => ({
+			key: st.key,
+			label: st.label,
+			at: timelineMap[st.key],
+			current: st.key === ticket.state
+		}));
+	});
 
 	let stateDraft = $state('');
 	let titleDraft = $state('');
@@ -94,6 +112,13 @@
 		let end = lines.findIndex((line, idx) => idx > start && line.startsWith('## Acceptance Criteria'));
 		if (end < 0) end = lines.length;
 		return lines.slice(start, end).join('\n').trim();
+	}
+
+	function formatTimestamp(ts?: string): string {
+		if (!ts) return '—';
+		const parsed = new Date(ts);
+		if (Number.isNaN(parsed.getTime())) return ts;
+		return parsed.toLocaleString();
 	}
 
 	async function saveState() {
@@ -210,17 +235,17 @@
 </script>
 
 <Sheet bind:open>
-	<SheetContent class="w-[min(72rem,96vw)] max-w-none border-l-slate-200 bg-white/98 p-0 sm:w-[min(64rem,92vw)]">
+	<SheetContent class="w-[min(72rem,96vw)] max-w-none border-l-border bg-card/98 p-0 sm:w-[min(64rem,92vw)]">
 		{#if ticket}
 			<div class="flex h-full flex-col">
-				<SheetHeader class="space-y-3 border-b border-slate-200/80 px-6 pt-6 pb-5">
+				<SheetHeader class="space-y-3 border-b border-border/80 px-6 pt-6 pb-5">
 					<div class="flex items-start justify-between gap-3">
-						<SheetTitle class="text-xl leading-tight font-semibold text-slate-900">{ticket.id}</SheetTitle>
+						<SheetTitle class="text-xl leading-tight font-semibold text-foreground">{ticket.id}</SheetTitle>
 						<Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button>
 					</div>
 					<div class="grid gap-2 sm:grid-cols-[1fr_auto]">
 						<input
-							class="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+							class="h-9 rounded-md border border-input bg-background px-3 text-sm"
 							value={titleDraft}
 							oninput={(e) => (titleDraft = (e.currentTarget as HTMLInputElement).value)}
 							placeholder="Ticket title"
@@ -237,13 +262,13 @@
 							<Badge variant="outline">{ticket.created_at}</Badge>
 							{#if ticket.parent}<Badge variant="outline">parent: {ticket.parent}</Badge>{/if}
 							{#each ticket.labels as label}
-								<Badge variant="secondary" class="bg-slate-100 text-slate-700">{label}</Badge>
+								<Badge variant="secondary" class="bg-muted text-foreground">{label}</Badge>
 							{/each}
 						</div>
 					</SheetDescription>
 					<div class="flex flex-wrap items-center gap-2">
 						<Select type="single" value={stateDraft} onValueChange={(value: string) => (stateDraft = value)}>
-							<SelectTrigger class="w-52 bg-white">
+							<SelectTrigger class="w-52 bg-background">
 								{stateOptions.find((s: StateOption) => s.key === stateDraft)?.label ?? stateDraft}
 							</SelectTrigger>
 							<SelectContent>
@@ -264,7 +289,7 @@
 							</p>
 							<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
 								<input
-									class="h-9 rounded-md border border-amber-200 bg-white px-3 text-sm"
+									class="h-9 rounded-md border border-amber-300/70 bg-background px-3 text-sm"
 									value={approvalTicket}
 									oninput={(e) => (approvalTicket = (e.currentTarget as HTMLInputElement).value)}
 									placeholder="Approval ticket (TKT-###)"
@@ -280,7 +305,7 @@
 							</div>
 						</div>
 					{/if}
-					<div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+					<div class="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
 						<p>
 							Secure mode: <span class={secureActive ? 'text-emerald-700' : 'text-red-700'}>{secureActive ? 'active' : 'inactive'}</span>
 							{#if secureActive && secureExpiresAt} (expires: {secureExpiresAt}){/if}
@@ -298,10 +323,10 @@
 				</SheetHeader>
 
 				<ScrollArea class="h-[calc(100vh-11rem)] px-6 py-5">
-					<div class="mb-5 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-						<p class="mb-2 text-xs font-medium tracking-wide text-slate-600 uppercase">Description</p>
+					<div class="mb-5 rounded-lg border border-border bg-muted/40 p-3">
+						<p class="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Description</p>
 						<textarea
-							class="min-h-36 w-full rounded-md border border-slate-200 bg-white p-3 text-sm"
+							class="min-h-36 w-full rounded-md border border-input bg-background p-3 text-sm"
 							value={descriptionDraft}
 							oninput={(e) => (descriptionDraft = (e.currentTarget as HTMLTextAreaElement).value)}
 							disabled={savingDescription}
@@ -322,15 +347,15 @@
 					</div>
 
 					{#if ticket.ac.length > 0}
-						<div class="mb-5 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-							<p class="mb-2 text-xs font-medium tracking-wide text-slate-600 uppercase">Acceptance Criteria</p>
+						<div class="mb-5 rounded-lg border border-border bg-muted/40 p-3">
+							<p class="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Acceptance Criteria</p>
 							<div class="space-y-2">
 								{#each ticket.ac as ac}
-									<div class="flex items-start gap-3 rounded-md border border-slate-100 bg-white p-2">
+									<div class="flex items-start gap-3 rounded-md border border-border bg-background p-2">
 										<input
 											type="checkbox"
 											checked={ac.done}
-											class="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
+											class="mt-1 h-4 w-4 rounded border-input text-primary"
 											onchange={async (e) => {
 												if ((e.target as HTMLInputElement).checked) {
 													const evidence = prompt('Provide evidence for completion (e.g. commit SHA, file path, or description):');
@@ -344,7 +369,7 @@
 											disabled={ac.done}
 										/>
 										<div class="flex-1">
-											<p class="text-sm {ac.done ? 'text-slate-500 line-through' : 'text-slate-900'}">{ac.description}</p>
+											<p class="text-sm {ac.done ? 'text-muted-foreground line-through' : 'text-foreground'}">{ac.description}</p>
 											{#if ac.evidence}
 												<p class="mt-1 text-xs text-emerald-600">Evidence: {ac.evidence}</p>
 											{/if}
@@ -354,22 +379,39 @@
 							</div>
 						</div>
 					{/if}
-					<article class="markdown max-w-none text-sm leading-relaxed text-slate-800">
+					<article class="markdown max-w-none text-sm leading-relaxed text-foreground">
 						{@html html}
 					</article>
 
-					<div class="mt-8 border-t border-slate-100 pt-6">
-						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Comments</p>
+					<div class="mt-8 border-t border-border pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">Workflow Timeline</p>
+						<div class="grid gap-2">
+							{#each workflowTimeline as step}
+								<div class="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2">
+									<div class="flex items-center gap-2">
+										<span class="text-sm font-medium text-foreground">{step.label}</span>
+										{#if step.current}
+											<Badge variant="secondary" class="text-[10px]">Current</Badge>
+										{/if}
+									</div>
+									<span class="text-xs text-muted-foreground">{formatTimestamp(step.at)}</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<div class="mt-8 border-t border-border pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">Comments</p>
 						<div class="space-y-4">
 							{#each ticket.comments || [] as comment}
-								<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
+								<div class="rounded-lg border border-border bg-background p-3 shadow-xs">
 									<div class="mb-2 flex items-center justify-between gap-2">
-										<span class="text-xs font-semibold text-slate-700">{comment.author}</span>
-										<span class="text-[10px] text-slate-400"
+										<span class="text-xs font-semibold text-foreground">{comment.author}</span>
+										<span class="text-[10px] text-muted-foreground"
 											>{new Date(comment.at).toLocaleString()}</span
 										>
 									</div>
-									<div class="markdown text-sm text-slate-800">
+									<div class="markdown text-sm text-foreground">
 										{@html marked.parse(comment.body, { gfm: true })}
 									</div>
 								</div>
@@ -377,7 +419,7 @@
 
 							<div class="mt-4 space-y-2">
 								<textarea
-									class="min-h-24 w-full rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+									class="min-h-24 w-full rounded-md border border-input bg-muted/30 p-3 text-sm focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring/40"
 									placeholder="Add a comment... (Markdown supported)"
 									bind:value={newCommentBody}
 								></textarea>
@@ -388,37 +430,37 @@
 						</div>
 					</div>
 
-					<div class="mt-8 border-t border-slate-100 pt-6">
-						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Related Tickets</p>
+					<div class="mt-8 border-t border-border pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">Related Tickets</p>
 						{#if loadingRelated}
-							<p class="text-xs text-slate-400 animate-pulse">Finding similar tickets...</p>
+							<p class="text-xs text-muted-foreground animate-pulse">Finding similar tickets...</p>
 						{:else if relatedTickets.length === 0}
-							<p class="text-xs text-slate-400 italic">No similar tickets found.</p>
+							<p class="text-xs text-muted-foreground italic">No similar tickets found.</p>
 						{:else}
 							<div class="space-y-2">
 								{#each relatedTickets as rel}
 									<button
-										class="w-full text-left rounded-lg border border-slate-200 bg-white p-3 shadow-xs hover:border-indigo-300 hover:bg-indigo-50 transition-colors group"
+										class="w-full text-left rounded-lg border border-border bg-background p-3 shadow-xs hover:border-primary/50 hover:bg-accent/30 transition-colors group"
 										onclick={() => onSelect?.(new CustomEvent('select', { detail: { id: rel.id } }))}
 									>
 										<div class="flex items-center justify-between gap-2">
-											<span class="text-xs font-mono font-bold text-slate-500 group-hover:text-indigo-600">{rel.id}</span>
+											<span class="text-xs font-mono font-bold text-muted-foreground group-hover:text-primary">{rel.id}</span>
 											<Badge variant="outline" class="text-[10px] scale-90 origin-right">Score: {rel.score.toFixed(2)}</Badge>
 										</div>
-										<p class="mt-1 text-sm font-medium text-slate-800 line-clamp-1">{rel.title}</p>
+										<p class="mt-1 text-sm font-medium text-foreground line-clamp-1">{rel.title}</p>
 									</button>
 								{/each}
 							</div>
 						{/if}
 					</div>
 
-					<div class="mt-8 border-t border-slate-100 pt-6">
-						<p class="mb-4 text-xs font-medium tracking-wide text-slate-600 uppercase">Relations</p>
+					<div class="mt-8 border-t border-border pt-6">
+						<p class="mb-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">Relations</p>
 						<div class="grid gap-4 sm:grid-cols-2">
-							<div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-								<p class="mb-2 text-xs font-semibold text-slate-500">Blockers</p>
+							<div class="rounded-lg border border-border bg-muted/30 p-3">
+								<p class="mb-2 text-xs font-semibold text-muted-foreground">Blockers</p>
 								<div class="flex flex-wrap gap-2">
-									{#each relations.filter((r) => r.from === ticket.id && r.relation === 'blocked_by') as rel}
+									{#each relations.filter((r: Relation) => r.from === ticket.id && r.relation === 'blocked_by') as rel}
 										<Button
 											variant="outline"
 											size="sm"
@@ -428,14 +470,14 @@
 											{rel.to}
 										</Button>
 									{:else}
-										<span class="text-xs text-slate-400 italic">None</span>
+										<span class="text-xs text-muted-foreground italic">None</span>
 									{/each}
 								</div>
 							</div>
-							<div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-								<p class="mb-2 text-xs font-semibold text-slate-500">Dependents</p>
+							<div class="rounded-lg border border-border bg-muted/30 p-3">
+								<p class="mb-2 text-xs font-semibold text-muted-foreground">Dependents</p>
 								<div class="flex flex-wrap gap-2">
-									{#each relations.filter((r) => r.to === ticket.id && r.relation === 'blocked_by') as rel}
+									{#each relations.filter((r: Relation) => r.to === ticket.id && r.relation === 'blocked_by') as rel}
 										<Button
 											variant="outline"
 											size="sm"
@@ -445,7 +487,7 @@
 											{rel.from}
 										</Button>
 									{:else}
-										<span class="text-xs text-slate-400 italic">None</span>
+										<span class="text-xs text-muted-foreground italic">None</span>
 									{/each}
 								</div>
 							</div>

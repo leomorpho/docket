@@ -127,7 +127,7 @@ var updateCmd = &cobra.Command{
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
 
-			// Use WorkflowManager for complex transitions (in-progress, done, etc.)
+			// Use WorkflowManager for run lifecycle transitions that own worktree merge-back.
 			deps := newRuntimeDeps(repo)
 
 			if newState == "in-progress" {
@@ -141,7 +141,7 @@ var updateCmd = &cobra.Command{
 				}
 				// Reload ticket after StartTask
 				t, _ = s.GetTicket(ctx, t.ID)
-			} else if newState == "done" || newState == "archived" {
+			} else if newState == "in-review" {
 				_, err := deps.workflow.FinishTask(ctx, t.ID, cfg)
 				if err != nil {
 					return fmt.Errorf("finishing task: %w", err)
@@ -150,6 +150,9 @@ var updateCmd = &cobra.Command{
 				t, _ = s.GetTicket(ctx, t.ID)
 			} else {
 				t.State = newState
+				if newState == "done" && t.CompletedAt.IsZero() {
+					t.CompletedAt = time.Now().UTC().Truncate(time.Second)
+				}
 			}
 			updatedFields = append(updatedFields, "state")
 

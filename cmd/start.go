@@ -169,11 +169,10 @@ func routingInputs(t *ticket.Ticket) (tokenEstimate int, risk string, failureCou
 }
 
 func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (*ticket.Ticket, error) {
-	// Candidates are open states that are NOT in-progress
+	// Candidates are actionable intake states only.
 	var candidates []ticket.State
-	for _, stateName := range cfg.OpenStates() {
-		st := ticket.State(stateName)
-		if st != "in-progress" {
+	for _, st := range []ticket.State{"backlog", "todo"} {
+		if cfg.IsValidState(string(st)) {
 			candidates = append(candidates, st)
 		}
 	}
@@ -189,12 +188,24 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 	}
 
 	for _, t := range tickets {
+		if isEpicTicket(t) {
+			continue
+		}
 		if err := ticket.ValidateTransition(cfg, t.State, ticket.State("in-progress")); err == nil {
 			return t, nil
 		}
 	}
 
 	return nil, nil
+}
+
+func isEpicTicket(t *ticket.Ticket) bool {
+	for _, l := range t.Labels {
+		if strings.EqualFold(strings.TrimSpace(l), "epic") {
+			return true
+		}
+	}
+	return strings.HasPrefix(strings.TrimSpace(t.Title), "[Epic]")
 }
 
 func init() {

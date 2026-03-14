@@ -85,7 +85,7 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 	return t, claimedPath, nil
 }
 
-// FinishTask moves a ticket to 'done' (or 'in-review') and releases the claim.
+// FinishTask moves a ticket to 'in-review' and releases the claim.
 // If the ticket was in a separate worktree, it commits changes and merges back.
 func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
 	t, err := m.store.GetTicket(ctx, ticketID)
@@ -132,16 +132,9 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 }
 
 func buildFinishStateCmd(t *ticket.Ticket, cfg *ticket.Config) (UpdateStateCmd, error) {
-	doneCmd := UpdateStateCmd{
-		To:             "done",
-		SetCompletedAt: true,
-	}
-	if err := doneCmd.Validate(t, cfg); err == nil {
-		return doneCmd, nil
-	}
 	reviewCmd := UpdateStateCmd{To: "in-review"}
 	if err := reviewCmd.Validate(t, cfg); err == nil {
 		return reviewCmd, nil
 	}
-	return UpdateStateCmd{}, fmt.Errorf("cannot transition %s from %s to done or in-review", t.ID, t.State)
+	return UpdateStateCmd{}, fmt.Errorf("cannot transition %s from %s to in-review", t.ID, t.State)
 }

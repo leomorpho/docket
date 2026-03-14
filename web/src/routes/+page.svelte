@@ -22,12 +22,18 @@
 			tickets: Ticket[];
 		};
 	}>();
+	let showClosedStates = $state(false);
 
 	const openStateEntries = $derived.by(() =>
 		(Object.entries(data.config.states) as [string, StateConfig][])
 			.filter(([, st]) => st.open)
 			.sort((a, b) => a[1].column - b[1].column)
 	);
+	const allStateEntries = $derived.by(() =>
+		(Object.entries(data.config.states) as [string, StateConfig][])
+			.sort((a, b) => a[1].column - b[1].column)
+	);
+	const visibleStateEntries = $derived(showClosedStates ? allStateEntries : openStateEntries);
 
 	const openStates = $derived(openStateEntries.map(([key]) => key));
 	const allStates = $derived.by(() =>
@@ -35,23 +41,25 @@
 			.sort((a, b) => a[1].column - b[1].column)
 			.map(([key, st]) => ({ key, label: st.label }))
 	);
-	const stateOptions = $derived(openStateEntries.map(([key, st]) => ({ key, label: st.label })));
+	const visibleStates = $derived(visibleStateEntries.map(([key]) => key));
+	const visibleStateKey = $derived(visibleStates.join('|'));
+	const stateOptions = $derived(visibleStateEntries.map(([key, st]) => ({ key, label: st.label })));
 	const labelOptions: string[] = $derived(
 		Array.from(new Set(data.tickets.flatMap((t: Ticket) => t.labels))).sort() as string[]
 	);
 
 	const activeProject = $derived(
-		data.projects.find((p) => p.id === data.activeProjectId) ?? data.projects[0] ?? null
+		data.projects.find((p: Project) => p.id === data.activeProjectId) ?? data.projects[0] ?? null
 	);
 
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
 	type MutationResult = { ok: boolean; error?: string };
 	type StateUpdateOptions = { approvalTicket?: string; confirmed?: boolean };
 	let selectedStates = $state(new Set<string>());
-	let selectedStatesInitialized = $state(false);
+	let selectedStatesKey = $state('');
 	let selectedLabel = $state('');
 	let maxPriority = $state(0);
-	let mode = $state<'board' | 'list'>('board');
+	let mode = $state<'board' | 'list' | 'review' | 'health'>('board');
 	let selectedTicket = $state<Ticket | null>(null);
 	let sheetOpen = $state(false);
 	let sortBy = $state<SortKey>('priority');
@@ -91,7 +99,7 @@
 		window.addEventListener('keydown', handleKeydown);
 
 		const persisted = localStorage.getItem('docket_active_project');
-		if (persisted && !data.activeProjectId && data.projects.some((p) => p.id === persisted)) {
+		if (persisted && !data.activeProjectId && data.projects.some((p: Project) => p.id === persisted)) {
 			switchProject(persisted);
 		}
 
@@ -109,9 +117,9 @@
 	});
 
 	$effect(() => {
-		if (!selectedStatesInitialized && openStates.length > 0) {
-			selectedStates = new Set(openStates);
-			selectedStatesInitialized = true;
+		if (visibleStateKey && visibleStateKey !== selectedStatesKey) {
+			selectedStates = new Set(visibleStates);
+			selectedStatesKey = visibleStateKey;
 		}
 	});
 
@@ -119,7 +127,7 @@
 	$effect(() => {
 		const ticketId = $page.url.searchParams.get('ticket');
 		if (ticketId && !selectedTicket) {
-			const t = data.tickets.find((t) => t.id === ticketId);
+			const t = data.tickets.find((t: Ticket) => t.id === ticketId);
 			if (t) {
 				selectedTicket = t;
 				sheetOpen = true;
@@ -143,8 +151,8 @@
 	// Reset filters when project changes
 	$effect(() => {
 		if (data.activeProjectId) {
-			selectedStates = new Set(openStates);
-			selectedStatesInitialized = false;
+			selectedStates = new Set(visibleStates);
+			selectedStatesKey = visibleStateKey;
 			selectedLabel = '';
 			maxPriority = 0;
 			selectedTicket = null;
@@ -175,7 +183,7 @@
 		})
 	);
 
-	const columns = $derived(openStateEntries.map(([key, st]) => ({
+	const columns = $derived(visibleStateEntries.map(([key, st]) => ({
 		key,
 		label: st.label,
 		column: st.column,
@@ -189,6 +197,16 @@
 		if (av > bv) return sortDir === 'asc' ? 1 : -1;
 		return 0;
 	}));
+	const reviewQueue = $derived(
+		[...data.tickets]
+			.filter((t: Ticket) => t.state === 'in-review' || t.state === 'done')
+			.sort((a: Ticket, b: Ticket) => {
+				const rank = (state: string) => (state === 'in-review' ? 0 : 1);
+				if (rank(a.state) !== rank(b.state)) return rank(a.state) - rank(b.state);
+				if (a.priority !== b.priority) return a.priority - b.priority;
+				return a.seq - b.seq;
+			})
+	);
 
 	function switchProject(id: string) {
 		const url = new URL($page.url);
@@ -231,9 +249,13 @@
 	}
 
 	function clearFilters() {
-		selectedStates = new Set(openStates);
+		selectedStates = new Set(visibleStates);
 		selectedLabel = '';
 		maxPriority = 0;
+	}
+
+	function applyStatePreset(states: string[]) {
+		selectedStates = new Set(states);
 	}
 
 	function toggleSort(by: SortKey) {
@@ -357,9 +379,9 @@
 	}
 </script>
 
-<main class="min-h-screen bg-gradient-to-br from-slate-50 via-zinc-50 to-slate-100 px-4 py-5 sm:px-6">
+<main class="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 px-4 py-5 sm:px-6">
 	<div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-		<Card class="border-slate-200/80 bg-white/90 shadow-sm">
+		<Card class="border-border/80 bg-card/90 shadow-sm">
 			<CardHeader class="flex flex-row items-start justify-between gap-3">
 				<div class="space-y-1">
 					<CardTitle class="text-2xl tracking-tight">Docket UI</CardTitle>
@@ -371,7 +393,7 @@
 					<div class="flex items-center gap-2">
 						<span class="text-xs text-muted-foreground">Project</span>
 						<select
-							class="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-slate-300"
+							class="rounded-md border border-input bg-background px-2 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring/40"
 							value={data.activeProjectId ?? ''}
 							onchange={(e) => switchProject((e.target as HTMLSelectElement).value)}
 						>
@@ -384,7 +406,25 @@
 						</Button>
 					</div>
 					<Badge variant="secondary">{openStates.length} workflow states</Badge>
-					<Button size="sm" class="bg-indigo-600 hover:bg-indigo-700 text-white" onclick={() => (createModalOpen = true)}>
+					<Button
+						variant={showClosedStates ? 'default' : 'outline'}
+						size="sm"
+						onclick={() => {
+							showClosedStates = !showClosedStates;
+						}}
+					>
+						{showClosedStates ? 'Hide Closed' : 'Show Closed'}
+					</Button>
+					<Button variant="outline" size="sm" onclick={() => applyStatePreset(['in-review'])}>
+						In Review
+					</Button>
+					<Button variant="outline" size="sm" onclick={() => applyStatePreset(['done'])}>
+						Done
+					</Button>
+					<Button variant="outline" size="sm" onclick={() => applyStatePreset(visibleStates)}>
+						All Visible
+					</Button>
+					<Button size="sm" onclick={() => (createModalOpen = true)}>
 						Add Ticket (n)
 					</Button>
 				</div>
@@ -407,9 +447,10 @@
 		</Card>
 
 		<Tabs bind:value={mode} class="gap-3">
-			<TabsList class="w-fit border bg-white/80 p-1 shadow-xs">
+			<TabsList class="w-fit border border-border bg-background/80 p-1 shadow-xs">
 				<TabsTrigger value="board">Board</TabsTrigger>
 				<TabsTrigger value="list">List</TabsTrigger>
+				<TabsTrigger value="review">Review Queue</TabsTrigger>
 				<TabsTrigger value="health">Health</TabsTrigger>
 			</TabsList>
 
@@ -430,9 +471,19 @@
 				/>
 			</TabsContent>
 
+			<TabsContent value="review" class="mt-0">
+				<ListTable
+					tickets={reviewQueue}
+					{sortBy}
+					{sortDir}
+					on:sort={(e: CustomEvent<{ by: SortKey }>) => toggleSort(e.detail.by)}
+					on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
+				/>
+			</TabsContent>
+
 			<TabsContent value="health" class="mt-0">
 				<HealthView projectId={data.activeProjectId} on:select={(e: CustomEvent<{ id: string }>) => {
-					const t = data.tickets.find(t => t.id === e.detail.id);
+					const t = data.tickets.find((t: Ticket) => t.id === e.detail.id);
 					if (t) onCardSelect(t);
 				}} />
 			</TabsContent>
@@ -453,7 +504,7 @@
 		secureExpiresAt={secureExpiresAt}
 		secureStatusError={secureStatusError}
 		onSelect={(e) => {
-			const t = data.tickets.find((t) => t.id === e.detail.id);
+			const t = data.tickets.find((t: Ticket) => t.id === e.detail.id);
 			if (t) onCardSelect(t);
 		}}
 	/>
@@ -462,7 +513,7 @@
 		bind:open={createModalOpen}
 		config={data.config}
 		projectId={data.activeProjectId}
-		onCreate={async (t) => {
+		onCreate={async (t: Ticket) => {
 			onCardSelect(t);
 		}}
 	/>

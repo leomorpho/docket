@@ -186,6 +186,45 @@ func TestRunManifestVerifyStaleAndMismatch(t *testing.T) {
 	}
 }
 
+func TestRunManifestGetRejectsInvalidPayload(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-a")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	store := NewRepoNamespaceStore(home)
+	if err := store.RecordRunStart(repo, "TKT-210", "agent:test", "/tmp/wt-TKT-210", "docket/TKT-210", "hash-210"); err != nil {
+		t.Fatalf("record run manifest failed: %v", err)
+	}
+	repoID, nsDir, err := store.EnsureRepoNamespace(repo)
+	if err != nil {
+		t.Fatalf("ensure namespace failed: %v", err)
+	}
+
+	bad := RunManifest{
+		RepoID:       repoID,
+		TicketID:     "TKT-999",
+		Actor:        "agent:test",
+		ActorType:    "agent",
+		WorktreePath: "/tmp/wt-TKT-210",
+		Branch:       "docket/TKT-210",
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	data, err := json.MarshalIndent(bad, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal bad manifest failed: %v", err)
+	}
+	manifestPath := filepath.Join(nsDir, "runs", "TKT-210.json")
+	if err := os.WriteFile(manifestPath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write bad manifest failed: %v", err)
+	}
+
+	if _, _, err := store.GetRunManifest(repo, "TKT-210"); !errors.Is(err, ErrRunManifestInvalid) {
+		t.Fatalf("expected invalid run manifest error, got: %v", err)
+	}
+}
+
 func TestUpdateContextBindingDetectsResetTriggers(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(t.TempDir(), "repo-a")
@@ -216,5 +255,134 @@ func TestUpdateContextBindingDetectsResetTriggers(t *testing.T) {
 	}
 	if !reset || reason != "ticket_changed" {
 		t.Fatalf("expected ticket_changed reset, got reset=%v reason=%q", reset, reason)
+	}
+}
+
+func TestTrustedLedgerHeadBootstrapsAndAdvances(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-ledger")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	store := NewRepoNamespaceStore(home)
+	ks := NewFileKeystore(home)
+	if err := ks.Create("pw-1"); err != nil {
+		t.Fatalf("create keystore failed: %v", err)
+	}
+	ledger := NewEventLedger(repo, ks, "dev-test")
+
+	first, err := ledger.Append(LedgerAppendInput{
+		Type:   EventRunStarted,
+		RepoID: "drid_test",
+		Actor:  "agent:test",
+	})
+	if err != nil {
+		t.Fatalf("append first event failed: %v", err)
+	}
+
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); err != nil {
+		t.Fatalf("bootstrap trusted head failed: %v", err)
+	}
+	_, trustedHead, ok, err := store.GetTrustedLedgerHead(repo)
+	if err != nil || !ok {
+		t.Fatalf("get trusted head after bootstrap failed: ok=%v err=%v", ok, err)
+	}
+	if trustedHead != first.Hash {
+		t.Fatalf("expected trusted head %s, got %s", first.Hash, trustedHead)
+	}
+
+	second, err := ledger.Append(LedgerAppendInput{
+		Type:   EventRunStopped,
+		RepoID: "drid_test",
+		Actor:  "agent:test",
+	})
+	if err != nil {
+		t.Fatalf("append second event failed: %v", err)
+	}
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); err != nil {
+		t.Fatalf("advance trusted head failed: %v", err)
+	}
+	_, trustedHead, ok, err = store.GetTrustedLedgerHead(repo)
+	if err != nil || !ok {
+		t.Fatalf("get trusted head after advance failed: ok=%v err=%v", ok, err)
+	}
+	if trustedHead != second.Hash {
+		t.Fatalf("expected trusted head %s, got %s", second.Hash, trustedHead)
+	}
+}
+
+func TestTrustedLedgerHeadDetectsRollback(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-rollback")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	store := NewRepoNamespaceStore(home)
+	ks := NewFileKeystore(home)
+	if err := ks.Create("pw-1"); err != nil {
+		t.Fatalf("create keystore failed: %v", err)
+	}
+	ledger := NewEventLedger(repo, ks, "dev-test")
+
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:   EventRunStarted,
+		RepoID: "drid_test",
+		Actor:  "agent:test",
+	}); err != nil {
+		t.Fatalf("append first event failed: %v", err)
+	}
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:   EventRunStopped,
+		RepoID: "drid_test",
+		Actor:  "agent:test",
+	}); err != nil {
+		t.Fatalf("append second event failed: %v", err)
+	}
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); err != nil {
+		t.Fatalf("seed trusted head failed: %v", err)
+	}
+
+	data, err := os.ReadFile(LedgerPath(repo))
+	if err != nil {
+		t.Fatalf("read ledger failed: %v", err)
+	}
+	lines := bytesSplitLines(data)
+	if len(lines) < 2 {
+		t.Fatalf("expected at least two ledger lines, got %d", len(lines))
+	}
+	if err := os.WriteFile(LedgerPath(repo), append(lines[0], '\n'), 0o644); err != nil {
+		t.Fatalf("truncate ledger failed: %v", err)
+	}
+
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); !errors.Is(err, ErrLedgerHeadRollback) {
+		t.Fatalf("expected rollback detection, got: %v", err)
+	}
+}
+
+func TestTrustedLedgerHeadMissingAndCorruptAnchor(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-anchor")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+	store := NewRepoNamespaceStore(home)
+
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); err != nil {
+		t.Fatalf("missing anchor bootstrap failed: %v", err)
+	}
+	repoID, _, ok, err := store.GetTrustedLedgerHead(repo)
+	if err != nil || !ok {
+		t.Fatalf("expected anchor after bootstrap: ok=%v err=%v", ok, err)
+	}
+
+	corruptPath := filepath.Join(home, "repos", repoID, "trusted_ledger_head.json")
+	if err := os.WriteFile(corruptPath, []byte("{not-json}\n"), 0o600); err != nil {
+		t.Fatalf("write corrupt anchor failed: %v", err)
+	}
+
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); !errors.Is(err, ErrLedgerHeadAnchor) {
+		t.Fatalf("expected malformed anchor error, got: %v", err)
 	}
 }

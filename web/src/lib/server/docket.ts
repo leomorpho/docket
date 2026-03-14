@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Config, Ticket } from '$lib/types';
+import type { AcceptanceCriterion, Comment, Config, PlanStep, Relation, Ticket } from '$lib/types';
 import { getProject } from '$lib/server/registry';
 
 type FrontmatterTicket = Omit<Ticket, 'title' | 'body'>;
@@ -143,6 +143,8 @@ function parseTicketFile(content: string): Ticket | null {
 		title,
 		created_at: String(fm.created_at ?? ''),
 		updated_at: String(fm.updated_at ?? ''),
+		started_at: fm.started_at ? String(fm.started_at) : undefined,
+		completed_at: fm.completed_at ? String(fm.completed_at) : undefined,
 		ac,
 		plan,
 		comments,
@@ -151,11 +153,36 @@ function parseTicketFile(content: string): Ticket | null {
 	};
 }
 
-export type Relation = {
-	from: string;
-	to: string;
-	relation: string;
-};
+export function readTickets(projectId?: string): Ticket[] {
+	const ticketsDir = path.join(docketRoot(projectId), '.docket', 'tickets');
+	if (!fs.existsSync(ticketsDir)) {
+		return [];
+	}
+
+	const entries = fs
+		.readdirSync(ticketsDir)
+		.filter((name) => name.endsWith('.md') && name.startsWith('TKT-'))
+		.sort();
+
+	const tickets: Ticket[] = [];
+	for (const entry of entries) {
+		const file = path.join(ticketsDir, entry);
+		try {
+			const parsed = parseTicketFile(fs.readFileSync(file, 'utf8'));
+			if (parsed && parsed.id) {
+				tickets.push(parsed);
+			}
+		} catch {
+			// Ignore malformed ticket files in UI read path.
+		}
+	}
+
+	return tickets.sort((a, b) => {
+		if (a.priority !== b.priority) return a.priority - b.priority;
+		if (a.seq !== b.seq) return a.seq - b.seq;
+		return a.id.localeCompare(b.id);
+	});
+}
 
 export function readRelations(projectId?: string): Relation[] {
 	const p = path.join(docketRoot(projectId), '.docket', 'relations.json');

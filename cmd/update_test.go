@@ -328,6 +328,9 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	if got.State != "done" {
 		t.Fatalf("expected done state, got %s", got.State)
 	}
+	if got.CompletedAt.IsZero() {
+		t.Fatalf("expected done transition to set completed_at")
+	}
 
 	session := security.NewSessionManager(tmpHome)
 	if err := session.RequireActive(tmpDir); err != nil {
@@ -401,6 +404,85 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "in-review"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected in-review transition after linked commit, got: %v", err)
+	}
+}
+
+func TestUpdateCmd_ManagedRunRejectsStaleRunManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
+
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-209",
+		Seq:         209,
+		Title:       "Managed run stale manifest",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Handoff:     "handoff",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	ns := security.NewRepoNamespaceStore(tmpHome)
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-209")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree path failed: %v", err)
+	}
+	if err := ns.RecordRunStart(tmpDir, "TKT-209", "agent:test", worktreePath, "HEAD", "hash-209"); err != nil {
+		t.Fatalf("RecordRunStart failed: %v", err)
+	}
+	run, ok, err := ns.GetRunManifest(tmpDir, "TKT-209")
+	if err != nil || !ok {
+		t.Fatalf("GetRunManifest failed: ok=%v err=%v", ok, err)
+	}
+	run.StartedAt = time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339Nano)
+	repoID, nsDir, err := ns.EnsureRepoNamespace(tmpDir)
+	if err != nil {
+		t.Fatalf("EnsureRepoNamespace failed: %v", err)
+	}
+	run.RepoID = repoID
+	data, err := json.MarshalIndent(run, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal stale run manifest failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(nsDir, "runs", "TKT-209.json"), append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write stale run manifest failed: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "work.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("write file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "feat: stale manifest\n\nTicket: TKT-209")
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-209", "--state", "in-review"})
+	err = rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "run manifest validation failed") {
+		t.Fatalf("expected stale run manifest rejection, got: %v", err)
 	}
 }
 
