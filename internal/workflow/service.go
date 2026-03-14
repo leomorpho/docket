@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/vcs"
@@ -14,10 +15,10 @@ import (
 type WorkflowManager struct {
 	store   store.Backend
 	vcs     vcs.Provider
-	claimer ClaimManager
+	claimer claim.Manager
 }
 
-func NewManager(s store.Backend, v vcs.Provider, c ClaimManager) *WorkflowManager {
+func NewManager(s store.Backend, v vcs.Provider, c claim.Manager) *WorkflowManager {
 	return &WorkflowManager{
 		store:   s,
 		vcs:     v,

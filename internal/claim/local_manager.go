@@ -8,6 +8,8 @@ type LocalClaimManager struct {
 	repoRoot string
 }
 
+var _ Manager = (*LocalClaimManager)(nil)
+
 func NewLocalClaimManager(repoRoot string) *LocalClaimManager {
 	return &LocalClaimManager{repoRoot: repoRoot}
 }
