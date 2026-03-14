@@ -29,7 +29,7 @@ func (m *mockWorkflowRunner) StartTask(ctx context.Context, ticketID, agentID st
 
 func (m *mockWorkflowRunner) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
 	m.finishCalls++
-	return &ticket.Ticket{ID: ticketID, State: "done"}, nil
+	return &ticket.Ticket{ID: ticketID, State: "in-review"}, nil
 }
 
 type mockClaimLookup struct{}
@@ -187,5 +187,51 @@ func TestServeMCPWithDeps_DelegatesStartTask(t *testing.T) {
 	}
 	if resp["ok"] != true {
 		t.Fatalf("response not ok: %v", resp)
+	}
+}
+
+func TestServeMCPWithDeps_DelegatesFinishTaskOnReview(t *testing.T) {
+	repo := t.TempDir()
+	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("in-progress"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("seed ticket: %v", err)
+	}
+
+	mockWF := &mockWorkflowRunner{}
+	deps := &DispatchDeps{
+		RepoRoot: repo,
+		Store:    s,
+		Workflow: mockWF,
+		Claimer:  &mockClaimLookup{},
+		Config:   ticket.DefaultConfig(),
+	}
+
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"in-review"}}` + "\n")
+	var out bytes.Buffer
+	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
+		t.Fatalf("ServeMCPWithDeps failed: %v", err)
+	}
+
+	if mockWF.finishCalls != 1 {
+		t.Fatalf("FinishTask calls = %d, want 1", mockWF.finishCalls)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp["ok"] != true {
+		t.Fatalf("response not ok: %v", resp)
+	}
+	if resp["result"].(map[string]interface{})["state"] != "in-review" {
+		t.Fatalf("expected response state in-review, got %v", resp["result"])
 	}
 }

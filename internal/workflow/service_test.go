@@ -37,12 +37,19 @@ type MockVCS struct {
 	worktreePath      string
 	getWorktreeDirErr error
 	createWorktreeErr error
+	commitCalls       int
+	mergeCalls        int
+	deleteCalls       int
+	removeCalls       int
 }
 
 func (m *MockVCS) CreateWorktree(ctx context.Context, ticketID, branch, path string) error {
 	return m.createWorktreeErr
 }
-func (m *MockVCS) RemoveWorktree(ctx context.Context, path string) error { return nil }
+func (m *MockVCS) RemoveWorktree(ctx context.Context, path string) error {
+	m.removeCalls++
+	return nil
+}
 func (m *MockVCS) GetAgentWorktreeDir(ctx context.Context, ticketID string) (string, error) {
 	if m.getWorktreeDirErr != nil {
 		return "", m.getWorktreeDirErr
@@ -58,9 +65,18 @@ func (m *MockVCS) GetRepoRoot(ctx context.Context) (string, error) {
 	}
 	return "/tmp/repo", nil
 }
-func (m *MockVCS) CommitAll(ctx context.Context, path, msg string) error { return nil }
-func (m *MockVCS) MergeBranch(ctx context.Context, branch string) error  { return nil }
-func (m *MockVCS) DeleteBranch(ctx context.Context, branch string) error { return nil }
+func (m *MockVCS) CommitAll(ctx context.Context, path, msg string) error {
+	m.commitCalls++
+	return nil
+}
+func (m *MockVCS) MergeBranch(ctx context.Context, branch string) error {
+	m.mergeCalls++
+	return nil
+}
+func (m *MockVCS) DeleteBranch(ctx context.Context, branch string) error {
+	m.deleteCalls++
+	return nil
+}
 
 // MockClaim
 type MockClaim struct {
@@ -77,7 +93,7 @@ func (m *MockClaim) Release(ctx context.Context, ticketID string) error {
 }
 func (m *MockClaim) GetClaim(ctx context.Context, ticketID string) (*claim.ClaimMetadata, error) {
 	if agent, ok := m.claims[ticketID]; ok {
-		return &claim.ClaimMetadata{AgentID: agent}, nil
+		return &claim.ClaimMetadata{AgentID: agent, Worktree: "/tmp/wt-" + ticketID}, nil
 	}
 	return nil, nil
 }
@@ -164,23 +180,21 @@ func TestWorkflowFinishTask(t *testing.T) {
 	mgr := NewManager(s, v, c)
 	cfg := ticket.DefaultConfig()
 
-	// Allow in-progress -> done
-	st := cfg.States["in-progress"]
-	st.Next = append(st.Next, "done")
-	cfg.States["in-progress"] = st
-
 	res, err := mgr.FinishTask(context.Background(), "TKT-001", cfg)
 	if err != nil {
 		t.Fatalf("FinishTask failed: %v", err)
 	}
 
-	if res.State != "done" {
-		t.Errorf("expected state done, got %s", res.State)
+	if res.State != "in-review" {
+		t.Errorf("expected state in-review, got %s", res.State)
 	}
-	if res.CompletedAt.IsZero() {
-		t.Error("expected CompletedAt to be set")
+	if !res.CompletedAt.IsZero() {
+		t.Error("expected CompletedAt to remain unset at in-review")
 	}
 	if _, ok := c.claims["TKT-001"]; ok {
 		t.Error("expected claim to be released")
+	}
+	if v.commitCalls != 1 || v.mergeCalls != 1 || v.removeCalls != 1 || v.deleteCalls != 1 {
+		t.Fatalf("expected merge-back lifecycle once, got commit=%d merge=%d remove=%d delete=%d", v.commitCalls, v.mergeCalls, v.removeCalls, v.deleteCalls)
 	}
 }

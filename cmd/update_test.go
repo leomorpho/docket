@@ -328,6 +328,9 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	if got.State != "done" {
 		t.Fatalf("expected done state, got %s", got.State)
 	}
+	if got.CompletedAt.IsZero() {
+		t.Fatalf("expected done transition to set completed_at")
+	}
 
 	session := security.NewSessionManager(tmpHome)
 	if err := session.RequireActive(tmpDir); err != nil {
