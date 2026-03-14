@@ -129,3 +129,41 @@ func TestSessionResume_RejectsAgentOutsideBoundWorktree(t *testing.T) {
 		t.Fatalf("expected bound worktree rejection, got: %v", err)
 	}
 }
+
+func TestBuildCheckpointIncludesStructuredResumeFields(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "human"
+
+	s := local.New(tmp)
+	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
+	now := time.Now().UTC().Truncate(time.Second)
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:            "TKT-504",
+		Seq:           504,
+		Title:         "Structured checkpoint",
+		State:         "in-progress",
+		Priority:      1,
+		BlockedBy:     []string{"TKT-099"},
+		LinkedCommits: []string{"abc123"},
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		CreatedBy:     "me",
+		Description:   "desc",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "Done step", Done: true},
+			{Description: "Pending step", Done: false},
+		},
+	})
+
+	cp := buildCheckpoint(tmp, "TKT-504", "summary")
+	if len(cp.LinkedCommits) != 1 || cp.LinkedCommits[0] != "abc123" {
+		t.Fatalf("expected linked commits in checkpoint, got %#v", cp.LinkedCommits)
+	}
+	if len(cp.Blockers) != 1 || cp.Blockers[0] != "TKT-099" {
+		t.Fatalf("expected blockers in checkpoint, got %#v", cp.Blockers)
+	}
+	if len(cp.NextSteps) != 1 || !strings.Contains(cp.NextSteps[0], "Pending step") {
+		t.Fatalf("expected next steps in checkpoint, got %#v", cp.NextSteps)
+	}
+}

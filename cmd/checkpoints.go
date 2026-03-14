@@ -14,15 +14,18 @@ import (
 )
 
 type checkpoint struct {
-	TicketID     string   `json:"ticket_id"`
-	CreatedAt    string   `json:"created_at"`
-	ACDone       int      `json:"ac_done"`
-	ACTotal      int      `json:"ac_total"`
-	ChangedFiles []string `json:"changed_files"`
-	LastComments []string `json:"last_comments"`
-	Branch       string   `json:"branch"`
-	WorktreePath string   `json:"worktree_path"`
-	Summary      string   `json:"summary,omitempty"`
+	TicketID      string   `json:"ticket_id"`
+	CreatedAt     string   `json:"created_at"`
+	ACDone        int      `json:"ac_done"`
+	ACTotal       int      `json:"ac_total"`
+	ChangedFiles  []string `json:"changed_files"`
+	LinkedCommits []string `json:"linked_commits,omitempty"`
+	Blockers      []string `json:"blockers,omitempty"`
+	NextSteps     []string `json:"next_steps,omitempty"`
+	LastComments  []string `json:"last_comments"`
+	Branch        string   `json:"branch"`
+	WorktreePath  string   `json:"worktree_path"`
+	Summary       string   `json:"summary,omitempty"`
 }
 
 func checkpointsDir(repoRoot string) string {
@@ -74,13 +77,20 @@ func buildCheckpoint(repoRoot, ticketID string, summary string) checkpoint {
 	done := 0
 	total := 0
 	lastComments := []string{}
+	linkedCommits := []string{}
+	blockers := []string{}
+	nextSteps := []string{}
 	if t != nil {
 		total = len(t.AC)
 		for _, ac := range t.AC {
 			if ac.Done {
 				done++
+			} else if strings.TrimSpace(ac.Description) != "" {
+				nextSteps = append(nextSteps, strings.TrimSpace(ac.Description))
 			}
 		}
+		linkedCommits = append(linkedCommits, t.LinkedCommits...)
+		blockers = append(blockers, t.BlockedBy...)
 		if len(t.Comments) > 0 {
 			start := len(t.Comments) - 3
 			if start < 0 {
@@ -92,15 +102,18 @@ func buildCheckpoint(repoRoot, ticketID string, summary string) checkpoint {
 		}
 	}
 	return checkpoint{
-		TicketID:     ticketID,
-		CreatedAt:    time.Now().UTC().Format(time.RFC3339),
-		ACDone:       done,
-		ACTotal:      total,
-		ChangedFiles: gitChangedFiles(repoRoot),
-		LastComments: lastComments,
-		Branch:       gitCurrentBranch(repoRoot),
-		WorktreePath: repoRoot,
-		Summary:      summary,
+		TicketID:      ticketID,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		ACDone:        done,
+		ACTotal:       total,
+		ChangedFiles:  gitChangedFiles(repoRoot),
+		LinkedCommits: linkedCommits,
+		Blockers:      blockers,
+		NextSteps:     nextSteps,
+		LastComments:  lastComments,
+		Branch:        gitCurrentBranch(repoRoot),
+		WorktreePath:  repoRoot,
+		Summary:       summary,
 	}
 }
 

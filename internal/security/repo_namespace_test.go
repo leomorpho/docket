@@ -162,3 +162,36 @@ func TestRunManifestVerifyStaleAndMismatch(t *testing.T) {
 		t.Fatalf("expected stale run manifest error, got: %v", err)
 	}
 }
+
+func TestUpdateContextBindingDetectsResetTriggers(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-a")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+	store := NewRepoNamespaceStore(home)
+
+	reset, reason, err := store.UpdateContextBinding(repo, "agent:test", "TKT-1", "/tmp/wt-1", "run-1")
+	if err != nil {
+		t.Fatalf("UpdateContextBinding first call failed: %v", err)
+	}
+	if !reset || reason != "new_context" {
+		t.Fatalf("expected new_context reset, got reset=%v reason=%q", reset, reason)
+	}
+
+	reset, reason, err = store.UpdateContextBinding(repo, "agent:test", "TKT-1", "/tmp/wt-1", "run-1")
+	if err != nil {
+		t.Fatalf("UpdateContextBinding second call failed: %v", err)
+	}
+	if reset || reason != "" {
+		t.Fatalf("expected no reset on identical context, got reset=%v reason=%q", reset, reason)
+	}
+
+	reset, reason, err = store.UpdateContextBinding(repo, "agent:test", "TKT-2", "/tmp/wt-2", "run-2")
+	if err != nil {
+		t.Fatalf("UpdateContextBinding ticket change failed: %v", err)
+	}
+	if !reset || reason != "ticket_changed" {
+		t.Fatalf("expected ticket_changed reset, got reset=%v reason=%q", reset, reason)
+	}
+}

@@ -58,6 +58,15 @@ type RepoNamespaceStore struct {
 	docketHome string
 }
 
+type ContextBinding struct {
+	RepoID       string `json:"repo_id"`
+	Actor        string `json:"actor"`
+	TicketID     string `json:"ticket_id"`
+	WorktreePath string `json:"worktree_path"`
+	RunStartedAt string `json:"run_started_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
 func NewRepoNamespaceStore(docketHome string) *RepoNamespaceStore {
 	return &RepoNamespaceStore{docketHome: docketHome}
 }
@@ -345,6 +354,58 @@ func GetOrCreateRepoID(repoRoot string) (string, error) {
 
 func (s *RepoNamespaceStore) repoNamespaceDir(repoID string) string {
 	return filepath.Join(s.docketHome, "repos", repoID)
+}
+
+func (s *RepoNamespaceStore) UpdateContextBinding(repoRoot, actor, ticketID, worktreePath, runStartedAt string) (bool, string, error) {
+	if actor == "" || ticketID == "" || worktreePath == "" {
+		return false, "", fmt.Errorf("actor, ticketID, and worktreePath are required")
+	}
+	repoID, dir, err := s.EnsureRepoNamespace(repoRoot)
+	if err != nil {
+		return false, "", err
+	}
+	contextDir := filepath.Join(dir, "context")
+	if err := os.MkdirAll(contextDir, 0o755); err != nil {
+		return false, "", err
+	}
+	actorSum := sha256.Sum256([]byte(actor))
+	path := filepath.Join(contextDir, fmt.Sprintf("%x.json", actorSum[:8]))
+
+	reset := true
+	reason := "new_context"
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		var prev ContextBinding
+		if unmarshalErr := json.Unmarshal(data, &prev); unmarshalErr == nil {
+			switch {
+			case prev.TicketID != ticketID:
+				reason = "ticket_changed"
+			case prev.WorktreePath != worktreePath:
+				reason = "worktree_changed"
+			case prev.RunStartedAt != "" && runStartedAt != "" && prev.RunStartedAt != runStartedAt:
+				reason = "run_changed"
+			default:
+				reset = false
+				reason = ""
+			}
+		}
+	}
+
+	next := ContextBinding{
+		RepoID:       repoID,
+		Actor:        actor,
+		TicketID:     ticketID,
+		WorktreePath: worktreePath,
+		RunStartedAt: runStartedAt,
+		UpdatedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	b, err := json.MarshalIndent(next, "", "  ")
+	if err != nil {
+		return false, "", err
+	}
+	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
+		return false, "", err
+	}
+	return reset, reason, nil
 }
 
 func trimSpace(b []byte) []byte {

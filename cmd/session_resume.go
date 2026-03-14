@@ -20,6 +20,8 @@ var sessionResumeCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		actor := detectActor()
+		contextReset := false
+		contextResetReason := ""
 		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
 			actor = "agent:" + agentID
 		}
@@ -61,6 +63,17 @@ var sessionResumeCmd = &cobra.Command{
 				}
 				return err
 			}
+			runManifest, ok, err := ns.GetRunManifest(repo, id)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("agent-managed resume requires run manifest for %s", id)
+			}
+			contextReset, contextResetReason, err = ns.UpdateContextBinding(repo, actor, id, cl.Worktree, runManifest.StartedAt)
+			if err != nil {
+				return fmt.Errorf("updating context binding: %w", err)
+			}
 		}
 
 		paths, err := listCheckpointPaths(repo, id)
@@ -87,6 +100,13 @@ var sessionResumeCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "branch=%s\n", cp.Branch)
 		fmt.Fprintf(cmd.OutOrStdout(), "worktree=%s\n", cp.WorktreePath)
 		fmt.Fprintf(cmd.OutOrStdout(), "changed_files=[%s]\n", strings.Join(cp.ChangedFiles, ", "))
+		fmt.Fprintf(cmd.OutOrStdout(), "linked_commits=[%s]\n", strings.Join(cp.LinkedCommits, ", "))
+		fmt.Fprintf(cmd.OutOrStdout(), "blockers=[%s]\n", strings.Join(cp.Blockers, ", "))
+		fmt.Fprintf(cmd.OutOrStdout(), "next_steps=[%s]\n", strings.Join(cp.NextSteps, " | "))
+		fmt.Fprintf(cmd.OutOrStdout(), "context_reset=%t\n", contextReset)
+		if contextResetReason != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "context_reset_reason=%s\n", contextResetReason)
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "last_comments=[%s]\n", strings.Join(cp.LastComments, " | "))
 		if strings.TrimSpace(cp.Summary) != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "summary=%s\n", strings.TrimSpace(cp.Summary))
