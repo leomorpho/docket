@@ -1082,6 +1082,11 @@
       "state": "backlog",
       "priority": 3,
       "parent": "TKT-177"
+    },
+    "TKT-208": {
+      "title": "Fix docket ui project registration 404s",
+      "state": "backlog",
+      "priority": 10
     }
   }
 }
