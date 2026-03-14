@@ -977,7 +977,7 @@
     },
     "TKT-190": {
       "title": "Build semantic diff views for workflow and state transitions",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-174"
     },
@@ -989,13 +989,13 @@
     },
     "TKT-192": {
       "title": "Verify ledger chain integrity and signatures on privileged mutations",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 3,
       "parent": "TKT-175"
     },
     "TKT-193": {
       "title": "Store the trusted ledger head outside the repo and detect rollback",
-      "state": "backlog",
+      "state": "todo",
       "priority": 3,
       "parent": "TKT-175"
     },
