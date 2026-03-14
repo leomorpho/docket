@@ -1049,7 +1049,7 @@
     },
     "TKT-202": {
       "title": "Reset context on ticket worktree and run boundaries and persist structured resume artifacts",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },
