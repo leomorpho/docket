@@ -834,7 +834,7 @@
     },
     "TKT-166": {
       "title": "Refactor MCP Handlers for Dependency Injection",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 10,
       "parent": "TKT-162"
     },

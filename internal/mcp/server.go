@@ -77,7 +77,7 @@ func ServeMCPWithDeps(in io.Reader, out io.Writer, deps *DispatchDeps) error {
 }
 
 type claimLookupAdapter struct {
-	manager *claim.LocalClaimManager
+	manager claim.Manager
 }
 
 func (a *claimLookupAdapter) GetClaim(ctx context.Context, ticketID string) (*ClaimMetadata, error) {
