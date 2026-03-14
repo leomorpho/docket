@@ -133,8 +133,12 @@ func processSection(t *ticket.Ticket, section string, lines []string) {
 					t.AC = append(t.AC, ac)
 				}
 			} else if len(t.AC) > 0 && trimmed != "" {
-				// Append to previous AC
-				t.AC[len(t.AC)-1].Description += "\n" + line
+				last := &t.AC[len(t.AC)-1]
+				if applyACMetadata(last, trimmed) {
+					continue
+				}
+				// Append to previous AC description for backward compatibility.
+				last.Description += "\n" + line
 			}
 		}
 	case "plan":
@@ -192,4 +196,53 @@ func processSection(t *ticket.Ticket, section string, lines []string) {
 	case "handoff":
 		t.Handoff = content
 	}
+}
+
+func applyACMetadata(ac *ticket.AcceptanceCriterion, line string) bool {
+	key, value, ok := strings.Cut(line, ":")
+	if !ok {
+		return false
+	}
+	key = strings.ToLower(strings.TrimSpace(key))
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	switch key {
+	case "kind":
+		ac.Kind = strings.ToLower(value)
+		return true
+	case "applies_to":
+		ac.AppliesTo = splitMetadataList(value)
+		return true
+	case "verification_steps", "verify":
+		ac.VerificationSteps = splitMetadataList(value)
+		return true
+	case "preserves":
+		ac.Preserves = splitMetadataList(value)
+		return true
+	default:
+		return false
+	}
+}
+
+func splitMetadataList(raw string) []string {
+	parts := strings.Split(raw, "|")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		parts = strings.Split(raw, ",")
+		for _, p := range parts {
+			s := strings.TrimSpace(p)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }

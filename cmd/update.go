@@ -111,6 +111,11 @@ var updateCmd = &cobra.Command{
 					return err
 				}
 			}
+			if newState == "done" {
+				if err := enforceStructuredACClosureGate(t); err != nil {
+					return err
+				}
+			}
 			if newState == "done" || newState == "archived" {
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
 					return err
@@ -466,6 +471,25 @@ func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string) error 
 	}
 	if err != nil {
 		return fmt.Errorf("privileged hook failed: %w", err)
+	}
+	return nil
+}
+
+func enforceStructuredACClosureGate(t *ticket.Ticket) error {
+	for i, ac := range t.AC {
+		kind := strings.ToLower(strings.TrimSpace(ac.NormalizedKind()))
+		if kind != "human" || !ac.IsUserFacing() {
+			continue
+		}
+		if len(ac.VerificationSteps) == 0 {
+			return fmt.Errorf("cannot close %s: AC #%d requires verification_steps for human user-facing criteria", t.ID, i+1)
+		}
+		if !ac.Done {
+			return fmt.Errorf("cannot close %s: AC #%d is human user-facing and must be marked done", t.ID, i+1)
+		}
+		if strings.TrimSpace(ac.Evidence) == "" {
+			return fmt.Errorf("cannot close %s: AC #%d is human user-facing and requires evidence", t.ID, i+1)
+		}
 	}
 	return nil
 }

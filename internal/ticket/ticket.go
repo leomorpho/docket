@@ -11,10 +11,14 @@ type PlanStep struct {
 }
 
 type AcceptanceCriterion struct {
-	Description string `yaml:"description"`
-	Done        bool   `yaml:"done"`
-	Evidence    string `yaml:"evidence,omitempty"`
-	Run         string `yaml:"run,omitempty"`
+	Description       string   `yaml:"description"`
+	Done              bool     `yaml:"done"`
+	Evidence          string   `yaml:"evidence,omitempty"`
+	Run               string   `yaml:"run,omitempty"`
+	Kind              string   `yaml:"kind,omitempty"`
+	AppliesTo         []string `yaml:"applies_to,omitempty"`
+	VerificationSteps []string `yaml:"verification_steps,omitempty"`
+	Preserves         []string `yaml:"preserves,omitempty"`
 }
 
 type Ticket struct {
@@ -63,4 +67,23 @@ func (t *Ticket) ACComplete() bool {
 		}
 	}
 	return true
+}
+
+// NormalizedKind returns the AC kind with defaults and whitespace removed.
+func (ac AcceptanceCriterion) NormalizedKind() string {
+	kind := ac.Kind
+	if kind == "" {
+		return "automated"
+	}
+	return kind
+}
+
+func (ac AcceptanceCriterion) IsUserFacing() bool {
+	for _, scope := range ac.AppliesTo {
+		switch scope {
+		case "cli", "user-facing", "ui":
+			return true
+		}
+	}
+	return false
 }

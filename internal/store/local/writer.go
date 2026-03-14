@@ -105,10 +105,10 @@ func render(t *ticket.Ticket) (string, error) {
 			if ac.Done {
 				box = "[x]"
 			}
-			
+
 			descLines := strings.Split(ac.Description, "\n")
 			firstLine := descLines[0]
-			
+
 			line := fmt.Sprintf("- %s %s", box, firstLine)
 			if ac.Run != "" {
 				line += " (run: " + ac.Run + ")"
@@ -117,9 +117,21 @@ func render(t *ticket.Ticket) (string, error) {
 				line += " : " + ac.Evidence
 			}
 			sb.WriteString(line + "\n")
-			
+
 			for i := 1; i < len(descLines); i++ {
 				sb.WriteString(descLines[i] + "\n")
+			}
+			if ac.Kind != "" {
+				sb.WriteString("  kind: " + ac.Kind + "\n")
+			}
+			if len(ac.AppliesTo) > 0 {
+				sb.WriteString("  applies_to: " + strings.Join(ac.AppliesTo, " | ") + "\n")
+			}
+			if len(ac.VerificationSteps) > 0 {
+				sb.WriteString("  verification_steps: " + strings.Join(ac.VerificationSteps, " | ") + "\n")
+			}
+			if len(ac.Preserves) > 0 {
+				sb.WriteString("  preserves: " + strings.Join(ac.Preserves, " | ") + "\n")
 			}
 		}
 		sb.WriteString("\n")
@@ -131,13 +143,13 @@ func render(t *ticket.Ticket) (string, error) {
 		for i, p := range t.Plan {
 			descLines := strings.Split(p.Description, "\n")
 			firstLine := descLines[0]
-			
+
 			sb.WriteString(fmt.Sprintf("%d. [%s] %s", i+1, p.Status, firstLine))
 			if p.Notes != "" {
 				sb.WriteString(" : " + p.Notes)
 			}
 			sb.WriteString("\n")
-			
+
 			for j := 1; j < len(descLines); j++ {
 				sb.WriteString(descLines[j] + "\n")
 			}

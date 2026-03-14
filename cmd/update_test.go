@@ -469,3 +469,24 @@ func TestUpdateCmd_RejectsEmptyState(t *testing.T) {
 		t.Fatalf("expected empty state error, got %v", err)
 	}
 }
+
+func TestEnforceStructuredACClosureGateRejectsIncompleteHumanVerification(t *testing.T) {
+	tkt := &ticket.Ticket{
+		ID: "TKT-900",
+		AC: []ticket.AcceptanceCriterion{
+			{
+				Description: "Manual CLI verification",
+				Kind:        "human",
+				AppliesTo:   []string{"cli"},
+				VerificationSteps: []string{
+					"Run command",
+				},
+				Done: false,
+			},
+		},
+	}
+	err := enforceStructuredACClosureGate(tkt)
+	if err == nil || !strings.Contains(err.Error(), "must be marked done") {
+		t.Fatalf("expected closure gate rejection for incomplete human verification, got %v", err)
+	}
+}

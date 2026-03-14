@@ -123,6 +123,33 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 	}
 	if len(t.AC) == 0 {
 		errs = append(errs, store.ValidationError{Field: "body", Message: "## Acceptance Criteria section is required"})
+	} else {
+		allowedKinds := map[string]bool{
+			"automated": true,
+			"human":     true,
+			"preserved": true,
+		}
+		for i, ac := range t.AC {
+			kind := strings.ToLower(strings.TrimSpace(ac.NormalizedKind()))
+			if !allowedKinds[kind] {
+				errs = append(errs, store.ValidationError{
+					Field:   fmt.Sprintf("ac[%d].kind", i),
+					Message: fmt.Sprintf("invalid kind %q (allowed: automated, human, preserved)", ac.Kind),
+				})
+			}
+			if kind == "human" && len(ac.VerificationSteps) == 0 {
+				errs = append(errs, store.ValidationError{
+					Field:   fmt.Sprintf("ac[%d].verification_steps", i),
+					Message: "human criteria require explicit verification_steps",
+				})
+			}
+			if kind == "preserved" && len(ac.Preserves) == 0 {
+				errs = append(errs, store.ValidationError{
+					Field:   fmt.Sprintf("ac[%d].preserves", i),
+					Message: "preserved criteria must document preserved behavior in preserves",
+				})
+			}
+		}
 	}
 
 	// 5. Warnings — states that require a handoff are determined by which states
