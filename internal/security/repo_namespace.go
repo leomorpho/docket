@@ -51,6 +51,7 @@ var (
 	ErrRunManifestMissing = errors.New("run manifest missing")
 	ErrRunManifestStale   = errors.New("run manifest stale")
 	ErrRunContextMismatch = errors.New("run context mismatch")
+	ErrRunManifestInvalid = errors.New("run manifest invalid")
 	DefaultRunManifestTTL = 24 * time.Hour
 )
 
@@ -276,7 +277,41 @@ func (s *RepoNamespaceStore) GetRunManifest(repoRoot, ticketID string) (RunManif
 	if err := json.Unmarshal(data, &rec); err != nil {
 		return RunManifest{}, false, err
 	}
+	if err := validateRunManifest(repoID, ticketID, rec); err != nil {
+		return RunManifest{}, false, err
+	}
 	return rec, true, nil
+}
+
+func validateRunManifest(expectedRepoID, expectedTicketID string, rec RunManifest) error {
+	if strings.TrimSpace(rec.RepoID) == "" {
+		return fmt.Errorf("%w: repo_id is required", ErrRunManifestInvalid)
+	}
+	if rec.RepoID != expectedRepoID {
+		return fmt.Errorf("%w: repo_id mismatch (expected %s, got %s)", ErrRunManifestInvalid, expectedRepoID, rec.RepoID)
+	}
+	if strings.TrimSpace(rec.TicketID) == "" {
+		return fmt.Errorf("%w: ticket_id is required", ErrRunManifestInvalid)
+	}
+	if rec.TicketID != expectedTicketID {
+		return fmt.Errorf("%w: ticket_id mismatch (expected %s, got %s)", ErrRunManifestInvalid, expectedTicketID, rec.TicketID)
+	}
+	if strings.TrimSpace(rec.Actor) == "" {
+		return fmt.Errorf("%w: actor is required", ErrRunManifestInvalid)
+	}
+	if strings.TrimSpace(rec.ActorType) == "" {
+		return fmt.Errorf("%w: actor_type is required", ErrRunManifestInvalid)
+	}
+	if strings.TrimSpace(rec.WorktreePath) == "" {
+		return fmt.Errorf("%w: worktree_path is required", ErrRunManifestInvalid)
+	}
+	if strings.TrimSpace(rec.Branch) == "" {
+		return fmt.Errorf("%w: branch is required", ErrRunManifestInvalid)
+	}
+	if strings.TrimSpace(rec.StartedAt) == "" {
+		return fmt.Errorf("%w: started_at is required", ErrRunManifestInvalid)
+	}
+	return nil
 }
 
 func (s *RepoNamespaceStore) VerifyRunContext(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {

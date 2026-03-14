@@ -130,6 +130,60 @@ func TestSessionResume_RejectsAgentOutsideBoundWorktree(t *testing.T) {
 	}
 }
 
+func TestSessionResume_RejectsAgentWithoutRunManifest(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "human"
+
+	runGitSession(t, tmp, "init")
+	runGitSession(t, tmp, "config", "user.email", "test@example.com")
+	runGitSession(t, tmp, "config", "user.name", "Test User")
+
+	s := local.New(tmp)
+	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
+	now := time.Now().UTC().Truncate(time.Second)
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-505", Seq: 505, Title: "Resume manifest gate", State: "todo", Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
+	})
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "complete", "TKT-505", "--step", "1", "--evidence", "done"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("ac complete failed: %v", err)
+	}
+
+	worktreePath := filepath.Join(tmp, "wt", "TKT-505")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("creating worktree path failed: %v", err)
+	}
+	resolvedWorktreePath, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		t.Fatalf("eval symlinks failed: %v", err)
+	}
+	if err := claim.Claim(tmp, "TKT-505", resolvedWorktreePath, "agent:test"); err != nil {
+		t.Fatalf("claim failed: %v", err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd failed: %v", err)
+	}
+	if err := os.Chdir(resolvedWorktreePath); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
+
+	t.Setenv("DOCKET_AGENT_ID", "test")
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"session", "resume", "TKT-505"})
+	err = rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "requires run manifest") {
+		t.Fatalf("expected run manifest rejection, got: %v", err)
+	}
+}
+
 func TestBuildCheckpointIncludesStructuredResumeFields(t *testing.T) {
 	tmp := t.TempDir()
 	repo = tmp

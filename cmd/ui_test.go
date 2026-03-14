@@ -18,7 +18,7 @@ func TestRegistration(t *testing.T) {
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "service": "docket-ui"})
 	})
-	mux.HandleFunc("/api/projects/register", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		json.NewDecoder(r.Body).Decode(&body)
 		if body["dir"] == "" {
@@ -26,11 +26,11 @@ func TestRegistration(t *testing.T) {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{
-			"ok": true,
+			"ok":      true,
 			"project": map[string]string{"id": "test-project"},
 		})
 	})
-	
+
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -44,6 +44,42 @@ func TestRegistration(t *testing.T) {
 	id, ok = postRegister(server.URL, "/some/dir", time.Second)
 	if !ok || id != "test-project" {
 		t.Errorf("postRegister failed: id=%s, ok=%v", id, ok)
+	}
+}
+
+func TestRegisterWithHubRetry_UsesProjectsRoute(t *testing.T) {
+	var requests int
+	var deprecatedRouteHits int
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"ok":false}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"project": map[string]string{
+				"id": "retry-project",
+			},
+		})
+	})
+	mux.HandleFunc("/api/projects/register", func(w http.ResponseWriter, r *http.Request) {
+		deprecatedRouteHits++
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	id, ok := registerWithHubRetry(server.URL, "/some/dir", 2*time.Second)
+	if !ok || id != "retry-project" {
+		t.Fatalf("registerWithHubRetry failed: id=%s ok=%v requests=%d", id, ok, requests)
+	}
+	if deprecatedRouteHits != 0 {
+		t.Fatalf("expected no calls to deprecated /api/projects/register route, got %d", deprecatedRouteHits)
 	}
 }
 

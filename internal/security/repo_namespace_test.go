@@ -186,6 +186,45 @@ func TestRunManifestVerifyStaleAndMismatch(t *testing.T) {
 	}
 }
 
+func TestRunManifestGetRejectsInvalidPayload(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-a")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	store := NewRepoNamespaceStore(home)
+	if err := store.RecordRunStart(repo, "TKT-210", "agent:test", "/tmp/wt-TKT-210", "docket/TKT-210", "hash-210"); err != nil {
+		t.Fatalf("record run manifest failed: %v", err)
+	}
+	repoID, nsDir, err := store.EnsureRepoNamespace(repo)
+	if err != nil {
+		t.Fatalf("ensure namespace failed: %v", err)
+	}
+
+	bad := RunManifest{
+		RepoID:       repoID,
+		TicketID:     "TKT-999",
+		Actor:        "agent:test",
+		ActorType:    "agent",
+		WorktreePath: "/tmp/wt-TKT-210",
+		Branch:       "docket/TKT-210",
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	data, err := json.MarshalIndent(bad, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal bad manifest failed: %v", err)
+	}
+	manifestPath := filepath.Join(nsDir, "runs", "TKT-210.json")
+	if err := os.WriteFile(manifestPath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write bad manifest failed: %v", err)
+	}
+
+	if _, _, err := store.GetRunManifest(repo, "TKT-210"); !errors.Is(err, ErrRunManifestInvalid) {
+		t.Fatalf("expected invalid run manifest error, got: %v", err)
+	}
+}
+
 func TestUpdateContextBindingDetectsResetTriggers(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(t.TempDir(), "repo-a")

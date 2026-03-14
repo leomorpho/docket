@@ -8,3 +8,5 @@ web/build
 .docket/locks.json
 .doombox/
 .pnpm-store/
+.cache/
+.docket/checkpoints/

@@ -822,31 +822,31 @@
     },
     "TKT-164": {
       "title": "Abstract Git Operations into vcs.Provider Interface",
-      "state": "in-review",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-165": {
       "title": "Abstract Claims into claim.Manager Interface",
-      "state": "in-review",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-166": {
       "title": "Refactor MCP Handlers for Dependency Injection",
-      "state": "in-review",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-167": {
       "title": "Implement Command Pattern for Ticket Mutations",
-      "state": "in-review",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-168": {
       "title": "Dependency Injection Wiring in CLI",
-      "state": "in-review",
+      "state": "done",
       "priority": 10,
       "parent": "TKT-162"
     },
@@ -870,36 +870,36 @@
     },
     "TKT-172": {
       "title": "[Epic] Harden local trust, workflow governance, and agent execution",
-      "state": "todo",
+      "state": "in-progress",
       "priority": 1
     },
     "TKT-173": {
       "title": "[Epic] Build the local trust anchor and secure mode",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-174": {
       "title": "[Epic] Govern workflow policy and privileged state transitions",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-175": {
       "title": "[Epic] Add repo-native signed state and rollback recovery",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 3,
       "parent": "TKT-172"
     },
     "TKT-176": {
       "title": "[Epic] Enforce agent worktrees and execution traceability",
-      "state": "backlog",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-177": {
       "title": "[Epic] Improve AI orchestration, context discipline, and docs",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-172"
     },
@@ -983,7 +983,7 @@
     },
     "TKT-191": {
       "title": "Define a signed event ledger format and append rules for privileged runtime events",
-      "state": "backlog",
+      "state": "done",
       "priority": 3,
       "parent": "TKT-175"
     },
@@ -1037,7 +1037,7 @@
     },
     "TKT-200": {
       "title": "Add capability-tier model routing and a provider adapter contract",
-      "state": "in-progress",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-177"
     },
@@ -1085,7 +1085,7 @@
     },
     "TKT-208": {
       "title": "Fix docket ui project registration 404s",
-      "state": "backlog",
+      "state": "done",
       "priority": 10
     }
   }
