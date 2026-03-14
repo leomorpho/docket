@@ -965,7 +965,7 @@
     },
     "TKT-188": {
       "title": "Extend ticket acceptance criteria for human verification preserved behavior and applicability",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-174"
     },
