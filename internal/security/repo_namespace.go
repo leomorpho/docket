@@ -32,14 +32,19 @@ type workflowActivationFile struct {
 }
 
 type RunManifest struct {
-	RepoID       string `json:"repo_id"`
-	TicketID     string `json:"ticket_id"`
-	Actor        string `json:"actor"`
-	ActorType    string `json:"actor_type"`
-	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
-	WorkflowHash string `json:"workflow_hash"`
-	StartedAt    string `json:"started_at"`
+	RepoID            string `json:"repo_id"`
+	TicketID          string `json:"ticket_id"`
+	Actor             string `json:"actor"`
+	ActorType         string `json:"actor_type"`
+	WorktreePath      string `json:"worktree_path"`
+	Branch            string `json:"branch"`
+	WorkflowHash      string `json:"workflow_hash"`
+	StartedAt         string `json:"started_at"`
+	RoutingTier       string `json:"routing_tier,omitempty"`
+	RoutingProvider   string `json:"routing_provider,omitempty"`
+	RoutingModelID    string `json:"routing_model_id,omitempty"`
+	RoutingRationale  string `json:"routing_rationale,omitempty"`
+	RoutingRecordedAt string `json:"routing_recorded_at,omitempty"`
 }
 
 var (
@@ -207,6 +212,36 @@ func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, actor, worktreeP
 		WorkflowHash: workflowHash,
 		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
 	}
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	runsDir := filepath.Join(dir, "runs")
+	if err := os.MkdirAll(runsDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(runsDir, ticketID+".json"), append(data, '\n'), 0o600)
+}
+
+func (s *RepoNamespaceStore) RecordRunRoutingDecision(repoRoot, ticketID, tier, provider, modelID, rationale string) error {
+	rec, ok, err := s.GetRunManifest(repoRoot, ticketID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrRunManifestMissing, ticketID)
+	}
+	rec.RoutingTier = strings.TrimSpace(tier)
+	rec.RoutingProvider = strings.TrimSpace(provider)
+	rec.RoutingModelID = strings.TrimSpace(modelID)
+	rec.RoutingRationale = strings.TrimSpace(rationale)
+	rec.RoutingRecordedAt = time.Now().UTC().Format(time.RFC3339Nano)
+
+	repoID, dir, err := s.EnsureRepoNamespace(repoRoot)
+	if err != nil {
+		return err
+	}
+	rec.RepoID = repoID
 	data, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return err

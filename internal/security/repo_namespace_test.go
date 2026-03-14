@@ -110,6 +110,19 @@ func TestRunManifestRecordAndVerify(t *testing.T) {
 	if err := store.VerifyRunContext(repo, "TKT-197", "agent:test", "/tmp/wt-TKT-197", "docket/TKT-197", "hash-123"); err != nil {
 		t.Fatalf("verify run context failed: %v", err)
 	}
+	if err := store.RecordRunRoutingDecision(repo, "TKT-197", "cheap", "fixture", "fixture-cheap", "small task"); err != nil {
+		t.Fatalf("record run routing failed: %v", err)
+	}
+	rec, ok, err = store.GetRunManifest(repo, "TKT-197")
+	if err != nil || !ok {
+		t.Fatalf("get run manifest after routing failed: ok=%v err=%v", ok, err)
+	}
+	if rec.RoutingTier != "cheap" || rec.RoutingProvider != "fixture" || rec.RoutingModelID != "fixture-cheap" {
+		t.Fatalf("unexpected routing metadata: %#v", rec)
+	}
+	if rec.RoutingRationale == "" || rec.RoutingRecordedAt == "" {
+		t.Fatalf("expected routing rationale and timestamp, got: %#v", rec)
+	}
 }
 
 func TestRunManifestVerifyStaleAndMismatch(t *testing.T) {

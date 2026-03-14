@@ -11,6 +11,7 @@ import (
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -90,11 +91,24 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
 			return fmt.Errorf("recording run manifest: %w", err)
 		}
+		tokenEstimate, risk, failureCount := routingInputs(t)
+		preferredTier := workflow.SelectCapabilityTier(tokenEstimate, risk, failureCount)
+		adapter := workflow.DefaultProviderAdapter()
+		model, decision, routeErr := workflow.ResolveModelForTask(adapter, preferredTier)
+		if routeErr != nil {
+			return fmt.Errorf("resolving model route: %w", routeErr)
+		}
+		if err := ns.RecordRunRoutingDecision(repo, t.ID, string(decision.SelectedTier), adapter.ProviderName(), model.ID, decision.Rationale); err != nil {
+			return fmt.Errorf("recording run routing metadata: %w", err)
+		}
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{
 				"ticket":            t,
+				"model_tier":        decision.SelectedTier,
+				"model_id":          model.ID,
+				"routing_rationale": decision.Rationale,
 				"agent_instruction": "Analyze the requirements and implement the changes. Use 'docket' tools to track your progress.",
 			})
 			return nil
@@ -104,6 +118,7 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		fmt.Fprintf(cmd.OutOrStdout(), "You have started working on ticket: %s\n", t.ID)
 		fmt.Fprintf(cmd.OutOrStdout(), "Title: %s\n", t.Title)
 		fmt.Fprintf(cmd.OutOrStdout(), "Description: %s\n", t.Description)
+		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
 		fmt.Fprintf(cmd.OutOrStdout(), "\nAcceptance Criteria:\n")
 		for _, ac := range t.AC {
 			status := "[ ]"
@@ -117,6 +132,32 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 
 		return nil
 	},
+}
+
+func routingInputs(t *ticket.Ticket) (tokenEstimate int, risk string, failureCount int) {
+	risk = "low"
+	for _, l := range t.Labels {
+		switch strings.ToLower(strings.TrimSpace(l)) {
+		case "security", "user-facing", "human-only":
+			risk = "high"
+		}
+	}
+	var sb strings.Builder
+	sb.WriteString(t.Title)
+	sb.WriteString(" ")
+	sb.WriteString(t.Description)
+	for _, ac := range t.AC {
+		sb.WriteString(" ")
+		sb.WriteString(ac.Description)
+	}
+	tokenEstimate = len(strings.Fields(sb.String())) * 2
+	for _, c := range t.Comments {
+		body := strings.ToLower(c.Body)
+		if strings.Contains(body, "fail") || strings.Contains(body, "retry") {
+			failureCount++
+		}
+	}
+	return tokenEstimate, risk, failureCount
 }
 
 func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (*ticket.Ticket, error) {

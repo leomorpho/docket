@@ -77,3 +77,24 @@ func TestSelectCapabilityTier(t *testing.T) {
 		t.Fatalf("expected long_context tier, got %s", got)
 	}
 }
+
+func TestResolveModelForTask_FallbackWhenPreferredUnavailable(t *testing.T) {
+	adapter := fixtureProviderAdapter{
+		name: "fixture-runtime",
+		models: map[CapabilityTier][]ModelSpec{
+			TierBalanced: {
+				{ID: "provider-balanced-v1"},
+			},
+		},
+	}
+	model, decision, err := ResolveModelForTask(adapter, TierStrong)
+	if err != nil {
+		t.Fatalf("ResolveModelForTask failed: %v", err)
+	}
+	if model.ID != "provider-balanced-v1" {
+		t.Fatalf("expected balanced fallback model, got %q", model.ID)
+	}
+	if !decision.PreferredUnavailable || decision.SelectedTier != TierBalanced {
+		t.Fatalf("expected fallback decision metadata, got %#v", decision)
+	}
+}
