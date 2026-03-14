@@ -92,7 +92,7 @@ func installCursorRules(cmd *cobra.Command) error {
     3. **update** the ticket to 'in-progress'. This will automatically claim the ticket and may create a dedicated git worktree for your changes.
     4. If a worktree was created, perform your work within that directory.
     5. Once finished, ensure all acceptance criteria are met and tests pass.
-    6. **update** the ticket to 'in-review'. This will automatically commit your changes, merge them back to the main branch, and cleanup the worktree/claim.
+    6. **update** the ticket to 'in-review'. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
     7. A human reviewer advances the ticket to 'done' after verification.
 - **Large Payloads:** If your content is > 1000 characters, write it to a temporary file and pass the path to the 'content_file' parameter in MCP calls.
 `
@@ -211,7 +211,7 @@ Docket provides a set of tools via its MCP server. Always prefer these tools ove
     3. **update** the ticket to 'in-progress'. This will automatically claim the ticket (TKT-142/143) and may create a dedicated git worktree for your changes.
     4. If a worktree was created, perform your work within that directory.
     5. Once finished, ensure all acceptance criteria are met and tests pass.
-    6. **update** the ticket to 'in-review'. This will automatically commit your changes, merge them back to the main branch, and cleanup the worktree/claim.
+    6. **update** the ticket to 'in-review'. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
     7. A human reviewer advances the ticket to 'done' after verification.
 
 ## Performance & Context

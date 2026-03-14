@@ -109,9 +109,13 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 			return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", err, cl.Worktree)
 		}
 
-		// Cleanup
-		_ = m.vcs.RemoveWorktree(ctx, cl.Worktree)
-		_ = m.vcs.DeleteBranch(ctx, branch)
+		// Cleanup must succeed so merged runs do not leave stale linked worktrees behind.
+		if err := m.vcs.RemoveWorktree(ctx, cl.Worktree); err != nil {
+			return nil, fmt.Errorf("cleanup merged worktree %s: %w", cl.Worktree, err)
+		}
+		if err := m.vcs.DeleteBranch(ctx, branch); err != nil {
+			return nil, fmt.Errorf("delete merged branch %s: %w", branch, err)
+		}
 	}
 
 	// 2. Transition state through command validation.
