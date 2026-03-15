@@ -208,10 +208,20 @@
 		data.tickets.filter((t: Ticket) => {
 			if (searchQuery) {
 				const q = searchQuery.toLowerCase();
-				return (
-					t.id.toLowerCase().includes(q) ||
-					t.title.toLowerCase().includes(q)
-				);
+				const searchable = [
+					t.id,
+					t.title,
+					t.state,
+					t.parent ?? '',
+					t.created_by ?? '',
+					t.description ?? '',
+					...(t.labels ?? []),
+					...(t.children ?? []),
+					...(t.blocked_by ?? [])
+				]
+					.join('\n')
+					.toLowerCase();
+				return searchable.includes(q);
 			}
 			return true;
 		})
@@ -496,7 +506,7 @@
 					<input
 						bind:this={searchInput}
 						type="text"
-						placeholder="Search tickets by id or title... (/)"
+						placeholder="Search by id, title, labels, state, parent, blocker... (/)"
 						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
 						bind:value={searchQuery}
 					/>

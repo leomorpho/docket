@@ -3,8 +3,6 @@ import path from 'node:path';
 import type { AcceptanceCriterion, Comment, Config, PlanStep, Relation, Ticket } from '$lib/types';
 import { getProject } from '$lib/server/registry';
 
-type FrontmatterTicket = Omit<Ticket, 'title' | 'body'>;
-
 const defaultConfig: Config = {
 	states: {
 		backlog: { label: 'Backlog', open: true, column: 0, next: ['todo', 'archived'] },
@@ -41,6 +39,165 @@ export function readConfig(projectId?: string): Config {
 	};
 }
 
+type ParsedBody = {
+	description: string;
+	sections: Record<string, string>;
+};
+
+function parseBodySections(body: string): ParsedBody {
+	const lines = body.split('\n');
+	const titleLineIndex = lines.findIndex((line) => /^#\s+/.test(line));
+	const contentStart = titleLineIndex >= 0 ? titleLineIndex + 1 : 0;
+	let firstSectionIndex = lines.length;
+	for (let i = contentStart; i < lines.length; i += 1) {
+		if (/^##\s+/.test(lines[i])) {
+			firstSectionIndex = i;
+			break;
+		}
+	}
+
+	const sections: Record<string, string> = {};
+	let currentSectionKey: string | null = null;
+	let currentSectionLines: string[] = [];
+	for (let i = firstSectionIndex; i < lines.length; i += 1) {
+		const line = lines[i];
+		const headingMatch = line.match(/^##\s+(.+?)\s*$/);
+		if (headingMatch) {
+			if (currentSectionKey) {
+				sections[currentSectionKey] = currentSectionLines.join('\n').trim();
+			}
+			currentSectionKey = headingMatch[1].trim().toLowerCase();
+			currentSectionLines = [];
+			continue;
+		}
+		if (currentSectionKey) {
+			currentSectionLines.push(line);
+		}
+	}
+	if (currentSectionKey) {
+		sections[currentSectionKey] = currentSectionLines.join('\n').trim();
+	}
+
+	const fallbackDescription = lines.slice(contentStart, firstSectionIndex).join('\n').trim();
+	const description = sections.description?.trim() || fallbackDescription;
+	return { description, sections };
+}
+
+function parseAcceptanceCriteria(section: string | undefined): AcceptanceCriterion[] {
+	if (!section) return [];
+	const ac: AcceptanceCriterion[] = [];
+	for (const line of section.split('\n')) {
+		const m = line.trim().match(/^- \[(x| )\] (.*)$/);
+		if (!m) continue;
+		const done = m[1] === 'x';
+		let desc = m[2].trim();
+		let evidence: string | undefined;
+		if (desc.includes(' — evidence: ')) {
+			const parts = desc.split(' — evidence: ');
+			desc = parts[0];
+			evidence = parts[1];
+		} else if (desc.includes(' : ')) {
+			const parts = desc.split(' : ');
+			desc = parts[0];
+			evidence = parts[1];
+		}
+		ac.push({ done, description: desc, evidence });
+	}
+	return ac;
+}
+
+function parsePlan(section: string | undefined): PlanStep[] {
+	if (!section) return [];
+	const plan: PlanStep[] = [];
+	for (const line of section.split('\n')) {
+		const m = line.trim().match(/^\d+\. \[(.*?)\] (.*)$/);
+		if (!m) continue;
+		const status = m[1].trim();
+		let desc = m[2].trim();
+		let notes: string | undefined;
+		if (desc.includes(' — ')) {
+			const parts = desc.split(' — ');
+			desc = parts[0];
+			notes = parts[1];
+		} else if (desc.includes(' : ')) {
+			const parts = desc.split(' : ');
+			desc = parts[0];
+			notes = parts[1];
+		}
+		plan.push({ status, description: desc, notes });
+	}
+	return plan;
+}
+
+function parseComments(section: string | undefined): Comment[] {
+	if (!section) return [];
+	const comments: Comment[] = [];
+	const headerPattern =
+		/^(?:###\s*)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s+—\s+(.+)$/;
+
+	let currentAt: string | null = null;
+	let currentAuthor: string | null = null;
+	let currentBodyLines: string[] = [];
+
+	const flush = () => {
+		if (!currentAt || !currentAuthor) return;
+		comments.push({
+			at: currentAt,
+			author: currentAuthor,
+			body: currentBodyLines.join('\n').trim()
+		});
+		currentAt = null;
+		currentAuthor = null;
+		currentBodyLines = [];
+	};
+
+	for (const rawLine of section.split('\n')) {
+		const line = rawLine.replace(/\r$/, '');
+		const headerMatch = line.trim().match(headerPattern);
+		if (headerMatch) {
+			flush();
+			currentAt = headerMatch[1];
+			currentAuthor = headerMatch[2].trim();
+			currentBodyLines = [];
+			continue;
+		}
+		if (currentAt && currentAuthor) {
+			currentBodyLines.push(line);
+		}
+	}
+	flush();
+	if (comments.length === 0 && section.trim()) {
+		comments.push({
+			at: '',
+			author: 'unstructured',
+			body: section.trim()
+		});
+	}
+	return comments;
+}
+
+function buildFrontmatterRecord(
+	fmObj: Record<string, unknown>
+): Record<string, string | string[]> | undefined {
+	const frontmatter: Record<string, string | string[]> = {};
+	for (const [key, value] of Object.entries(fmObj)) {
+		if (Array.isArray(value)) {
+			const items = value
+				.map((entry) => String(entry).trim())
+				.filter(Boolean);
+			if (items.length > 0) {
+				frontmatter[key] = items;
+			}
+			continue;
+		}
+		if (value === undefined || value === null) continue;
+		const normalized = String(value).trim();
+		if (!normalized) continue;
+		frontmatter[key] = normalized;
+	}
+	return Object.keys(frontmatter).length > 0 ? frontmatter : undefined;
+}
+
 function parseTicketFile(content: string): Ticket | null {
 	const parts = content.split('---\n');
 	if (parts.length < 3) return null;
@@ -50,70 +207,14 @@ function parseTicketFile(content: string): Ticket | null {
 	const fmObj = parseFrontmatter(frontmatter);
 	const titleMatch = body.match(/^#\s+[A-Z]+-\d+:\s+(.+)$/m) ?? body.match(/^#\s+(.+)$/m);
 	const title = titleMatch?.[1]?.trim() ?? 'Untitled';
-	const fm = fmObj as Record<string, unknown> & FrontmatterTicket;
-
-	const ac: AcceptanceCriterion[] = [];
-	const acSection = body.match(/## Acceptance Criteria([\s\S]*?)(##|$)/);
-	if (acSection) {
-		const lines = acSection[1].split('\n');
-		for (const line of lines) {
-			const m = line.trim().match(/^- \[(x| )\] (.*)$/);
-			if (m) {
-				const done = m[1] === 'x';
-				let desc = m[2].trim();
-				let evidence: string | undefined;
-				if (desc.includes(' — evidence: ')) {
-					const parts = desc.split(' — evidence: ');
-					desc = parts[0];
-					evidence = parts[1];
-				} else if (desc.includes(' : ')) {
-					const parts = desc.split(' : ');
-					desc = parts[0];
-					evidence = parts[1];
-				}
-				ac.push({ done, description: desc, evidence });
-			}
-		}
-	}
-
-	const plan: PlanStep[] = [];
-	const planSection = body.match(/## Plan([\s\S]*?)(##|$)/);
-	if (planSection) {
-		const lines = planSection[1].split('\n');
-		for (const line of lines) {
-			const m = line.trim().match(/^\d+\. \[(.*?)\] (.*)$/);
-			if (m) {
-				const status = m[1].trim();
-				let desc = m[2].trim();
-				let notes: string | undefined;
-				if (desc.includes(' — ')) {
-					const parts = desc.split(' — ');
-					desc = parts[0];
-					notes = parts[1];
-				} else if (desc.includes(' : ')) {
-					const parts = desc.split(' : ');
-					desc = parts[0];
-					notes = parts[1];
-				}
-				plan.push({ status, description: desc, notes });
-			}
-		}
-	}
-
-	const handoffMatch = body.match(/## Handoff([\s\S]*?)$/);
-	const handoff = handoffMatch ? handoffMatch[1].trim() : undefined;
-
-	const comments: Comment[] = [];
-	const commentsSection = body.match(/## Comments([\s\S]*?)(##|$)/);
-	if (commentsSection) {
-		const blocks = commentsSection[1].split(/\n(?=\d{4}-\d{2}-\d{2}T)/);
-		for (const block of blocks) {
-			const m = block.trim().match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) — (.*)\n([\s\S]*)$/);
-			if (m) {
-				comments.push({ at: m[1], author: m[2], body: m[3].trim() });
-			}
-		}
-	}
+	const fm = fmObj as Record<string, unknown>;
+	const parsedBody = parseBodySections(body);
+	const ac = parseAcceptanceCriteria(parsedBody.sections['acceptance criteria']);
+	const plan = parsePlan(parsedBody.sections.plan);
+	const comments = parseComments(parsedBody.sections.comments);
+	const handoff = parsedBody.sections.handoff?.trim() || undefined;
+	const description = parsedBody.description || undefined;
+	const frontmatterRecord = buildFrontmatterRecord(fmObj);
 
 	return {
 		id: String(fm.id ?? ''),
@@ -121,6 +222,7 @@ function parseTicketFile(content: string): Ticket | null {
 		state: String(fm.state ?? ''),
 		priority: Number(fm.priority ?? 0),
 		labels: toStringArray(fm.labels),
+		blocked_by: toStringArray(fm.blocked_by),
 		parent: fm.parent ? String(fm.parent) : undefined,
 		children: toStringArray((fm as Record<string, unknown>).children),
 		title,
@@ -128,10 +230,14 @@ function parseTicketFile(content: string): Ticket | null {
 		updated_at: String(fm.updated_at ?? ''),
 		started_at: fm.started_at ? String(fm.started_at) : undefined,
 		completed_at: fm.completed_at ? String(fm.completed_at) : undefined,
+		created_by: fm.created_by ? String(fm.created_by) : undefined,
+		write_hash: fm.write_hash ? String(fm.write_hash) : undefined,
+		description,
 		ac,
 		plan,
 		comments,
 		handoff,
+		frontmatter: frontmatterRecord,
 		body
 	};
 }
@@ -201,7 +307,9 @@ function parseTicketSummaryFile(content: string): Ticket | null {
 	const fmObj = parseFrontmatter(frontmatter);
 	const titleMatch = body.match(/^#\s+[A-Z]+-\d+:\s+(.+)$/m) ?? body.match(/^#\s+(.+)$/m);
 	const title = titleMatch?.[1]?.trim() ?? 'Untitled';
-	const fm = fmObj as Record<string, unknown> & FrontmatterTicket;
+	const fm = fmObj as Record<string, unknown>;
+	const parsedBody = parseBodySections(body);
+	const frontmatterRecord = buildFrontmatterRecord(fmObj);
 
 	return {
 		id: String(fm.id ?? ''),
@@ -209,6 +317,7 @@ function parseTicketSummaryFile(content: string): Ticket | null {
 		state: String(fm.state ?? ''),
 		priority: Number(fm.priority ?? 0),
 		labels: toStringArray(fm.labels),
+		blocked_by: toStringArray(fm.blocked_by),
 		parent: fm.parent ? String(fm.parent) : undefined,
 		children: toStringArray((fm as Record<string, unknown>).children),
 		title,
@@ -216,10 +325,14 @@ function parseTicketSummaryFile(content: string): Ticket | null {
 		updated_at: String(fm.updated_at ?? ''),
 		started_at: fm.started_at ? String(fm.started_at) : undefined,
 		completed_at: fm.completed_at ? String(fm.completed_at) : undefined,
+		created_by: fm.created_by ? String(fm.created_by) : undefined,
+		write_hash: fm.write_hash ? String(fm.write_hash) : undefined,
+		description: parsedBody.description || undefined,
 		ac: [],
 		plan: [],
 		comments: [],
 		handoff: undefined,
+		frontmatter: frontmatterRecord,
 		body: ''
 	};
 }

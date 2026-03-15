@@ -49,6 +49,7 @@ export type Ticket = {
 	state: string;
 	priority: number;
 	labels: string[];
+	blocked_by?: string[];
 	parent?: string;
 	children?: string[];
 	title: string;
@@ -56,10 +57,14 @@ export type Ticket = {
 	updated_at: string;
 	started_at?: string;
 	completed_at?: string;
+	created_by?: string;
+	write_hash?: string;
+	description?: string;
 	ac: AcceptanceCriterion[];
 	plan: PlanStep[];
 	comments: Comment[];
 	handoff?: string;
+	frontmatter?: Record<string, string | string[]>;
 	body: string;
 };
 

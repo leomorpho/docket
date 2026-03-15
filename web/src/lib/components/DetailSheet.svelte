@@ -2,7 +2,10 @@
 	import { marked } from 'marked';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import HumanDateTime from '$lib/components/HumanDateTime.svelte';
 	import TicketHierarchyTree from '$lib/components/TicketHierarchyTree.svelte';
+	import TicketReference from '$lib/components/TicketReference.svelte';
+	import TicketTimeline from '$lib/components/TicketTimeline.svelte';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import {
@@ -63,11 +66,18 @@
 		onSelect?: (e: CustomEvent<{ id: string }>) => void;
 	}>();
 
-	const overviewHtml = $derived.by(() => {
-		if (!ticket) return '';
-		const source = ticket.body || '_No overview provided._';
-		return marked.parse(source, { gfm: true, breaks: true });
+	const overviewMarkdown = $derived.by(() => {
+		if (!ticket) return '_No overview provided._';
+		const source = ticket.description?.trim() || extractDescription(ticket.body);
+		return source || '_No overview provided._';
 	});
+	const overviewHtml = $derived.by(() => marked.parse(overviewMarkdown, { gfm: true, breaks: true }));
+	const handoffHtml = $derived.by(() =>
+		ticket?.handoff?.trim() ? marked.parse(ticket.handoff, { gfm: true, breaks: true }) : ''
+	);
+	const frontmatterEntries = $derived.by(() =>
+		Object.entries(ticket?.frontmatter ?? {}).sort(([left], [right]) => left.localeCompare(right))
+	);
 
 	let stateDraft = $state('');
 	let titleDraft = $state('');
@@ -95,7 +105,7 @@
 		}
 		stateDraft = ticket.state;
 		titleDraft = ticket.title;
-		descriptionDraft = extractDescription(ticket.body);
+		descriptionDraft = ticket.description ?? extractDescription(ticket.body);
 		approvalTicket = ticket.id;
 		confirmPrivileged = false;
 		errorMessage = '';
@@ -159,30 +169,36 @@
 		const lines = markdown.split('\n');
 		const titleLine = lines.findIndex((line) => line.startsWith('# '));
 		const start = titleLine >= 0 ? titleLine + 1 : 0;
+		let effectiveStart = start;
+		for (let i = start; i < lines.length; i += 1) {
+			const line = lines[i].trim();
+			if (!line) continue;
+			if (/^##\s+Description\b/i.test(line)) {
+				effectiveStart = i + 1;
+			}
+			break;
+		}
 		let end = lines.findIndex(
 			(line, idx) =>
-				idx > start &&
+				idx > effectiveStart &&
 				/^\s*##\s+(Acceptance Criteria|Plan|Comments|Handoff)\b/i.test(line)
 		);
 		if (end < 0) end = lines.length;
-		return lines.slice(start, end).join('\n').trim();
+		return lines.slice(effectiveStart, end).join('\n').trim();
 	}
 
 	function resetQuickEdit() {
 		if (!ticket) return;
 		titleDraft = ticket.title;
-		descriptionDraft = extractDescription(ticket.body);
-	}
-
-	function formatLocalDateTime(value?: string): string {
-		if (!value) return '—';
-		const parsed = new Date(value);
-		if (Number.isNaN(parsed.getTime())) return value;
-		return parsed.toLocaleString();
+		descriptionDraft = ticket.description ?? extractDescription(ticket.body);
 	}
 
 	function selectTicketByID(id: string) {
 		onSelect?.(new CustomEvent('select', { detail: { id } }));
+	}
+
+	function isTicketID(value: string): boolean {
+		return /^TKT-\d+$/.test(value);
 	}
 
 	async function saveState() {
@@ -241,7 +257,7 @@
 	async function saveDescription() {
 		if (!ticket || savingDescription) return;
 		const next = descriptionDraft.trim();
-		const current = extractDescription(ticket.body);
+		const current = (ticket.description ?? extractDescription(ticket.body)).trim();
 		if (next === current) return;
 		savingDescription = true;
 		errorMessage = '';
@@ -325,12 +341,6 @@
 					<div class="flex flex-wrap items-center gap-2">
 						<Badge variant="outline">{ticket.state}</Badge>
 						<Badge variant="secondary">P{ticket.priority}</Badge>
-						<Badge variant="outline">created {formatLocalDateTime(ticket.created_at)}</Badge>
-						<Badge variant="outline">updated {formatLocalDateTime(ticket.updated_at)}</Badge>
-						{#if ticket.parent}<Badge variant="outline">parent: {ticket.parent}</Badge>{/if}
-						{#if childCount > 0}
-							<Badge variant="secondary">children: {childCount}</Badge>
-						{/if}
 						{#each ticket.labels as label}
 							<Badge variant="secondary" class="bg-muted text-foreground">{label}</Badge>
 						{/each}
@@ -383,7 +393,9 @@
 					<div class="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
 						<p>
 							Secure mode: <span class={secureActive ? 'text-emerald-700' : 'text-red-700'}>{secureActive ? 'active' : 'inactive'}</span>
-							{#if secureActive && secureExpiresAt} (expires: {formatLocalDateTime(secureExpiresAt)}){/if}
+							{#if secureActive && secureExpiresAt}
+								<span class="ml-1">(expires <HumanDateTime value={secureExpiresAt} layout="inline" />)</span>
+							{/if}
 						</p>
 						{#if secureStatusError}
 							<p class="mt-1 text-red-700">{secureStatusError}</p>
@@ -408,6 +420,13 @@
 						</section>
 
 						<section class="space-y-3">
+							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Timeline</p>
+							<div class="rounded-lg border border-border bg-muted/30 p-4">
+								<TicketTimeline {ticket} />
+							</div>
+						</section>
+
+						<section class="space-y-3">
 							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Hierarchy</p>
 							<div class="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
 								{#if parentTrail.length > 0}
@@ -415,14 +434,11 @@
 										<p class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Parent Path</p>
 										<div class="mt-2 flex flex-wrap items-center gap-2">
 											{#each parentTrail as ancestor}
-												<Button
-													variant="outline"
-													size="sm"
-													class="h-7 px-2 font-mono text-xs"
-													onclick={() => selectTicketByID(ancestor.id)}
-												>
-													{ancestor.id}
-												</Button>
+												<TicketReference
+													id={ancestor.id}
+													ticket={ancestor}
+													on:select={(e: CustomEvent<{ id: string }>) => selectTicketByID(e.detail.id)}
+												/>
 											{/each}
 											<Badge variant="secondary" class="font-mono text-[10px]">{ticket.id}</Badge>
 										</div>
@@ -436,14 +452,11 @@
 										</p>
 										<div class="mt-2 flex flex-wrap gap-2">
 											{#each siblings as sibling}
-												<Button
-													variant="outline"
-													size="sm"
-													class="h-7 px-2 font-mono text-xs"
-													onclick={() => selectTicketByID(sibling.id)}
-												>
-													{sibling.id}
-												</Button>
+												<TicketReference
+													id={sibling.id}
+													ticket={sibling}
+													on:select={(e: CustomEvent<{ id: string }>) => selectTicketByID(e.detail.id)}
+												/>
 											{/each}
 										</div>
 									</div>
@@ -462,6 +475,77 @@
 										</div>
 									{/if}
 								</div>
+							</div>
+						</section>
+
+						<section class="space-y-3">
+							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Metadata</p>
+							<div class="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+								<div class="grid gap-2 sm:grid-cols-2">
+									<div class="rounded-md border border-border bg-background px-3 py-2 text-xs">
+										<p class="text-muted-foreground">Created By</p>
+										<p class="mt-1 font-mono text-foreground">{ticket.created_by ?? '—'}</p>
+									</div>
+									<div class="rounded-md border border-border bg-background px-3 py-2 text-xs">
+										<p class="text-muted-foreground">Write Hash</p>
+										<p class="mt-1 break-all font-mono text-foreground">{ticket.write_hash ?? '—'}</p>
+									</div>
+								</div>
+
+								{#if (ticket.blocked_by?.length ?? 0) > 0}
+									<div>
+										<p class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+											Blocked By
+										</p>
+										<div class="mt-2 flex flex-wrap gap-2">
+											{#each ticket.blocked_by ?? [] as blocker}
+												{#if isTicketID(blocker)}
+													<TicketReference
+														id={blocker}
+														ticket={ticketByID.get(blocker)}
+														on:select={(e: CustomEvent<{ id: string }>) => selectTicketByID(e.detail.id)}
+													/>
+												{:else}
+													<Badge variant="outline" class="font-mono text-[10px]">{blocker}</Badge>
+												{/if}
+											{/each}
+										</div>
+									</div>
+								{/if}
+
+								{#if frontmatterEntries.length > 0}
+									<div class="rounded-md border border-border bg-background">
+										<div class="border-b border-border px-3 py-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+											Frontmatter
+										</div>
+										<div class="divide-y divide-border">
+											{#each frontmatterEntries as [frontmatterKey, frontmatterValue]}
+												<div class="grid gap-2 px-3 py-2 text-xs sm:grid-cols-[10rem_1fr]">
+													<p class="font-mono text-muted-foreground">{frontmatterKey}</p>
+													{#if Array.isArray(frontmatterValue)}
+														<div class="flex flex-wrap gap-1.5">
+															{#each frontmatterValue as item}
+																{#if isTicketID(item)}
+																	<TicketReference
+																		id={item}
+																		ticket={ticketByID.get(item)}
+																		compact={true}
+																		on:select={(e: CustomEvent<{ id: string }>) =>
+																			selectTicketByID(e.detail.id)}
+																	/>
+																{:else}
+																	<Badge variant="outline" class="font-mono text-[10px]">{item}</Badge>
+																{/if}
+															{/each}
+														</div>
+													{:else}
+														<p class="break-all font-mono text-foreground">{frontmatterValue}</p>
+													{/if}
+												</div>
+											{/each}
+										</div>
+									</div>
+								{/if}
 							</div>
 						</section>
 
@@ -539,14 +623,26 @@
 							</section>
 						{/if}
 
+						{#if ticket.handoff}
+							<section class="space-y-3">
+								<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Handoff</p>
+								<article class="overview-markdown max-w-none rounded-lg border border-border bg-background p-4 text-sm leading-relaxed text-foreground">
+									{@html handoffHtml}
+								</article>
+							</section>
+						{/if}
+
 						<section class="space-y-4 border-t border-border pt-6">
 							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Comments</p>
 							<div class="space-y-4">
+								{#if (ticket.comments?.length ?? 0) === 0}
+									<p class="text-xs text-muted-foreground italic">No comments recorded yet.</p>
+								{/if}
 								{#each ticket.comments || [] as comment}
 									<div class="rounded-lg border border-border bg-background p-3 shadow-xs">
 										<div class="mb-2 flex items-center justify-between gap-2">
 											<span class="text-xs font-semibold text-foreground">{comment.author}</span>
-											<span class="text-[10px] text-muted-foreground">{formatLocalDateTime(comment.at)}</span>
+											<HumanDateTime value={comment.at} layout="inline" />
 										</div>
 										<div class="markdown text-sm text-foreground">
 											{@html marked.parse(comment.body, { gfm: true })}
@@ -566,6 +662,18 @@
 								</div>
 							</div>
 						</section>
+
+						<details class="rounded-lg border border-border bg-muted/30 p-4">
+							<summary class="cursor-pointer text-xs font-medium tracking-wide text-muted-foreground uppercase">
+								Raw Markdown
+							</summary>
+							<div class="mt-3 space-y-2">
+								<p class="text-[11px] text-muted-foreground">
+									Full ticket body exactly as stored in markdown.
+								</p>
+								<pre class="max-h-72 overflow-auto rounded-md border border-border bg-background p-3 text-[11px] leading-relaxed text-foreground">{ticket.body}</pre>
+							</div>
+						</details>
 
 						<details class="rounded-lg border border-border bg-muted/30 p-4">
 							<summary class="cursor-pointer text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -604,14 +712,12 @@
 									<p class="mb-2 text-xs font-semibold text-muted-foreground">Blockers</p>
 									<div class="flex flex-wrap gap-2">
 										{#each relations.filter((r: Relation) => r.from === ticket.id && r.relation === 'blocked_by') as rel}
-											<Button
-												variant="outline"
-												size="sm"
-												class="h-7 px-2 font-mono text-xs"
-												onclick={() => onSelect?.(new CustomEvent('select', { detail: { id: rel.to } }))}
-											>
-												{rel.to}
-											</Button>
+											<TicketReference
+												id={rel.to}
+												ticket={ticketByID.get(rel.to)}
+												on:select={(e: CustomEvent<{ id: string }>) =>
+													onSelect?.(new CustomEvent('select', { detail: { id: e.detail.id } }))}
+											/>
 										{:else}
 											<span class="text-xs text-muted-foreground italic">None</span>
 										{/each}
@@ -621,14 +727,12 @@
 									<p class="mb-2 text-xs font-semibold text-muted-foreground">Dependents</p>
 									<div class="flex flex-wrap gap-2">
 										{#each relations.filter((r: Relation) => r.to === ticket.id && r.relation === 'blocked_by') as rel}
-											<Button
-												variant="outline"
-												size="sm"
-												class="h-7 px-2 font-mono text-xs"
-												onclick={() => onSelect?.(new CustomEvent('select', { detail: { id: rel.from } }))}
-											>
-												{rel.from}
-											</Button>
+											<TicketReference
+												id={rel.from}
+												ticket={ticketByID.get(rel.from)}
+												on:select={(e: CustomEvent<{ id: string }>) =>
+													onSelect?.(new CustomEvent('select', { detail: { id: e.detail.id } }))}
+											/>
 										{:else}
 											<span class="text-xs text-muted-foreground italic">None</span>
 										{/each}
