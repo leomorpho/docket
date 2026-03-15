@@ -15,10 +15,11 @@
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
 	const keys: SortKey[] = ['id', 'title', 'state', 'priority', 'parent', 'created_at'];
 
-	let { tickets, sortBy, sortDir } = $props<{
+	let { tickets, sortBy, sortDir, childCounts = {} } = $props<{
 		tickets: Ticket[];
 		sortBy: SortKey;
 		sortDir: 'asc' | 'desc';
+		childCounts?: Record<string, number>;
 	}>();
 
 	const dispatch = createEventDispatcher<{
@@ -37,6 +38,12 @@
 				created_at: 'Created'
 			}[k] ?? k
 		);
+	}
+
+	function formatLocalDateTime(value: string): string {
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) return value;
+		return parsed.toLocaleString();
 	}
 </script>
 
@@ -68,11 +75,25 @@
 						onclick={() => dispatch('select', { ticket })}
 					>
 						<TableCell class="font-medium text-foreground">{ticket.id}</TableCell>
-						<TableCell class="max-w-[36ch] truncate">{ticket.title}</TableCell>
+						<TableCell class="max-w-[48ch]">
+							<p class="truncate text-foreground">{ticket.title}</p>
+							{#if ticket.parent || (childCounts?.[ticket.id] ?? 0) > 0}
+								<div class="mt-1 flex flex-wrap items-center gap-1">
+									{#if ticket.parent}
+										<Badge variant="outline" class="text-[10px]">parent {ticket.parent}</Badge>
+									{/if}
+									{#if (childCounts?.[ticket.id] ?? 0) > 0}
+										<Badge variant="secondary" class="text-[10px]">
+											{childCounts?.[ticket.id]} child{(childCounts?.[ticket.id] ?? 0) === 1 ? '' : 'ren'}
+										</Badge>
+									{/if}
+								</div>
+							{/if}
+						</TableCell>
 						<TableCell><Badge variant="outline">{ticket.state}</Badge></TableCell>
 						<TableCell><Badge variant="secondary">P{ticket.priority}</Badge></TableCell>
 						<TableCell>{ticket.parent ?? '-'}</TableCell>
-						<TableCell class="text-muted-foreground">{ticket.created_at}</TableCell>
+						<TableCell class="text-muted-foreground">{formatLocalDateTime(ticket.created_at)}</TableCell>
 					</TableRow>
 				{/each}
 			</TableBody>

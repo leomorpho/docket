@@ -2,6 +2,7 @@
 	import { marked } from 'marked';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import TicketHierarchyTree from '$lib/components/TicketHierarchyTree.svelte';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import {
@@ -11,15 +12,19 @@
 		SheetHeader,
 		SheetTitle
 	} from '$lib/components/ui/sheet';
+	import { buildChildrenByParent } from '$lib/hierarchy';
 	import type { Relation, Ticket } from '$lib/types';
 
 	type MutationResult = { ok: boolean; error?: string };
 	type StateOption = { key: string; label: string };
 	type StateUpdateOptions = { approvalTicket?: string; confirmed?: boolean };
 	type RelatedTicket = { id: string; title: string; score: number };
+	type HierarchyNode = { ticket: Ticket; children: HierarchyNode[] };
 
 	let {
 		ticket,
+		tickets,
+		projectId = null,
 		open = $bindable(false),
 		stateOptions,
 		onUpdateState,
@@ -30,10 +35,16 @@
 		secureActive = false,
 		secureExpiresAt = '',
 		secureStatusError = '',
+		canNavigateBack = false,
+		canNavigateForward = false,
+		onNavigateBack,
+		onNavigateForward,
 		relations = [],
 		onSelect
 	} = $props<{
 		ticket: Ticket | null;
+		tickets: Ticket[];
+		projectId?: string | null;
 		open: boolean;
 		stateOptions: StateOption[];
 		relations: Relation[];
@@ -45,10 +56,18 @@
 		secureActive?: boolean;
 		secureExpiresAt?: string;
 		secureStatusError?: string;
+		canNavigateBack?: boolean;
+		canNavigateForward?: boolean;
+		onNavigateBack?: () => void;
+		onNavigateForward?: () => void;
 		onSelect?: (e: CustomEvent<{ id: string }>) => void;
 	}>();
 
-	const html = $derived(ticket ? marked.parse(ticket.body, { gfm: true }) : '');
+	const overviewHtml = $derived.by(() => {
+		if (!ticket) return '';
+		const source = ticket.body || '_No overview provided._';
+		return marked.parse(source, { gfm: true, breaks: true });
+	});
 
 	let stateDraft = $state('');
 	let titleDraft = $state('');
@@ -93,12 +112,58 @@
 	});
 
 	const stateIsPrivileged = $derived(stateDraft === 'done' || stateDraft === 'archived');
+	const ticketByID = $derived.by(
+		() => new Map<string, Ticket>(tickets.map((t: Ticket): [string, Ticket] => [t.id, t]))
+	);
+	const childrenByParent = $derived.by(() => buildChildrenByParent(tickets));
+	const childCount = $derived(ticket ? (childrenByParent.get(ticket.id)?.length ?? 0) : 0);
+	const parentTrail = $derived.by((): Ticket[] => {
+		if (!ticket) return [];
+		const trail: Ticket[] = [];
+		const seen = new Set<string>([ticket.id]);
+		let parentID = ticket.parent;
+		while (parentID) {
+			if (seen.has(parentID)) break;
+			const parent = ticketByID.get(parentID);
+			if (!parent) break;
+			trail.unshift(parent);
+			seen.add(parent.id);
+			parentID = parent.parent;
+		}
+		return trail;
+	});
+	const siblings = $derived.by((): Ticket[] => {
+		if (!ticket?.parent) return [];
+		return (childrenByParent.get(ticket.parent) ?? []).filter((t) => t.id !== ticket.id);
+	});
+	const childHierarchy = $derived.by((): HierarchyNode[] => {
+		if (!ticket) return [];
+		const build = (parentID: string, seen: Set<string>): HierarchyNode[] => {
+			const children = childrenByParent.get(parentID) ?? [];
+			const nodes: HierarchyNode[] = [];
+			for (const child of children) {
+				if (seen.has(child.id)) continue;
+				const nextSeen = new Set(seen);
+				nextSeen.add(child.id);
+				nodes.push({
+					ticket: child,
+					children: build(child.id, nextSeen)
+				});
+			}
+			return nodes;
+		};
+		return build(ticket.id, new Set([ticket.id]));
+	});
 
 	function extractDescription(markdown: string): string {
 		const lines = markdown.split('\n');
 		const titleLine = lines.findIndex((line) => line.startsWith('# '));
 		const start = titleLine >= 0 ? titleLine + 1 : 0;
-		let end = lines.findIndex((line, idx) => idx > start && line.startsWith('## Acceptance Criteria'));
+		let end = lines.findIndex(
+			(line, idx) =>
+				idx > start &&
+				/^\s*##\s+(Acceptance Criteria|Plan|Comments|Handoff)\b/i.test(line)
+		);
 		if (end < 0) end = lines.length;
 		return lines.slice(start, end).join('\n').trim();
 	}
@@ -107,6 +172,17 @@
 		if (!ticket) return;
 		titleDraft = ticket.title;
 		descriptionDraft = extractDescription(ticket.body);
+	}
+
+	function formatLocalDateTime(value?: string): string {
+		if (!value) return '—';
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) return value;
+		return parsed.toLocaleString();
+	}
+
+	function selectTicketByID(id: string) {
+		onSelect?.(new CustomEvent('select', { detail: { id } }));
 	}
 
 	async function saveState() {
@@ -183,7 +259,8 @@
 		if (!ticket) return;
 		loadingRelated = true;
 		try {
-			const response = await fetch(`/api/tickets/${ticket.id}/related`);
+			const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+			const response = await fetch(`/api/tickets/${ticket.id}/related${query}`);
 			const data = await response.json();
 			if (data.ok) {
 				relatedTickets = data.related || [];
@@ -211,7 +288,7 @@
 </script>
 
 <Sheet bind:open>
-	<SheetContent class="w-[min(64rem,96vw)] max-w-none border-l-border bg-card/98 p-0 sm:w-[min(56rem,92vw)]">
+	<SheetContent class="w-[96vw] max-w-none border-l-border bg-card/98 p-0 sm:w-[92vw] lg:w-[80vw]">
 		{#if ticket}
 			<div class="flex h-full flex-col">
 				<SheetHeader class="space-y-3 border-b border-border/80 px-6 pt-6 pb-5">
@@ -220,15 +297,40 @@
 							<SheetTitle class="text-xl leading-tight font-semibold text-foreground">{ticket.id}</SheetTitle>
 							<SheetDescription class="text-sm text-foreground">{ticket.title}</SheetDescription>
 						</div>
-						<Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button>
+						<div class="flex items-center gap-2">
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={() => onNavigateBack?.()}
+								disabled={!canNavigateBack}
+								aria-label="Previous ticket"
+								title="Previous ticket (Alt+Left)"
+							>
+								Back
+							</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={() => onNavigateForward?.()}
+								disabled={!canNavigateForward}
+								aria-label="Next ticket"
+								title="Next ticket (Alt+Right)"
+							>
+								Forward
+							</Button>
+							<Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button>
+						</div>
 					</div>
 
 					<div class="flex flex-wrap items-center gap-2">
 						<Badge variant="outline">{ticket.state}</Badge>
 						<Badge variant="secondary">P{ticket.priority}</Badge>
-						<Badge variant="outline">created {ticket.created_at}</Badge>
-						<Badge variant="outline">updated {ticket.updated_at}</Badge>
+						<Badge variant="outline">created {formatLocalDateTime(ticket.created_at)}</Badge>
+						<Badge variant="outline">updated {formatLocalDateTime(ticket.updated_at)}</Badge>
 						{#if ticket.parent}<Badge variant="outline">parent: {ticket.parent}</Badge>{/if}
+						{#if childCount > 0}
+							<Badge variant="secondary">children: {childCount}</Badge>
+						{/if}
 						{#each ticket.labels as label}
 							<Badge variant="secondary" class="bg-muted text-foreground">{label}</Badge>
 						{/each}
@@ -281,7 +383,7 @@
 					<div class="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
 						<p>
 							Secure mode: <span class={secureActive ? 'text-emerald-700' : 'text-red-700'}>{secureActive ? 'active' : 'inactive'}</span>
-							{#if secureActive && secureExpiresAt} (expires: {secureExpiresAt}){/if}
+							{#if secureActive && secureExpiresAt} (expires: {formatLocalDateTime(secureExpiresAt)}){/if}
 						</p>
 						{#if secureStatusError}
 							<p class="mt-1 text-red-700">{secureStatusError}</p>
@@ -300,9 +402,67 @@
 					<div class="space-y-6 pb-6">
 						<section class="space-y-3">
 							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Overview</p>
-							<article class="markdown max-w-none rounded-lg border border-border bg-background p-4 text-sm leading-relaxed text-foreground">
-								{@html html}
+							<article class="overview-markdown max-w-none rounded-lg border border-border bg-background p-4 text-sm leading-relaxed text-foreground">
+								{@html overviewHtml}
 							</article>
+						</section>
+
+						<section class="space-y-3">
+							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Hierarchy</p>
+							<div class="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+								{#if parentTrail.length > 0}
+									<div>
+										<p class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Parent Path</p>
+										<div class="mt-2 flex flex-wrap items-center gap-2">
+											{#each parentTrail as ancestor}
+												<Button
+													variant="outline"
+													size="sm"
+													class="h-7 px-2 font-mono text-xs"
+													onclick={() => selectTicketByID(ancestor.id)}
+												>
+													{ancestor.id}
+												</Button>
+											{/each}
+											<Badge variant="secondary" class="font-mono text-[10px]">{ticket.id}</Badge>
+										</div>
+									</div>
+								{/if}
+
+								{#if siblings.length > 0}
+									<div>
+										<p class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+											Siblings
+										</p>
+										<div class="mt-2 flex flex-wrap gap-2">
+											{#each siblings as sibling}
+												<Button
+													variant="outline"
+													size="sm"
+													class="h-7 px-2 font-mono text-xs"
+													onclick={() => selectTicketByID(sibling.id)}
+												>
+													{sibling.id}
+												</Button>
+											{/each}
+										</div>
+									</div>
+								{/if}
+
+								<div>
+									<p class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Children</p>
+									{#if childHierarchy.length === 0}
+										<p class="mt-2 text-xs text-muted-foreground italic">No child tickets.</p>
+									{:else}
+										<div class="mt-2">
+											<TicketHierarchyTree
+												nodes={childHierarchy}
+												on:select={(e: CustomEvent<{ id: string }>) => selectTicketByID(e.detail.id)}
+											/>
+										</div>
+									{/if}
+								</div>
+							</div>
 						</section>
 
 						{#if quickEditOpen}
@@ -386,7 +546,7 @@
 									<div class="rounded-lg border border-border bg-background p-3 shadow-xs">
 										<div class="mb-2 flex items-center justify-between gap-2">
 											<span class="text-xs font-semibold text-foreground">{comment.author}</span>
-											<span class="text-[10px] text-muted-foreground">{new Date(comment.at).toLocaleString()}</span>
+											<span class="text-[10px] text-muted-foreground">{formatLocalDateTime(comment.at)}</span>
 										</div>
 										<div class="markdown text-sm text-foreground">
 											{@html marked.parse(comment.body, { gfm: true })}
@@ -493,6 +653,86 @@
 	}
 
 	.markdown :global(code) {
+		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	.overview-markdown :global(h1),
+	.overview-markdown :global(h2),
+	.overview-markdown :global(h3) {
+		margin-top: 1rem;
+		margin-bottom: 0.5rem;
+		font-weight: 700;
+		line-height: 1.2;
+	}
+
+	.overview-markdown :global(h1) {
+		font-size: 1.1rem;
+	}
+
+	.overview-markdown :global(h2) {
+		font-size: 1rem;
+	}
+
+	.overview-markdown :global(h3) {
+		font-size: 0.95rem;
+	}
+
+	.overview-markdown :global(p) {
+		margin-top: 0.65rem;
+	}
+
+	.overview-markdown :global(ul),
+	.overview-markdown :global(ol) {
+		margin-top: 0.65rem;
+		padding-left: 1.1rem;
+	}
+
+	.overview-markdown :global(li) {
+		margin-top: 0.35rem;
+	}
+
+	.overview-markdown :global(blockquote) {
+		margin-top: 0.8rem;
+		border-left: 3px solid hsl(var(--border));
+		padding-left: 0.75rem;
+		color: hsl(var(--muted-foreground));
+	}
+
+	.overview-markdown :global(a) {
+		color: hsl(var(--primary));
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.overview-markdown :global(hr) {
+		margin-top: 1rem;
+		border: 0;
+		border-top: 1px solid hsl(var(--border));
+	}
+
+	.overview-markdown :global(table) {
+		margin-top: 0.8rem;
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.overview-markdown :global(th),
+	.overview-markdown :global(td) {
+		border: 1px solid hsl(var(--border));
+		padding: 0.4rem 0.5rem;
+		text-align: left;
+	}
+
+	.overview-markdown :global(pre) {
+		margin-top: 0.8rem;
+		border-radius: 0.5rem;
+		background: #0f172a;
+		color: #f1f5f9;
+		padding: 1rem;
+		overflow: auto;
+	}
+
+	.overview-markdown :global(code) {
 		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 	}
 </style>

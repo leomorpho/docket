@@ -1,15 +1,16 @@
 <script lang="ts">
-	import { goto, replaceState } from '$app/navigation';
+	import { browser } from '$app/environment';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import BoardView from '$lib/components/BoardView.svelte';
 	import CreateTicketModal from '$lib/components/CreateTicketModal.svelte';
 	import DetailSheet from '$lib/components/DetailSheet.svelte';
-	import FilterBar from '$lib/components/FilterBar.svelte';
 	import ListTable from '$lib/components/ListTable.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
+	import { buildChildCounts } from '$lib/hierarchy';
 	import type { Config, Project, Relation, StateConfig, Ticket } from '$lib/types';
 	import { onMount } from 'svelte';
 
@@ -50,15 +51,35 @@
 	let sortBy = $state<SortKey>('priority');
 	let sortDir = $state<'asc' | 'desc'>('asc');
 	let searchQuery = $state('');
-	let filterBar = $state<ReturnType<typeof FilterBar> | null>(null);
 	let createModalOpen = $state(false);
 	let secureActive = $state(false);
 	let secureExpiresAt = $state('');
 	let secureStatusError = $state('');
 	let ticketCache = $state(new Map<string, Ticket>());
 	let preloadWorker = $state<Worker | null>(null);
+	let ticketHistory = $state<string[]>([]);
+	let ticketHistoryIndex = $state(-1);
+	let searchInput = $state<HTMLInputElement | null>(null);
+	let routerReady = $state(false);
+	let initialTicketHandled = $state(false);
+
+	function focusSearch() {
+		searchInput?.focus();
+	}
+
+	function syncTicketQueryParam(ticketID: string | null) {
+		if (!browser) return;
+		const url = new URL(window.location.href);
+		if (ticketID) {
+			url.searchParams.set('ticket', ticketID);
+		} else {
+			url.searchParams.delete('ticket');
+		}
+		window.history.replaceState(window.history.state, '', url);
+	}
 
 	onMount(() => {
+		routerReady = true;
 		const handleKeydown = (e: KeyboardEvent) => {
 			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
 				if (e.key === 'Escape') {
@@ -75,11 +96,19 @@
 			}
 			if (e.key === '/') {
 				e.preventDefault();
-				filterBar?.focusSearch();
+				focusSearch();
 			}
 			if (e.key === 'Escape') {
 				if (sheetOpen) sheetOpen = false;
 				if (createModalOpen) createModalOpen = false;
+			}
+			if (sheetOpen && e.altKey && e.key === 'ArrowLeft') {
+				e.preventDefault();
+				navigateHistory(-1);
+			}
+			if (sheetOpen && e.altKey && e.key === 'ArrowRight') {
+				e.preventDefault();
+				navigateHistory(1);
 			}
 		};
 		window.addEventListener('keydown', handleKeydown);
@@ -89,7 +118,10 @@
 			switchProject(persisted);
 		}
 
-		return () => window.removeEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('keydown', handleKeydown);
+			routerReady = false;
+		};
 	});
 
 	onMount(() => {
@@ -146,23 +178,18 @@
 
 	// Handle initial ticket from URL
 	$effect(() => {
-		const ticketId = $page.url.searchParams.get('ticket');
-		if (ticketId && !selectedTicket) {
-			const t = ticketCache.get(ticketId) ?? data.tickets.find((ticket: Ticket) => ticket.id === ticketId);
-			if (t) {
-				selectedTicket = t;
-				sheetOpen = true;
-				requestWorkerTicket(ticketId);
-				void hydrateTicket(ticketId);
-			}
+		if (!routerReady || !browser || initialTicketHandled) return;
+		initialTicketHandled = true;
+		const ticketId = new URL(window.location.href).searchParams.get('ticket');
+		if (ticketId) {
+			openTicketByID(ticketId, { pushHistory: true });
 		}
 	});
 
 	$effect(() => {
-		if (!sheetOpen && $page.url.searchParams.has('ticket')) {
-			const url = new URL($page.url);
-			url.searchParams.delete('ticket');
-			replaceState(url, $page.state);
+		if (!routerReady || !browser || !initialTicketHandled) return;
+		if (!sheetOpen) {
+			syncTicketQueryParam(null);
 		}
 	});
 
@@ -172,6 +199,8 @@
 			searchQuery = '';
 			selectedTicket = null;
 			sheetOpen = false;
+			ticketHistory = [];
+			ticketHistoryIndex = -1;
 		}
 	});
 
@@ -210,7 +239,12 @@
 				if (av < bv) return sortDir === 'asc' ? -1 : 1;
 				if (av > bv) return sortDir === 'asc' ? 1 : -1;
 				return 0;
-			})
+				})
+	);
+	const childCountByID = $derived.by(() => buildChildCounts(Array.from(ticketCache.values())));
+	const canNavigateBack = $derived(ticketHistoryIndex > 0);
+	const canNavigateForward = $derived(
+		ticketHistoryIndex >= 0 && ticketHistoryIndex < ticketHistory.length - 1
 	);
 
 	function switchProject(id: string) {
@@ -239,14 +273,41 @@
 		}
 	}
 
-	function onCardSelect(ticket: Ticket) {
-		selectedTicket = ticketCache.get(ticket.id) ?? ticket;
+	function pushTicketHistory(ticketID: string) {
+		if (ticketHistory[ticketHistoryIndex] === ticketID) return;
+		const next = ticketHistory.slice(0, ticketHistoryIndex + 1);
+		next.push(ticketID);
+		ticketHistory = next;
+		ticketHistoryIndex = next.length - 1;
+	}
+
+	function openTicketByID(
+		ticketID: string,
+		options?: { pushHistory?: boolean; fallbackTicket?: Ticket | null }
+	) {
+		const fallbackTicket = options?.fallbackTicket ?? null;
+		const cached = ticketCache.get(ticketID) ?? data.tickets.find((ticket: Ticket) => ticket.id === ticketID) ?? fallbackTicket;
+		if (cached) {
+			selectedTicket = cached;
+		}
 		sheetOpen = true;
-		const url = new URL($page.url);
-		url.searchParams.set('ticket', ticket.id);
-		replaceState(url, $page.state);
-		requestWorkerTicket(ticket.id);
-		void hydrateTicket(ticket.id);
+		syncTicketQueryParam(ticketID);
+		if (options?.pushHistory ?? true) {
+			pushTicketHistory(ticketID);
+		}
+		requestWorkerTicket(ticketID);
+		void hydrateTicket(ticketID);
+	}
+
+	function onCardSelect(ticket: Ticket) {
+		openTicketByID(ticket.id, { pushHistory: true, fallbackTicket: ticket });
+	}
+
+	function navigateHistory(direction: -1 | 1) {
+		const nextIndex = ticketHistoryIndex + direction;
+		if (nextIndex < 0 || nextIndex >= ticketHistory.length) return;
+		ticketHistoryIndex = nextIndex;
+		openTicketByID(ticketHistory[nextIndex], { pushHistory: false });
 	}
 
 	function requestWorkerTicket(ticketID: string) {
@@ -259,7 +320,7 @@
 		preloadWorker.postMessage(request);
 	}
 
-	async function hydrateTicket(ticketID: string) {
+	async function hydrateTicket(ticketID: string): Promise<Ticket | undefined> {
 		const query = data.activeProjectId ? `?projectId=${encodeURIComponent(data.activeProjectId)}` : '';
 		try {
 			const response = await fetch(`/api/tickets/${ticketID}${query}`);
@@ -271,6 +332,7 @@
 			if (selectedTicket?.id === ticketID) {
 				selectedTicket = payload.ticket;
 			}
+			return payload.ticket;
 		} catch {
 			// Keep cached data on hydration failures.
 		}
@@ -430,7 +492,15 @@
 				</div>
 			</CardHeader>
 			<CardContent>
-				<FilterBar bind:this={filterBar} bind:searchQuery />
+				<div class="rounded-xl border border-border bg-muted/40 p-3">
+					<input
+						bind:this={searchInput}
+						type="text"
+						placeholder="Search tickets by id or title... (/)"
+						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+						bind:value={searchQuery}
+					/>
+				</div>
 			</CardContent>
 		</Card>
 
@@ -443,6 +513,7 @@
 			<TabsContent value="board" class="mt-0">
 				<BoardView
 					{columns}
+					childCounts={childCountByID}
 					on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
 				/>
 			</TabsContent>
@@ -452,6 +523,7 @@
 					tickets={reviewList}
 					{sortBy}
 					{sortDir}
+					childCounts={childCountByID}
 					on:sort={(e: CustomEvent<{ by: SortKey }>) => toggleSort(e.detail.by)}
 					on:select={(e: CustomEvent<{ ticket: Ticket }>) => onCardSelect(e.detail.ticket)}
 				/>
@@ -461,7 +533,13 @@
 
 	<DetailSheet
 		ticket={selectedTicket}
+		tickets={Array.from(ticketCache.values())}
+		projectId={data.activeProjectId}
 		bind:open={sheetOpen}
+		canNavigateBack={canNavigateBack}
+		canNavigateForward={canNavigateForward}
+		onNavigateBack={() => navigateHistory(-1)}
+		onNavigateForward={() => navigateHistory(1)}
 		stateOptions={allStates}
 		relations={data.relations}
 		onUpdateState={updateState}
@@ -473,8 +551,7 @@
 		secureExpiresAt={secureExpiresAt}
 		secureStatusError={secureStatusError}
 		onSelect={(e) => {
-			const t = data.tickets.find((t: Ticket) => t.id === e.detail.id);
-			if (t) onCardSelect(t);
+			openTicketByID(e.detail.id, { pushHistory: true });
 		}}
 	/>
 

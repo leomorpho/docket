@@ -13,7 +13,7 @@
 		tickets: Ticket[];
 	};
 
-	let { columns } = $props<{ columns: Column[] }>();
+	let { columns, childCounts = {} } = $props<{ columns: Column[]; childCounts?: Record<string, number> }>();
 	const dispatch = createEventDispatcher<{ select: { ticket: Ticket } }>();
 
 	const columnBackgrounds = [
@@ -40,6 +40,7 @@
 						{#each col.tickets as ticket}
 							<TicketCard
 								{ticket}
+								childCount={childCounts[ticket.id] ?? 0}
 								on:select={(e: CustomEvent<{ ticket: Ticket }>) => dispatch('select', e.detail)}
 							/>
 						{/each}

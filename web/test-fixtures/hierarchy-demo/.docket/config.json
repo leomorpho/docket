@@ -1,0 +1,12 @@
+{
+  "states": {
+    "backlog": { "label": "Backlog", "open": true, "column": 0, "next": ["todo"] },
+    "todo": { "label": "To Do", "open": true, "column": 1, "next": ["in-progress"] },
+    "in-progress": { "label": "In Progress", "open": true, "column": 2, "next": ["in-review"] },
+    "in-review": { "label": "In Review", "open": true, "column": 3, "next": ["done"] },
+    "done": { "label": "Done", "open": false, "column": 4, "next": [] }
+  },
+  "default_state": "backlog",
+  "default_priority": 5,
+  "labels": ["feature", "ui"]
+}

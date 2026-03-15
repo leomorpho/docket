@@ -120,8 +120,9 @@ function parseTicketFile(content: string): Ticket | null {
 		seq: Number(fm.seq ?? 0),
 		state: String(fm.state ?? ''),
 		priority: Number(fm.priority ?? 0),
-		labels: Array.isArray(fm.labels) ? (fm.labels as string[]) : [],
+		labels: toStringArray(fm.labels),
 		parent: fm.parent ? String(fm.parent) : undefined,
+		children: toStringArray((fm as Record<string, unknown>).children),
 		title,
 		created_at: String(fm.created_at ?? ''),
 		updated_at: String(fm.updated_at ?? ''),
@@ -137,12 +138,34 @@ function parseTicketFile(content: string): Ticket | null {
 
 function parseFrontmatter(frontmatter: string): Record<string, unknown> {
 	const fmObj: Record<string, unknown> = {};
-	for (const line of frontmatter.split('\n')) {
+	let pendingListKey: string | null = null;
+	for (const rawLine of frontmatter.split('\n')) {
+		const line = rawLine.replace(/\r$/, '');
+		const listItemMatch = line.match(/^\s*-\s+(.*)$/);
+		if (listItemMatch && pendingListKey) {
+			const list = Array.isArray(fmObj[pendingListKey]) ? (fmObj[pendingListKey] as unknown[]) : [];
+			list.push(listItemMatch[1].trim().replace(/^"(.*)"$/, '$1'));
+			fmObj[pendingListKey] = list;
+			continue;
+		}
+
 		const trimmed = line.trim();
-		if (!trimmed || !trimmed.includes(':')) continue;
-		const idx = trimmed.indexOf(':');
-		const key = trimmed.slice(0, idx).trim();
-		const rawValue = trimmed.slice(idx + 1).trim();
+		if (!trimmed) continue;
+		const keyMatch = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
+		if (!keyMatch) {
+			pendingListKey = null;
+			continue;
+		}
+
+		const key = keyMatch[1];
+		const rawValue = keyMatch[2].trim();
+		if (!rawValue) {
+			pendingListKey = key;
+			fmObj[key] = '';
+			continue;
+		}
+
+		pendingListKey = null;
 		if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
 			const vals = rawValue
 				.slice(1, -1)
@@ -155,6 +178,18 @@ function parseFrontmatter(frontmatter: string): Record<string, unknown> {
 		fmObj[key] = rawValue.replace(/^"(.*)"$/, '$1');
 	}
 	return fmObj;
+}
+
+function toStringArray(value: unknown): string[] {
+	if (Array.isArray(value)) {
+		return value
+			.map((entry) => String(entry).trim())
+			.filter(Boolean);
+	}
+	if (typeof value === 'string' && value.trim()) {
+		return [value.trim()];
+	}
+	return [];
 }
 
 function parseTicketSummaryFile(content: string): Ticket | null {
@@ -173,8 +208,9 @@ function parseTicketSummaryFile(content: string): Ticket | null {
 		seq: Number(fm.seq ?? 0),
 		state: String(fm.state ?? ''),
 		priority: Number(fm.priority ?? 0),
-		labels: Array.isArray(fm.labels) ? (fm.labels as string[]) : [],
+		labels: toStringArray(fm.labels),
 		parent: fm.parent ? String(fm.parent) : undefined,
+		children: toStringArray((fm as Record<string, unknown>).children),
 		title,
 		created_at: String(fm.created_at ?? ''),
 		updated_at: String(fm.updated_at ?? ''),

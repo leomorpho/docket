@@ -50,6 +50,7 @@ export type Ticket = {
 	priority: number;
 	labels: string[];
 	parent?: string;
+	children?: string[];
 	title: string;
 	created_at: string;
 	updated_at: string;

@@ -4,7 +4,7 @@
 	import { Card, CardContent, CardHeader } from '$lib/components/ui/card';
 	import type { Ticket } from '$lib/types';
 
-	let { ticket } = $props<{ ticket: Ticket }>();
+	let { ticket, childCount = 0 } = $props<{ ticket: Ticket; childCount?: number }>();
 	const dispatch = createEventDispatcher<{ select: { ticket: Ticket } }>();
 
 	function select() {
@@ -27,6 +27,18 @@
 		</CardHeader>
 		<CardContent class="space-y-3">
 			<h3 class="line-clamp-2 text-sm leading-snug font-semibold text-foreground">{ticket.title}</h3>
+			{#if ticket.parent || childCount > 0}
+				<div class="flex flex-wrap gap-1.5">
+					{#if ticket.parent}
+						<Badge variant="outline" class="text-[10px]">parent {ticket.parent}</Badge>
+					{/if}
+					{#if childCount > 0}
+						<Badge variant="secondary" class="text-[10px]">
+							{childCount} child{childCount === 1 ? '' : 'ren'}
+						</Badge>
+					{/if}
+				</div>
+			{/if}
 			{#if ticket.labels.length > 0}
 				<div class="flex flex-wrap gap-1.5">
 					{#each ticket.labels as label}

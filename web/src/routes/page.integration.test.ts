@@ -107,4 +107,37 @@ describe('UI integration: project registration + page load', () => {
 		expect(pageData.relations.length).toBe(1);
 		expect(pageData.relations[0].relation).toBe('blocked_by');
 	});
+
+	it('loads hierarchy fixture with parent and child-link metadata', async () => {
+		const repo = path.resolve('test-fixtures/hierarchy-demo');
+		process.env.DOCKET_DIR = repo;
+
+		const { POST } = await import('./api/projects/+server');
+		const registerRes = await POST({
+			request: new Request('http://localhost/api/projects', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ dir: repo })
+			})
+		} as never);
+		const registerBody = (await registerRes.json()) as {
+			ok: boolean;
+			project: { id: string };
+		};
+		expect(registerBody.ok).toBe(true);
+
+		const { load } = await import('./+page.server');
+		const pageData = (await load({
+			url: new URL(`http://localhost/?project=${registerBody.project.id}`)
+		} as never)) as {
+			tickets: Array<{ id: string; parent?: string; children?: string[] }>;
+		};
+
+		const epic = pageData.tickets.find((ticket) => ticket.id === 'TKT-900');
+		const directChild = pageData.tickets.find((ticket) => ticket.id === 'TKT-901');
+
+		expect(pageData.tickets.length).toBeGreaterThanOrEqual(4);
+		expect(epic?.children).toEqual(['TKT-901', 'TKT-902']);
+		expect(directChild?.parent).toBe('TKT-900');
+	});
 });
