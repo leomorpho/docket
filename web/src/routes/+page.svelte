@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import BoardView from '$lib/components/BoardView.svelte';
 	import CreateTicketModal from '$lib/components/CreateTicketModal.svelte';
@@ -34,8 +34,16 @@
 	);
 
 	type SortKey = 'id' | 'title' | 'state' | 'priority' | 'parent' | 'created_at';
+	type TicketFetchResult = { ok: boolean; ticket?: Ticket; error?: string };
 	type MutationResult = { ok: boolean; error?: string };
 	type StateUpdateOptions = { approvalTicket?: string; confirmed?: boolean };
+	type PreloadWorkerRequest =
+		| { type: 'preload'; projectId: string | null }
+		| { type: 'get-ticket'; projectId: string | null; id: string };
+	type PreloadWorkerResponse =
+		| { type: 'ready'; projectId: string | null; count: number }
+		| { type: 'ticket'; projectId: string | null; id: string; ticket: Ticket | null }
+		| { type: 'error'; projectId: string | null; error: string };
 	let mode = $state<'board' | 'review'>('board');
 	let selectedTicket = $state<Ticket | null>(null);
 	let sheetOpen = $state(false);
@@ -47,6 +55,8 @@
 	let secureActive = $state(false);
 	let secureExpiresAt = $state('');
 	let secureStatusError = $state('');
+	let ticketCache = $state(new Map<string, Ticket>());
+	let preloadWorker = $state<Worker | null>(null);
 
 	onMount(() => {
 		const handleKeydown = (e: KeyboardEvent) => {
@@ -82,6 +92,31 @@
 		return () => window.removeEventListener('keydown', handleKeydown);
 	});
 
+	onMount(() => {
+		if (typeof Worker === 'undefined') {
+			return;
+		}
+		const worker = new Worker(new URL('../lib/workers/ticket-preload.worker.ts', import.meta.url), {
+			type: 'module'
+		});
+		preloadWorker = worker;
+		worker.onmessage = (event: MessageEvent<PreloadWorkerResponse>) => {
+			const msg = event.data;
+			if (msg.type === 'ticket' && msg.projectId === data.activeProjectId && msg.ticket) {
+				const next = new Map(ticketCache);
+				next.set(msg.id, msg.ticket);
+				ticketCache = next;
+				if (selectedTicket?.id === msg.id) {
+					selectedTicket = msg.ticket;
+				}
+			}
+		};
+		return () => {
+			worker.terminate();
+			preloadWorker = null;
+		};
+	});
+
 	$effect(() => {
 		if (data.activeProjectId) {
 			localStorage.setItem('docket_active_project', data.activeProjectId);
@@ -89,17 +124,36 @@
 	});
 
 	$effect(() => {
+		const next = new Map<string, Ticket>();
+		for (const ticket of data.tickets) {
+			next.set(ticket.id, ticket);
+		}
+		ticketCache = next;
+	});
+
+	$effect(() => {
 		void refreshSecureStatus();
+	});
+
+	$effect(() => {
+		if (!preloadWorker) return;
+		const request: PreloadWorkerRequest = {
+			type: 'preload',
+			projectId: data.activeProjectId
+		};
+		preloadWorker.postMessage(request);
 	});
 
 	// Handle initial ticket from URL
 	$effect(() => {
 		const ticketId = $page.url.searchParams.get('ticket');
 		if (ticketId && !selectedTicket) {
-			const t = data.tickets.find((t: Ticket) => t.id === ticketId);
+			const t = ticketCache.get(ticketId) ?? data.tickets.find((ticket: Ticket) => ticket.id === ticketId);
 			if (t) {
 				selectedTicket = t;
 				sheetOpen = true;
+				requestWorkerTicket(ticketId);
+				void hydrateTicket(ticketId);
 			}
 		}
 	});
@@ -108,7 +162,7 @@
 		if (!sheetOpen && $page.url.searchParams.has('ticket')) {
 			const url = new URL($page.url);
 			url.searchParams.delete('ticket');
-			goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+			replaceState(url, $page.state);
 		}
 	});
 
@@ -121,20 +175,13 @@
 		}
 	});
 
-	$effect(() => {
-		if (!selectedTicket) return;
-		const refreshed = data.tickets.find((t: Ticket) => t.id === selectedTicket?.id) ?? null;
-		selectedTicket = refreshed;
-	});
-
 	const filtered = $derived(
 		data.tickets.filter((t: Ticket) => {
 			if (searchQuery) {
 				const q = searchQuery.toLowerCase();
 				return (
 					t.id.toLowerCase().includes(q) ||
-					t.title.toLowerCase().includes(q) ||
-					t.body.toLowerCase().includes(q)
+					t.title.toLowerCase().includes(q)
 				);
 			}
 			return true;
@@ -193,11 +240,40 @@
 	}
 
 	function onCardSelect(ticket: Ticket) {
-		selectedTicket = ticket;
+		selectedTicket = ticketCache.get(ticket.id) ?? ticket;
 		sheetOpen = true;
 		const url = new URL($page.url);
 		url.searchParams.set('ticket', ticket.id);
-		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+		replaceState(url, $page.state);
+		requestWorkerTicket(ticket.id);
+		void hydrateTicket(ticket.id);
+	}
+
+	function requestWorkerTicket(ticketID: string) {
+		if (!preloadWorker) return;
+		const request: PreloadWorkerRequest = {
+			type: 'get-ticket',
+			projectId: data.activeProjectId,
+			id: ticketID
+		};
+		preloadWorker.postMessage(request);
+	}
+
+	async function hydrateTicket(ticketID: string) {
+		const query = data.activeProjectId ? `?projectId=${encodeURIComponent(data.activeProjectId)}` : '';
+		try {
+			const response = await fetch(`/api/tickets/${ticketID}${query}`);
+			const payload = (await response.json().catch(() => ({}))) as TicketFetchResult;
+			if (!response.ok || !payload.ok || !payload.ticket) return;
+			const next = new Map(ticketCache);
+			next.set(ticketID, payload.ticket);
+			ticketCache = next;
+			if (selectedTicket?.id === ticketID) {
+				selectedTicket = payload.ticket;
+			}
+		} catch {
+			// Keep cached data on hydration failures.
+		}
 	}
 
 	function toggleSort(by: SortKey) {

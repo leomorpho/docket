@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { readConfig } from '$lib/server/docket';
+import { readConfig, readTicket } from '$lib/server/docket';
 import { runTicketMutation, type TicketMutation } from '$lib/server/docket-cli';
 
 type MutationBody = {
@@ -8,6 +8,15 @@ type MutationBody = {
 	value?: string;
 	evidence?: string;
 	projectId?: string;
+};
+
+export const GET: RequestHandler = async ({ params, url }) => {
+	const projectId = url.searchParams.get('projectId') ?? undefined;
+	const ticket = readTicket(params.id, projectId);
+	if (!ticket) {
+		return json({ ok: false, error: 'Ticket not found.' }, { status: 404 });
+	}
+	return json({ ok: true, ticket });
 };
 
 export const PATCH: RequestHandler = async ({ params, request }) => {

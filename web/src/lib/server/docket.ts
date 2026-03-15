@@ -47,25 +47,7 @@ function parseTicketFile(content: string): Ticket | null {
 	const frontmatter = parts[1];
 	const body = parts.slice(2).join('---\n').trim();
 
-	const fmObj: Record<string, unknown> = {};
-	for (const line of frontmatter.split('\n')) {
-		const trimmed = line.trim();
-		if (!trimmed || !trimmed.includes(':')) continue;
-		const idx = trimmed.indexOf(':');
-		const key = trimmed.slice(0, idx).trim();
-		const rawValue = trimmed.slice(idx + 1).trim();
-		if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
-			const vals = rawValue
-				.slice(1, -1)
-				.split(',')
-				.map((v) => v.trim().replace(/^"(.*)"$/, '$1'))
-				.filter(Boolean);
-			fmObj[key] = vals;
-			continue;
-		}
-		fmObj[key] = rawValue.replace(/^"(.*)"$/, '$1');
-	}
-
+	const fmObj = parseFrontmatter(frontmatter);
 	const titleMatch = body.match(/^#\s+[A-Z]+-\d+:\s+(.+)$/m) ?? body.match(/^#\s+(.+)$/m);
 	const title = titleMatch?.[1]?.trim() ?? 'Untitled';
 	const fm = fmObj as Record<string, unknown> & FrontmatterTicket;
@@ -153,6 +135,59 @@ function parseTicketFile(content: string): Ticket | null {
 	};
 }
 
+function parseFrontmatter(frontmatter: string): Record<string, unknown> {
+	const fmObj: Record<string, unknown> = {};
+	for (const line of frontmatter.split('\n')) {
+		const trimmed = line.trim();
+		if (!trimmed || !trimmed.includes(':')) continue;
+		const idx = trimmed.indexOf(':');
+		const key = trimmed.slice(0, idx).trim();
+		const rawValue = trimmed.slice(idx + 1).trim();
+		if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
+			const vals = rawValue
+				.slice(1, -1)
+				.split(',')
+				.map((v) => v.trim().replace(/^"(.*)"$/, '$1'))
+				.filter(Boolean);
+			fmObj[key] = vals;
+			continue;
+		}
+		fmObj[key] = rawValue.replace(/^"(.*)"$/, '$1');
+	}
+	return fmObj;
+}
+
+function parseTicketSummaryFile(content: string): Ticket | null {
+	const parts = content.split('---\n');
+	if (parts.length < 3) return null;
+	const frontmatter = parts[1];
+	const body = parts.slice(2).join('---\n').trim();
+
+	const fmObj = parseFrontmatter(frontmatter);
+	const titleMatch = body.match(/^#\s+[A-Z]+-\d+:\s+(.+)$/m) ?? body.match(/^#\s+(.+)$/m);
+	const title = titleMatch?.[1]?.trim() ?? 'Untitled';
+	const fm = fmObj as Record<string, unknown> & FrontmatterTicket;
+
+	return {
+		id: String(fm.id ?? ''),
+		seq: Number(fm.seq ?? 0),
+		state: String(fm.state ?? ''),
+		priority: Number(fm.priority ?? 0),
+		labels: Array.isArray(fm.labels) ? (fm.labels as string[]) : [],
+		parent: fm.parent ? String(fm.parent) : undefined,
+		title,
+		created_at: String(fm.created_at ?? ''),
+		updated_at: String(fm.updated_at ?? ''),
+		started_at: fm.started_at ? String(fm.started_at) : undefined,
+		completed_at: fm.completed_at ? String(fm.completed_at) : undefined,
+		ac: [],
+		plan: [],
+		comments: [],
+		handoff: undefined,
+		body: ''
+	};
+}
+
 export function readTickets(projectId?: string): Ticket[] {
 	const ticketsDir = path.join(docketRoot(projectId), '.docket', 'tickets');
 	if (!fs.existsSync(ticketsDir)) {
@@ -182,6 +217,50 @@ export function readTickets(projectId?: string): Ticket[] {
 		if (a.seq !== b.seq) return a.seq - b.seq;
 		return a.id.localeCompare(b.id);
 	});
+}
+
+export function readTicketSummaries(projectId?: string): Ticket[] {
+	const ticketsDir = path.join(docketRoot(projectId), '.docket', 'tickets');
+	if (!fs.existsSync(ticketsDir)) {
+		return [];
+	}
+
+	const entries = fs
+		.readdirSync(ticketsDir)
+		.filter((name) => name.endsWith('.md') && name.startsWith('TKT-'))
+		.sort();
+
+	const tickets: Ticket[] = [];
+	for (const entry of entries) {
+		const file = path.join(ticketsDir, entry);
+		try {
+			const parsed = parseTicketSummaryFile(fs.readFileSync(file, 'utf8'));
+			if (parsed && parsed.id) {
+				tickets.push(parsed);
+			}
+		} catch {
+			// Ignore malformed ticket files in UI read path.
+		}
+	}
+
+	return tickets.sort((a, b) => {
+		if (a.priority !== b.priority) return a.priority - b.priority;
+		if (a.seq !== b.seq) return a.seq - b.seq;
+		return a.id.localeCompare(b.id);
+	});
+}
+
+export function readTicket(id: string, projectId?: string): Ticket | null {
+	if (!id) return null;
+	const file = path.join(docketRoot(projectId), '.docket', 'tickets', `${id}.md`);
+	if (!fs.existsSync(file)) return null;
+	try {
+		const parsed = parseTicketFile(fs.readFileSync(file, 'utf8'));
+		if (!parsed || !parsed.id) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
 }
 
 export function readRelations(projectId?: string): Relation[] {

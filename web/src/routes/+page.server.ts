@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { readConfig, readTickets, readRelations } from '$lib/server/docket';
+import { readConfig, readRelations, readTicketSummaries } from '$lib/server/docket';
 import { listProjects } from '$lib/server/registry';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		projects,
 		activeProjectId: projectId ?? null,
 		config: readConfig(projectId ?? undefined),
-		tickets: readTickets(projectId ?? undefined),
+		tickets: readTicketSummaries(projectId ?? undefined),
 		relations: readRelations(projectId ?? undefined)
 	};
 };

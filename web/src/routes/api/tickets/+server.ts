@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { getProject } from '$lib/server/registry';
 import path from 'node:path';
 import fs from 'node:fs';
+import { readTickets } from '$lib/server/docket';
 
 const execFileAsync = promisify(execFile);
 
@@ -16,6 +17,11 @@ type CreateBody = {
 	labels?: string[];
 	parent?: string;
 	projectId?: string;
+};
+
+export const GET: RequestHandler = async ({ url }) => {
+	const projectId = url.searchParams.get('projectId') ?? undefined;
+	return json({ ok: true, tickets: readTickets(projectId) });
 };
 
 export const POST: RequestHandler = async ({ request }) => {
