@@ -1143,7 +1143,7 @@
     },
     "TKT-218": {
       "title": "Add docket capabilities command with md and json outputs",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },
