@@ -1291,7 +1291,7 @@
     },
     "TKT-243": {
       "title": "Render screenshot proof evidence in Ducca ticket UI",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

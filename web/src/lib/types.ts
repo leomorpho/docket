@@ -43,6 +43,22 @@ export type Comment = {
 	body: string;
 };
 
+export type Proof = {
+	id: string;
+	ticket_id: string;
+	proof_title: string;
+	note: string;
+	added_at: string;
+	captured_at?: string;
+	actor?: string;
+	file: {
+		path: string;
+		mime_type: string;
+		size_bytes: number;
+		sha256: string;
+	};
+};
+
 export type Ticket = {
 	id: string;
 	seq: number;
@@ -64,6 +80,7 @@ export type Ticket = {
 	plan: PlanStep[];
 	comments: Comment[];
 	handoff?: string;
+	proofs?: Proof[];
 	frontmatter?: Record<string, string | string[]>;
 	body: string;
 };

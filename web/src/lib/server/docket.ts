@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { AcceptanceCriterion, Comment, Config, PlanStep, Relation, Ticket } from '$lib/types';
+import type { AcceptanceCriterion, Comment, Config, PlanStep, Proof, Relation, Ticket } from '$lib/types';
 import { getProject } from '$lib/server/registry';
 
 const defaultConfig: Config = {
@@ -298,6 +298,43 @@ function toStringArray(value: unknown): string[] {
 	return [];
 }
 
+function parseProofs(ticketID: string, projectId?: string): Proof[] {
+	const metadataPath = path.join(docketRoot(projectId), '.docket', 'proofs', ticketID, 'metadata.json');
+	if (!fs.existsSync(metadataPath)) return [];
+	try {
+		const raw = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+		if (!Array.isArray(raw)) return [];
+		const proofs: Proof[] = [];
+		for (const entry of raw) {
+			const rec = entry as Record<string, unknown>;
+			const file = (rec.file ?? {}) as Record<string, unknown>;
+			const id = String(rec.id ?? '').trim();
+			if (!id) continue;
+			proofs.push({
+				id,
+				ticket_id: String(rec.ticket_id ?? ticketID),
+				proof_title: String(rec.proof_title ?? ''),
+				note: String(rec.note ?? ''),
+				added_at: String(rec.added_at ?? ''),
+				captured_at: rec.captured_at ? String(rec.captured_at) : undefined,
+				actor: rec.actor ? String(rec.actor) : undefined,
+				file: {
+					path: String(file.path ?? ''),
+					mime_type: String(file.mime_type ?? 'application/octet-stream'),
+					size_bytes: Number(file.size_bytes ?? 0),
+					sha256: String(file.sha256 ?? '')
+				}
+			});
+		}
+		return proofs.sort((a, b) => {
+			if (a.added_at === b.added_at) return a.id.localeCompare(b.id);
+			return b.added_at.localeCompare(a.added_at);
+		});
+	} catch {
+		return [];
+	}
+}
+
 function parseTicketSummaryFile(content: string): Ticket | null {
 	const parts = content.split('---\n');
 	if (parts.length < 3) return null;
@@ -354,6 +391,7 @@ export function readTickets(projectId?: string): Ticket[] {
 		try {
 			const parsed = parseTicketFile(fs.readFileSync(file, 'utf8'));
 			if (parsed && parsed.id) {
+				parsed.proofs = parseProofs(parsed.id, projectId);
 				tickets.push(parsed);
 			}
 		} catch {
@@ -385,6 +423,7 @@ export function readTicketSummaries(projectId?: string): Ticket[] {
 		try {
 			const parsed = parseTicketSummaryFile(fs.readFileSync(file, 'utf8'));
 			if (parsed && parsed.id) {
+				parsed.proofs = parseProofs(parsed.id, projectId);
 				tickets.push(parsed);
 			}
 		} catch {
@@ -406,7 +445,35 @@ export function readTicket(id: string, projectId?: string): Ticket | null {
 	try {
 		const parsed = parseTicketFile(fs.readFileSync(file, 'utf8'));
 		if (!parsed || !parsed.id) return null;
+		parsed.proofs = parseProofs(parsed.id, projectId);
 		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+export function readTicketProofBlob(
+	ticketID: string,
+	proofID: string,
+	projectId?: string
+): { bytes: Buffer; mimeType: string } | null {
+	const ticket = readTicket(ticketID, projectId);
+	if (!ticket) return null;
+	const proof = (ticket.proofs ?? []).find((entry) => entry.id === proofID);
+	if (!proof) return null;
+
+	const root = docketRoot(projectId);
+	const proofPath = path.resolve(root, proof.file.path);
+	const rootPath = path.resolve(root);
+	if (!proofPath.startsWith(rootPath + path.sep) && proofPath !== rootPath) {
+		return null;
+	}
+	if (!fs.existsSync(proofPath)) return null;
+	try {
+		return {
+			bytes: fs.readFileSync(proofPath),
+			mimeType: proof.file.mime_type || 'application/octet-stream'
+		};
 	} catch {
 		return null;
 	}

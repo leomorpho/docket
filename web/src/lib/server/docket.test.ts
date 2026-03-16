@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readTicketSummaries, readTickets } from '$lib/server/docket';
+import { readTicket, readTicketProofBlob, readTicketSummaries, readTickets } from '$lib/server/docket';
 
 const originalDocketDir = process.env.DOCKET_DIR;
 
@@ -160,5 +160,67 @@ Handoff details.
 		expect(ticket?.handoff).toBe('Handoff details.');
 		expect(ticket?.frontmatter?.created_by).toBe('agent:test');
 		expect(ticket?.frontmatter?.blocked_by).toEqual(['TKT-949']);
+	});
+
+	it('loads proof metadata and blob bytes for ticket detail views', () => {
+		const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-proof-test-'));
+		const ticketsDir = path.join(repo, '.docket', 'tickets');
+		const proofsDir = path.join(repo, '.docket', 'proofs');
+		fs.mkdirSync(ticketsDir, { recursive: true });
+		fs.mkdirSync(path.join(proofsDir, 'TKT-001'), { recursive: true });
+		fs.mkdirSync(path.join(proofsDir, 'by-hash'), { recursive: true });
+
+		const blobRel = '.docket/proofs/by-hash/abc123.png';
+		const blobAbs = path.join(repo, blobRel);
+		fs.writeFileSync(blobAbs, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+		fs.writeFileSync(
+			path.join(proofsDir, 'TKT-001', 'metadata.json'),
+			JSON.stringify(
+				[
+					{
+						id: 'PRF-1',
+						ticket_id: 'TKT-001',
+						proof_title: 'Before',
+						note: 'baseline',
+						added_at: '2026-03-16T19:00:00Z',
+						file: {
+							path: blobRel,
+							mime_type: 'image/png',
+							size_bytes: 8,
+							sha256: 'abc123'
+						}
+					}
+				],
+				null,
+				2
+			),
+			'utf8'
+		);
+
+		fs.writeFileSync(
+			path.join(ticketsDir, 'TKT-001.md'),
+			`---
+id: TKT-001
+seq: 1
+state: todo
+priority: 1
+labels: [feature]
+created_at: "2026-03-14T00:00:00Z"
+updated_at: "2026-03-14T00:00:00Z"
+---
+
+# TKT-001: Proof ticket
+`,
+			'utf8'
+		);
+
+		process.env.DOCKET_DIR = repo;
+		const ticket = readTicket('TKT-001');
+		expect(ticket?.proofs).toHaveLength(1);
+		expect(ticket?.proofs?.[0].proof_title).toBe('Before');
+		const blob = readTicketProofBlob('TKT-001', 'PRF-1');
+		expect(blob).toBeTruthy();
+		expect(blob?.mimeType).toBe('image/png');
+		expect(blob?.bytes.length).toBe(8);
 	});
 });

@@ -16,7 +16,7 @@
 		SheetTitle
 	} from '$lib/components/ui/sheet';
 	import { buildChildrenByParent } from '$lib/hierarchy';
-	import type { Relation, Ticket } from '$lib/types';
+	import type { Proof, Relation, Ticket } from '$lib/types';
 
 	type MutationResult = { ok: boolean; error?: string };
 	type StateOption = { key: string; label: string };
@@ -75,6 +75,7 @@
 	const handoffHtml = $derived.by(() =>
 		ticket?.handoff?.trim() ? marked.parse(ticket.handoff, { gfm: true, breaks: true }) : ''
 	);
+	const proofs = $derived.by(() => ticket?.proofs ?? []);
 	const frontmatterEntries = $derived.by(() =>
 		Object.entries(ticket?.frontmatter ?? {}).sort(([left], [right]) => left.localeCompare(right))
 	);
@@ -94,6 +95,7 @@
 	let savingComment = $state(false);
 	let relatedTickets = $state<RelatedTicket[]>([]);
 	let loadingRelated = $state(false);
+	let proofPreviewErrors = $state<Record<string, boolean>>({});
 
 	$effect(() => {
 		if (!ticket) {
@@ -111,6 +113,11 @@
 		errorMessage = '';
 		successMessage = '';
 		quickEditOpen = false;
+	});
+
+	$effect(() => {
+		ticket?.id;
+		proofPreviewErrors = {};
 	});
 
 	$effect(() => {
@@ -199,6 +206,11 @@
 
 	function isTicketID(value: string): boolean {
 		return /^TKT-\d+$/.test(value);
+	}
+
+	function proofPreviewURL(entry: Proof): string {
+		const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+		return `/api/tickets/${entry.ticket_id}/proofs/${entry.id}${query}`;
 	}
 
 	async function saveState() {
@@ -417,6 +429,62 @@
 							<article class="overview-markdown max-w-none rounded-lg border border-border bg-background p-4 text-sm leading-relaxed text-foreground">
 								{@html overviewHtml}
 							</article>
+						</section>
+
+						<section class="space-y-3">
+							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Proof Evidence</p>
+							{#if proofs.length === 0}
+								<div class="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground">
+									No screenshot proofs attached yet.
+								</div>
+							{:else}
+								<div class="grid gap-3">
+									{#each proofs as entry (entry.id)}
+										<article class="rounded-lg border border-border bg-background p-3">
+											<div class="flex flex-wrap items-center justify-between gap-2">
+												<p class="text-sm font-semibold text-foreground">{entry.proof_title}</p>
+												<Badge variant="outline" class="font-mono text-[10px]">{entry.id}</Badge>
+											</div>
+											<p class="mt-1 text-xs text-foreground">{entry.note}</p>
+											<div class="mt-2 text-[11px] text-muted-foreground">
+												<p>Added: <HumanDateTime value={entry.added_at} layout="inline" /></p>
+												{#if entry.captured_at}
+													<p>Captured: <HumanDateTime value={entry.captured_at} layout="inline" /></p>
+												{/if}
+											</div>
+											<div class="mt-3 overflow-hidden rounded-md border border-border bg-muted/20">
+												{#if proofPreviewErrors[entry.id]}
+													<p class="px-3 py-4 text-xs text-red-700">
+														Preview failed to load. Use the open-image link below.
+													</p>
+												{:else}
+													<img
+														src={proofPreviewURL(entry)}
+														alt={`Proof screenshot ${entry.proof_title}`}
+														class="max-h-64 w-full object-contain"
+														loading="lazy"
+														onerror={() => {
+															proofPreviewErrors = { ...proofPreviewErrors, [entry.id]: true };
+														}}
+													/>
+												{/if}
+											</div>
+											<div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+												<a
+													class="underline hover:text-foreground"
+													href={proofPreviewURL(entry)}
+													target="_blank"
+													rel="noreferrer"
+												>
+													Open full image
+												</a>
+												<span>{entry.file.mime_type}</span>
+												<span>{entry.file.size_bytes} bytes</span>
+											</div>
+										</article>
+									{/each}
+								</div>
+							{/if}
 						</section>
 
 						<section class="space-y-3">
