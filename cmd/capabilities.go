@@ -13,6 +13,7 @@ type capabilitiesView struct {
 	Adapter       adapters.Metadata            `json:"adapter"`
 	AdapterSource string                       `json:"adapter_source,omitempty"`
 	Contract      capabilities.RuntimeContract `json:"contract"`
+	QuickPath     llmQuickPath                 `json:"llm_quick_path"`
 }
 
 var capabilitiesCmd = &cobra.Command{
@@ -29,6 +30,7 @@ var capabilitiesCmd = &cobra.Command{
 			Adapter:       resolution.Adapter.Metadata(),
 			AdapterSource: resolution.Source,
 			Contract:      contract,
+			QuickPath:     buildLLMQuickPath(),
 		}
 		if format == "json" {
 			printJSON(cmd, view)
@@ -73,6 +75,13 @@ func renderCapabilitiesMarkdown(view capabilitiesView) string {
 	if strings.TrimSpace(view.Contract.Compatibility.UpgradeNotes) != "" {
 		lines = append(lines, "", "## Compatibility", view.Contract.Compatibility.UpgradeNotes)
 	}
+	lines = append(lines, "", "## LLM Quick Path")
+	lines = append(lines,
+		"- "+view.QuickPath.Preference,
+		"- `"+view.QuickPath.TicketApply+"`",
+		"- `"+view.QuickPath.BacklogApply+"`",
+		"- "+view.QuickPath.AutomationHint,
+	)
 	return strings.Join(lines, "\n")
 }
 

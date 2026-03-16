@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +35,18 @@ func TestHelpJSONCommand(t *testing.T) {
 			t.Fatalf("ticket_quality.%s missing", key)
 		}
 	}
+	workflow, ok := ai["workflow"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow guidance missing in agent_instructions")
+	}
+	for _, key := range []string{"quick_path_preference", "ticket_apply", "backlog_apply"} {
+		if workflow[key] == nil {
+			t.Fatalf("workflow.%s missing", key)
+		}
+	}
+	if !strings.Contains(workflow["ticket_apply"].(string), "--automation") {
+		t.Fatalf("ticket_apply guidance must include automation mode hint: %v", workflow["ticket_apply"])
+	}
 
 	commands, ok := manifest["commands"].([]any)
 	if !ok || len(commands) == 0 {
@@ -54,8 +67,8 @@ func TestHelpJSONCommand(t *testing.T) {
 	}
 
 	env, ok := manifest["environment"].(map[string]any)
-	if !ok || env["DOCKET_ACTOR"] == nil {
-		t.Fatalf("environment DOCKET_ACTOR missing")
+	if !ok || env["DOCKET_ACTOR"] == nil || env["DOCKET_AUTOMATION"] == nil {
+		t.Fatalf("environment guidance missing DOCKET_ACTOR or DOCKET_AUTOMATION")
 	}
 
 	conv, ok := manifest["conventions"].(map[string]any)

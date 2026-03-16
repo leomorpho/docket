@@ -1250,7 +1250,7 @@
     },
     "TKT-236": {
       "title": "Update help-json, start, and capabilities with LLM quick-path guidance",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-228"
     },
