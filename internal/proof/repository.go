@@ -75,6 +75,12 @@ type Repository struct {
 	RepoRoot string
 }
 
+type GCSummary struct {
+	Scanned  int `json:"scanned"`
+	Retained int `json:"retained"`
+	Removed  int `json:"removed"`
+}
+
 var allowedImageMIMEs = map[string][]string{
 	"image/png":  {".png"},
 	"image/jpeg": {".jpg", ".jpeg"},
@@ -274,6 +280,59 @@ func (r *Repository) Remove(ctx context.Context, ticketID string, proofID string
 		return nil, err
 	}
 	return &removed, nil
+}
+
+func (r *Repository) GC(ctx context.Context) (GCSummary, error) {
+	_ = ctx
+	refs := map[string]struct{}{}
+	proofsRoot := filepath.Join(r.RepoRoot, ".docket", "proofs")
+	entries, err := os.ReadDir(proofsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return GCSummary{}, nil
+		}
+		return GCSummary{}, fieldError("io_failed", "metadata", "failed to scan proof metadata directories", "check repository permissions and retry")
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !ticketIDPattern.MatchString(entry.Name()) {
+			continue
+		}
+		records, loadErr := r.load(entry.Name())
+		if loadErr != nil {
+			return GCSummary{}, loadErr
+		}
+		for _, rec := range records {
+			refs[filepath.ToSlash(rec.File.Path)] = struct{}{}
+		}
+	}
+
+	blobDir := filepath.Join(proofsRoot, "by-hash")
+	blobEntries, err := os.ReadDir(blobDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return GCSummary{}, nil
+		}
+		return GCSummary{}, fieldError("io_failed", "path", "failed to scan proof blob directory", "check repository permissions and retry")
+	}
+
+	summary := GCSummary{}
+	for _, entry := range blobEntries {
+		if entry.IsDir() {
+			continue
+		}
+		summary.Scanned++
+		rel := filepath.ToSlash(filepath.Join(".docket", "proofs", "by-hash", entry.Name()))
+		if _, ok := refs[rel]; ok {
+			summary.Retained++
+			continue
+		}
+		abs := filepath.Join(blobDir, entry.Name())
+		if removeErr := os.Remove(abs); removeErr != nil {
+			return GCSummary{}, fieldError("io_failed", "path", "failed to remove unreferenced blob", "check repository permissions and retry")
+		}
+		summary.Removed++
+	}
+	return summary, nil
 }
 
 func (r *Repository) metadataPath(ticketID string) string {

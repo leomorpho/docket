@@ -298,6 +298,11 @@ func (s *Store) RemoveProof(ctx context.Context, ticketID string, proofID string
 	return repo.Remove(ctx, ticketID, proofID)
 }
 
+func (s *Store) GCProofBlobs(ctx context.Context) (proof.GCSummary, error) {
+	repo := proof.NewRepository(s.RepoRoot)
+	return repo.GC(ctx)
+}
+
 func (s *Store) NextID(ctx context.Context) (id string, seq int, err error) {
 	return ticket.NextID(s.RepoRoot)
 }

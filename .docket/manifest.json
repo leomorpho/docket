@@ -1315,7 +1315,7 @@
     },
     "TKT-247": {
       "title": "Define proof remove semantics and add garbage collection for unreferenced blobs",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

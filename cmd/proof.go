@@ -151,6 +151,40 @@ var proofRemoveCmd = &cobra.Command{
 	},
 }
 
+var proofGCCmd = &cobra.Command{
+	Use:          "gc",
+	Short:        "Garbage-collect unreferenced proof blobs",
+	Args:         cobra.NoArgs,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		defer func() {
+			runErr = renderProofMutationError(cmd, runErr)
+		}()
+
+		s := local.New(repo)
+		summary, err := s.GCProofBlobs(context.Background())
+		if err != nil {
+			return err
+		}
+
+		if format == "json" {
+			printJSON(cmd, map[string]any{
+				"gc": summary,
+			})
+			return nil
+		}
+
+		fmt.Fprintf(
+			cmd.OutOrStdout(),
+			"Proof GC complete: scanned=%d retained=%d removed=%d\n",
+			summary.Scanned,
+			summary.Retained,
+			summary.Removed,
+		)
+		return nil
+	},
+}
+
 func filterAndSortProofs(recs []proof.Record, kind string, since string, actor string, limit int) ([]proof.Record, error) {
 	var sinceAt time.Time
 	if strings.TrimSpace(since) != "" {
@@ -265,5 +299,6 @@ func init() {
 	proofCmd.AddCommand(proofAddCmd)
 	proofCmd.AddCommand(proofListCmd)
 	proofCmd.AddCommand(proofRemoveCmd)
+	proofCmd.AddCommand(proofGCCmd)
 	rootCmd.AddCommand(proofCmd)
 }

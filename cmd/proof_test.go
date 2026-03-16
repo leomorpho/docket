@@ -305,3 +305,104 @@ func TestProofListFilterValidationEnvelopeJSON(t *testing.T) {
 		t.Fatalf("expected kind field validation error, got %+v", envAny)
 	}
 }
+
+func TestProofRemoveAndGCSharedBlobSafetyJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	setupProofTicket(t, tmpDir)
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-002",
+		Seq:         2,
+		Title:       "Proof command test two",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "second ticket for shared blob gc test",
+		AC:          []ticket.AcceptanceCriterion{{Description: "proof command works"}},
+	}); err != nil {
+		t.Fatalf("create second ticket: %v", err)
+	}
+
+	fixtureRel := filepath.Join("fixtures", "proof.png")
+	fixtureAbs := filepath.Join(tmpDir, fixtureRel)
+	writeProofPNGFixture(t, fixtureAbs)
+
+	first, err := s.AddProof(context.Background(), proof.AddInput{
+		TicketID:   "TKT-001",
+		SourcePath: fixtureRel,
+		ProofTitle: "A",
+		Note:       "A",
+		AddedAt:    "2026-03-16T20:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("seed first proof: %v", err)
+	}
+	second, err := s.AddProof(context.Background(), proof.AddInput{
+		TicketID:   "TKT-002",
+		SourcePath: fixtureRel,
+		ProofTitle: "B",
+		Note:       "B",
+		AddedAt:    "2026-03-16T20:01:00Z",
+	})
+	if err != nil {
+		t.Fatalf("seed second proof: %v", err)
+	}
+	if first.File.Path != second.File.Path {
+		t.Fatalf("expected shared blob path, got %q and %q", first.File.Path, second.File.Path)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(new(bytes.Buffer))
+
+	rootCmd.SetArgs([]string{"proof", "remove", "TKT-001", "--proof-id", first.ID})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("remove first proof failed: %v", err)
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"proof", "gc"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("gc while still referenced failed: %v", err)
+	}
+	var gcPayload struct {
+		GC struct {
+			Removed int `json:"removed"`
+		} `json:"gc"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &gcPayload); err != nil {
+		t.Fatalf("parse gc payload failed: %v; body=%s", err, out.String())
+	}
+	if gcPayload.GC.Removed != 0 {
+		t.Fatalf("expected no removals while blob is referenced, got %+v", gcPayload)
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"proof", "remove", "TKT-002", "--proof-id", second.ID})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("remove second proof failed: %v", err)
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"proof", "gc"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("gc after unreference failed: %v", err)
+	}
+	gcPayload = struct {
+		GC struct {
+			Removed int `json:"removed"`
+		} `json:"gc"`
+	}{}
+	if err := json.Unmarshal(out.Bytes(), &gcPayload); err != nil {
+		t.Fatalf("parse gc payload failed: %v; body=%s", err, out.String())
+	}
+	if gcPayload.GC.Removed != 1 {
+		t.Fatalf("expected exactly one blob removal, got %+v", gcPayload)
+	}
+}
