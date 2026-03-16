@@ -45,6 +45,15 @@ var blameCmd = &cobra.Command{
 					return fmt.Errorf("loading ticket %s: %w", ticketID, err)
 				}
 				res["ticket"] = t
+				if t != nil {
+					proofs, err := s.ListProofs(context.Background(), ticketID)
+					if err != nil {
+						return fmt.Errorf("loading proofs for %s: %w", ticketID, err)
+					}
+					if len(proofs) > 0 {
+						res["proofs"] = proofs
+					}
+				}
 			}
 			printJSON(cmd, res)
 			return nil
@@ -83,7 +92,11 @@ var blameCmd = &cobra.Command{
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "  This line was last modified in commit %s (%s)\n", shortSHA(blame.SHA), commitDate)
 		fmt.Fprintf(cmd.OutOrStdout(), "  Ticket: %s\n\n", ticketID)
-		printTicketContext(cmd, t, acAggregate{})
+		proofs, err := s.ListProofs(context.Background(), ticketID)
+		if err != nil {
+			return fmt.Errorf("loading proofs for %s: %w", ticketID, err)
+		}
+		printTicketContext(cmd, t, acAggregate{}, proofs)
 
 		return nil
 	},

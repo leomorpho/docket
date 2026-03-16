@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	g "github.com/leomorpho/docket/internal/git"
+	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ var contextLines string
 
 type contextTicket struct {
 	Ticket      *ticket.Ticket
+	Proofs      []proof.Record
 	Lines       []int
 	CommitLines map[string]int
 }
@@ -66,7 +68,11 @@ var contextCmd = &cobra.Command{
 				if t == nil {
 					continue
 				}
-				ct = &contextTicket{Ticket: t, CommitLines: map[string]int{}}
+				proofs, err := s.ListProofs(context.Background(), tid)
+				if err != nil {
+					return err
+				}
+				ct = &contextTicket{Ticket: t, Proofs: proofs, CommitLines: map[string]int{}}
 				ticketsMap[tid] = ct
 			}
 			ct.Lines = append(ct.Lines, e.Line)
@@ -141,6 +147,9 @@ func printContextHuman(cmd *cobra.Command, file string, tickets []*contextTicket
 			fmt.Fprintf(out, "  %s (%s, P%d) — %s\n", t.ID, t.State, t.Priority, t.Title)
 			fmt.Fprintf(out, "    Lines: %s\n", formatLineSpan(ct.Lines))
 			fmt.Fprintf(out, "    AC: %d/%d done.\n\n", acDone(t), len(t.AC))
+			if len(ct.Proofs) > 0 {
+				fmt.Fprintf(out, "    Proofs: %d\n\n", len(ct.Proofs))
+			}
 		}
 	}
 
@@ -161,6 +170,9 @@ func printContextCompact(cmd *cobra.Command, file string, tickets []*contextTick
 		fmt.Fprintf(out, "  %s %s P%d | %s\n", t.ID, t.State, t.Priority, t.Title)
 		fmt.Fprintf(out, "    HANDOFF: %s\n", oneLine(t.Handoff))
 		fmt.Fprintf(out, "    AC: %d/%d\n", acDone(t), len(t.AC))
+		if len(ct.Proofs) > 0 {
+			fmt.Fprintf(out, "    PROOFS: %d\n", len(ct.Proofs))
+		}
 	}
 	fmt.Fprintln(out, "ANNOTATIONS:")
 	for _, a := range anns {
@@ -179,6 +191,7 @@ func printContextJSON(cmd *cobra.Command, file string, tickets []*contextTicket,
 			"handoff":       t.Handoff,
 			"ac_status":     map[string]int{"total": len(t.AC), "done": acDone(t)},
 			"lines_touched": ct.Lines,
+			"proofs":        ct.Proofs,
 		})
 	}
 

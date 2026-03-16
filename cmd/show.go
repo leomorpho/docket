@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -48,15 +51,19 @@ var showCmd = &cobra.Command{
 		if t == nil {
 			return fmt.Errorf("ticket %s not found", id)
 		}
+		proofs, err := s.ListProofs(ctx, id)
+		if err != nil {
+			return fmt.Errorf("listing proofs: %w", err)
+		}
 		agg := aggregateDescendantAC(ctx, s, id)
 
 		switch format {
 		case "json":
-			printJSON(cmd, t)
+			printTicketJSON(cmd, t, proofs)
 		case "context":
-			printTicketContext(cmd, t, agg)
+			printTicketContext(cmd, t, agg, proofs)
 		default:
-			printTicketHuman(cmd, t, agg)
+			printTicketHuman(cmd, t, agg, proofs)
 		}
 
 		return nil
@@ -69,7 +76,7 @@ type acAggregate struct {
 	Done        int
 }
 
-func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
+func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, proofs []proof.Record) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s · %s · P%d · %s\n\n", t.ID, t.State, t.Priority, strings.Join(t.Labels, ", "))
 	fmt.Fprintf(out, "  %s\n\n", t.Title)
@@ -137,6 +144,17 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 		fmt.Fprintln(out)
 	}
 
+	if len(proofs) > 0 {
+		fmt.Fprintf(out, "  Proofs (%d)\n", len(proofs))
+		fmt.Fprintln(out, "  ──────────")
+		for _, p := range proofs {
+			fmt.Fprintf(out, "  %s · %s · %s\n", p.ID, p.ProofTitle, p.AddedAt.Format("2006-01-02T15:04:05Z"))
+			fmt.Fprintf(out, "    %s\n", p.Note)
+			fmt.Fprintf(out, "    %s (%s, %d bytes)\n", p.File.Path, p.File.MIMEType, p.File.SizeBytes)
+		}
+		fmt.Fprintln(out)
+	}
+
 	if len(t.LinkedCommits) > 0 {
 		fmt.Fprintf(out, "  Linked commits: %s\n", strings.Join(t.LinkedCommits, ", "))
 	}
@@ -153,7 +171,7 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 	}
 }
 
-func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
+func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, proofs []proof.Record) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "TICKET: %s · %s · P%d\n", t.ID, t.State, t.Priority)
 	fmt.Fprintf(out, "TITLE: %s\n", t.Title)
@@ -181,6 +199,13 @@ func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 		}
 		fmt.Fprintf(out, "PLAN: %s\n", strings.Join(planSteps, " "))
 	}
+	if len(proofs) > 0 {
+		var proofSummaries []string
+		for _, p := range proofs {
+			proofSummaries = append(proofSummaries, fmt.Sprintf("%s:%s@%s", p.ID, p.ProofTitle, p.AddedAt.Format(time.RFC3339)))
+		}
+		fmt.Fprintf(out, "PROOFS: %s\n", strings.Join(proofSummaries, " "))
+	}
 
 	if t.Handoff != "" {
 		fmt.Fprintf(out, "HANDOFF: %s\n", strings.ReplaceAll(t.Handoff, "\n", " "))
@@ -201,6 +226,25 @@ func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate) {
 	if rel := ticketRelationsLine(t.ID); rel != "" {
 		fmt.Fprintf(out, "RELATIONS: %s\n", rel)
 	}
+}
+
+func printTicketJSON(cmd *cobra.Command, t *ticket.Ticket, proofs []proof.Record) {
+	if len(proofs) == 0 {
+		printJSON(cmd, t)
+		return
+	}
+	raw, err := json.Marshal(t)
+	if err != nil {
+		printJSON(cmd, t)
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		printJSON(cmd, t)
+		return
+	}
+	payload["proofs"] = proofs
+	printJSON(cmd, payload)
 }
 
 func ticketRelationsLine(id string) string {

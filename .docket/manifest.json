@@ -1285,7 +1285,7 @@
     },
     "TKT-242": {
       "title": "Expose screenshot proof metadata in `show`, `context`, and JSON ticket outputs",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

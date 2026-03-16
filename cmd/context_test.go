@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -108,6 +109,77 @@ func TestContextCmd_NoTicketHistory(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "No tickets linked to this file's history") {
 		t.Fatalf("unexpected output:\n%s", buf.String())
+	}
+}
+
+func TestContextCmd_IncludesProofMetadata(t *testing.T) {
+	repoDir := setupCtxRepo(t)
+	repo = repoDir
+	contextLines = ""
+	format = "json"
+
+	s := local.New(repoDir)
+	ticket.SaveConfig(repoDir, ticket.DefaultConfig())
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Ctx Ticket",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	proofRel := filepath.Join("fixtures", "proof.png")
+	proofAbs := filepath.Join(repoDir, proofRel)
+	writeShowProofPNG(t, proofAbs)
+	if _, err := s.AddProof(context.Background(), proof.AddInput{
+		TicketID:   "TKT-001",
+		SourcePath: proofRel,
+		ProofTitle: "Before",
+		Note:       "proof note",
+		AddedAt:    now.Add(time.Minute).Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("add proof: %v", err)
+	}
+
+	mustWriteCtx(t, filepath.Join(repoDir, "main.go"), "package main\n\nfunc main() {\n\tprintln(\"x\") // [TKT-001] annotation\n}\n")
+	runGitCtxCmd(t, repoDir, "add", "main.go", ".docket/tickets/TKT-001.md", ".docket/config.json")
+	runGitCtxCmd(t, repoDir, "commit", "-m", "feat: ctx proof", "-m", "Ticket: TKT-001")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"scan"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	buf.Reset()
+	rootCmd.SetArgs([]string{"context", "main.go", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("context json failed: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("json parse failed: %v", err)
+	}
+	ticketsAny, ok := payload["tickets"].([]any)
+	if !ok || len(ticketsAny) == 0 {
+		t.Fatalf("expected ticket entries in payload: %+v", payload)
+	}
+	firstTicket, ok := ticketsAny[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected ticket payload: %+v", ticketsAny[0])
+	}
+	proofsAny, ok := firstTicket["proofs"].([]any)
+	if !ok || len(proofsAny) != 1 {
+		t.Fatalf("expected one proof in context ticket payload, got %+v", firstTicket["proofs"])
 	}
 }
 
