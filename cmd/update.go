@@ -330,6 +330,13 @@ var updateCmd = &cobra.Command{
 				fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s depth is %d (>3)\n", t.ID, depth)
 			}
 		}
+		if !cmd.Flags().Changed("state") {
+			updatedTicket, transitioned := maybeAutoTransitionReviewReady(ctx, cmd.OutOrStdout(), s, cfg, t, actor)
+			if transitioned {
+				t = updatedTicket
+				updatedFields = append(updatedFields, "state")
+			}
+		}
 		if transitionChanged {
 			emitStateTransitionEvent(
 				cmd.ErrOrStderr(),

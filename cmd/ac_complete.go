@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,10 @@ var acCompleteCmd = &cobra.Command{
 		}
 
 		s := local.New(repo)
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			cfg = ticket.DefaultConfig()
+		}
 		t, err := s.GetTicket(context.Background(), id)
 		if err != nil {
 			return err
@@ -50,6 +55,11 @@ var acCompleteCmd = &cobra.Command{
 		if err := s.UpdateTicket(context.Background(), t); err != nil {
 			return err
 		}
+		actor := detectActor()
+		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
+			actor = "agent:" + agentID
+		}
+		t, _ = maybeAutoTransitionReviewReady(context.Background(), cmd.OutOrStdout(), s, cfg, t, actor)
 		_, _ = writeCheckpoint(repo, buildCheckpoint(repo, id, "AC completion checkpoint"))
 
 		if format == "json" {

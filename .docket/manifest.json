@@ -1345,7 +1345,7 @@
     },
     "TKT-252": {
       "title": "Auto-transition review-ready tickets out of in-progress",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-174"
     }

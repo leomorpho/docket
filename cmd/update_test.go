@@ -572,3 +572,107 @@ func TestEnforceStructuredACClosureGateRejectsIncompleteHumanVerification(t *tes
 		t.Fatalf("expected closure gate rejection for incomplete human verification, got %v", err)
 	}
 }
+
+func TestUpdateAutoTransitionsReviewReadyTickets(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	handoff := "**Current state:** in-progress\n**Decisions made:** none\n**Files touched:** x\n**Remaining work:** review\n**AC status:** complete"
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-901",
+		Seq:         901,
+		Title:       "Auto transition ready",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		Handoff:     handoff,
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1", Done: true, Evidence: "done"},
+			{Description: "A2", Done: true, Evidence: "done"},
+		},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"update", "TKT-901", "--desc", "updated desc"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-901")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != ticket.State("in-review") {
+		t.Fatalf("expected auto transition to in-review, got %s", got.State)
+	}
+	if !strings.Contains(out.String(), "Auto-transitioned TKT-901") {
+		t.Fatalf("expected auto-transition diagnostic, got: %s", out.String())
+	}
+}
+
+func TestUpdateDoesNotAutoTransitionWhenReadinessFails(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-902",
+		Seq:         902,
+		Title:       "Auto transition not ready",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1", Done: false},
+		},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"update", "TKT-902", "--desc", "updated desc"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-902")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != ticket.State("in-progress") {
+		t.Fatalf("expected ticket to remain in-progress, got %s", got.State)
+	}
+	if !strings.Contains(out.String(), "Auto-review skipped for TKT-902") {
+		t.Fatalf("expected skip diagnostic, got: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "acceptance criteria incomplete") || !strings.Contains(out.String(), "handoff missing") {
+		t.Fatalf("expected readiness-failure reasons in diagnostic, got: %s", out.String())
+	}
+}
