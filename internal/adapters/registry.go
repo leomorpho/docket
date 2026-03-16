@@ -93,7 +93,7 @@ func DefaultRegistry() *Registry {
 	return NewRegistry(
 		newCodexAdapter(),
 		newClaudeCodeAdapter(),
-		newStubAdapter("gemini", "Gemini CLI", "GEMINI.md"),
+		newGeminiAdapter(),
 	)
 }
 

@@ -241,6 +241,59 @@ func TestClaudeBootstrapCreatesMCPConfigAndDoctorPassesReadiness(t *testing.T) {
 	}
 }
 
+func TestGeminiBootstrapCreatesSkillAndDoctorPassesReadiness(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "home")
+	tmpDocketHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("DOCKET_HOME", tmpDocketHome)
+	t.Setenv("DOCKET_ADAPTER", "")
+	docketHome = ""
+	repo = tmpRepo
+	format = "human"
+
+	if err := os.MkdirAll(filepath.Join(tmpRepo, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "GEMINI.md"), []byte("gemini marker"), 0o644); err != nil {
+		t.Fatalf("write GEMINI.md failed: %v", err)
+	}
+
+	before := buildDoctorReport(tmpRepo)
+	if statusByName(before.Checks, "mcp") != "FAIL" {
+		t.Fatalf("expected mcp FAIL before gemini bootstrap when MCP config is absent")
+	}
+	if statusByName(before.Checks, "skills") != "FAIL" {
+		t.Fatalf("expected skills FAIL before gemini bootstrap when skill path is absent")
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"bootstrap", "--adapter", "gemini"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bootstrap failed: %v\n%s", err, out.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpHome, ".gemini", "skills", "docket", "SKILL.md")); err != nil {
+		t.Fatalf("expected gemini bootstrap to create skill file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpRepo, ".cursor", "mcp.json")); err != nil {
+		t.Fatalf("expected gemini bootstrap to create repo MCP config: %v", err)
+	}
+
+	after := buildDoctorReport(tmpRepo)
+	if statusByName(after.Checks, "mcp") != "PASS" {
+		t.Fatalf("expected mcp PASS after gemini bootstrap")
+	}
+	if statusByName(after.Checks, "skills") != "PASS" {
+		t.Fatalf("expected skills PASS after gemini bootstrap")
+	}
+	if statusByName(after.Checks, "hooks") != "PASS" {
+		t.Fatalf("expected hooks PASS after gemini bootstrap")
+	}
+}
+
 func statusByName(checks []doctorCheck, name string) string {
 	for _, c := range checks {
 		if c.Name == name {
