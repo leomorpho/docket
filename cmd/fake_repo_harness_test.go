@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,6 +128,15 @@ func (h *fakeRepoHarness) writeFixture(name string, data []byte) string {
 		h.t.Fatalf("write fixture %s failed: %v", path, err)
 	}
 	return path
+}
+
+func (h *fakeRepoHarness) writeJSONSpec(name string, payload any) string {
+	h.t.Helper()
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		h.t.Fatalf("marshal spec %s failed: %v", name, err)
+	}
+	return h.writeFixture(filepath.Join("authoring", name), append(raw, '\n'))
 }
 
 func TestFakeRepoHarnessSetupAndSeedHelpers(t *testing.T) {
@@ -349,4 +359,158 @@ func TestAdapterMatrixIntegration(t *testing.T) {
 		manifestFixture := h.writeFixture(filepath.Join("matrix", fixture.AdapterID, "run-manifest.json"), append(runJSON, '\n'))
 		t.Logf("%s fixtures: %s | %s | %s | %s", fixture.AdapterID, startFixture, doctorBeforeFixture, doctorAfterFixture, manifestFixture)
 	}
+}
+
+func TestFakeRepoHarnessAuthoringApplyHappyPath(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	ticketSpec := map[string]any{
+		"version":   "docket.apply/v1",
+		"operation": "create",
+		"ticket": map[string]any{
+			"title":       "Authoring ticket",
+			"description": "Created via fake-repo harness authoring flow.",
+			"labels":      []string{"feature"},
+			"ac":          []string{"unit", "integration"},
+		},
+	}
+	ticketSpecPath := h.writeJSONSpec("ticket-apply.json", ticketSpec)
+
+	ticketOut, err := h.run("--automation", "--format", "json", "ticket", "apply", "--spec", ticketSpecPath)
+	if err != nil {
+		t.Fatalf("ticket apply failed: %v\n%s", err, ticketOut)
+	}
+	var ticketPayload map[string]any
+	if err := json.Unmarshal([]byte(ticketOut), &ticketPayload); err != nil {
+		t.Fatalf("unmarshal ticket apply output failed: %v\n%s", err, ticketOut)
+	}
+	if ticketPayload["id"] != "TKT-001" {
+		t.Fatalf("expected ticket apply id TKT-001, got %v", ticketPayload["id"])
+	}
+
+	backlogSpec := map[string]any{
+		"version": "docket.apply/v1",
+		"tickets": []map[string]any{
+			{"ref": "epic", "title": "Epic", "description": "Harness epic"},
+			{"ref": "child-a", "title": "Child A", "description": "Harness child A", "parent_ref": "epic"},
+			{"ref": "child-b", "title": "Child B", "description": "Harness child B", "parent_ref": "epic", "blocked_by": []string{"child-a"}},
+		},
+	}
+	backlogSpecPath := h.writeJSONSpec("backlog-apply.json", backlogSpec)
+
+	backlogOut, err := h.run("--automation", "--format", "json", "backlog", "apply", "--spec", backlogSpecPath)
+	if err != nil {
+		t.Fatalf("backlog apply failed: %v\n%s", err, backlogOut)
+	}
+	var backlogPayload map[string]any
+	if err := json.Unmarshal([]byte(backlogOut), &backlogPayload); err != nil {
+		t.Fatalf("unmarshal backlog apply output failed: %v\n%s", err, backlogOut)
+	}
+	createdIDs, ok := backlogPayload["created_ids"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected created_ids map in backlog payload: %v", backlogPayload)
+	}
+	if createdIDs["epic"] != "TKT-002" || createdIDs["child-a"] != "TKT-003" || createdIDs["child-b"] != "TKT-004" {
+		t.Fatalf("unexpected backlog created_ids mapping: %#v", createdIDs)
+	}
+
+	s := local.New(h.repo)
+	childB, err := s.GetTicket(context.Background(), "TKT-004")
+	if err != nil {
+		t.Fatalf("load child-b failed: %v", err)
+	}
+	if childB.Parent != "TKT-002" {
+		t.Fatalf("expected child-b parent TKT-002, got %q", childB.Parent)
+	}
+	if len(childB.BlockedBy) != 1 || childB.BlockedBy[0] != "TKT-003" {
+		t.Fatalf("expected child-b blocked_by TKT-003, got %#v", childB.BlockedBy)
+	}
+
+	ticketFixture := h.writeFixture("authoring/happy-ticket-output.json", []byte(ticketOut))
+	backlogFixture := h.writeFixture("authoring/happy-backlog-output.json", []byte(backlogOut))
+	treeSnapshot := "TKT-002 epic\n  TKT-003 child-a\n  TKT-004 child-b blocked_by=TKT-003\n"
+	treeFixture := h.writeFixture("authoring/happy-tree.txt", []byte(treeSnapshot))
+	t.Logf("authoring happy fixtures: %s | %s | %s", ticketFixture, backlogFixture, treeFixture)
+}
+
+func TestFakeRepoHarnessAuthoringFailureRecoveryAndContention(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	badSpec := map[string]any{
+		"version": "docket.apply/v2",
+		"ticket": map[string]any{
+			"title":  9,
+			"ac":     []string{"ok"},
+			"labels": []string{"feature"},
+		},
+	}
+	badSpecPath := h.writeJSONSpec("bad-ticket-apply.json", badSpec)
+	badOut, err := h.run("--automation", "--format", "json", "ticket", "apply", "--spec", badSpecPath)
+	if err == nil {
+		t.Fatalf("expected malformed spec to fail, output=%s", badOut)
+	}
+	if !strings.Contains(badOut, "\"error\": \"validation_failed\"") || !strings.Contains(badOut, "\"schema_version\"") {
+		t.Fatalf("expected structured validation output, got: %s", badOut)
+	}
+
+	goodSpec := map[string]any{
+		"version":   "docket.apply/v1",
+		"operation": "create",
+		"ticket": map[string]any{
+			"title":       "Recovered ticket",
+			"description": "Recovery path after malformed apply payload.",
+			"ac":          []string{"recovered"},
+		},
+	}
+	goodSpecPath := h.writeJSONSpec("recovery-ticket-apply.json", goodSpec)
+	recoverOut, err := h.run("--automation", "--format", "json", "ticket", "apply", "--spec", goodSpecPath)
+	if err != nil {
+		t.Fatalf("expected recovery apply to succeed: %v\n%s", err, recoverOut)
+	}
+	if !strings.Contains(recoverOut, "\"id\": \"TKT-001\"") {
+		t.Fatalf("expected deterministic recovered ticket id, got: %s", recoverOut)
+	}
+
+	s := local.New(h.repo)
+	ctx := context.Background()
+	errCh := make(chan error, 32)
+	var wg sync.WaitGroup
+	for worker := 0; worker < 3; worker++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				if err := s.SyncIndex(ctx); err != nil {
+					errCh <- fmt.Errorf("sync worker %d iter %d: %w", w, i, err)
+					continue
+				}
+				anns := []local.Annotation{{TicketID: "TKT-001", FilePath: "f.go", LineNum: i, Context: fmt.Sprintf("w-%d", w)}}
+				if err := s.UpsertAnnotations(ctx, anns); err != nil {
+					errCh <- fmt.Errorf("annotation worker %d iter %d: %w", w, i, err)
+				}
+			}
+		}(worker)
+	}
+	wg.Wait()
+	close(errCh)
+
+	busyFailures := 0
+	otherFailures := 0
+	for e := range errCh {
+		if strings.Contains(strings.ToLower(e.Error()), "sqlite_busy") || strings.Contains(strings.ToLower(e.Error()), "database is locked") {
+			busyFailures++
+			continue
+		}
+		otherFailures++
+		t.Logf("non-busy failure: %v", e)
+	}
+	if otherFailures != 0 {
+		t.Fatalf("unexpected non-busy contention failures: %d", otherFailures)
+	}
+
+	badFixture := h.writeFixture("authoring/failure-output.json", []byte(badOut))
+	recoverFixture := h.writeFixture("authoring/recovery-output.json", []byte(recoverOut))
+	summary := fmt.Sprintf("busy_failures=%d other_failures=%d\n", busyFailures, otherFailures)
+	summaryFixture := h.writeFixture("authoring/contention-summary.txt", []byte(summary))
+	t.Logf("authoring failure/recovery fixtures: %s | %s | %s", badFixture, recoverFixture, summaryFixture)
 }

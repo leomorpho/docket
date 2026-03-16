@@ -1256,7 +1256,7 @@
     },
     "TKT-237": {
       "title": "Add fake-repo integration suite for LLM ticket authoring reliability",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     },
