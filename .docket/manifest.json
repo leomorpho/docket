@@ -1113,7 +1113,7 @@
     },
     "TKT-213": {
       "title": "Create idempotent docket bootstrap command with cross-link to docket start",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
