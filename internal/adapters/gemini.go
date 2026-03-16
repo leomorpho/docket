@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const geminiManagedBlock = "# Docket\nUse `docket start` to work the next prioritized ticket."
-
 type geminiAdapter struct{}
 
 func newGeminiAdapter() Adapter {
@@ -41,7 +39,7 @@ func (geminiAdapter) Install(_ context.Context, input InstallInput) error {
 	if err := ensureGeminiDoc(repoRoot); err != nil {
 		return err
 	}
-	if err := ensureGeminiSkill(); err != nil {
+	if err := ensureGeminiSkill(repoRoot); err != nil {
 		return err
 	}
 	if err := ensureGeminiSettings(); err != nil {
@@ -84,22 +82,11 @@ func (a geminiAdapter) Status(ctx context.Context, repoRoot string) (StatusRepor
 
 func ensureGeminiDoc(repoRoot string) error {
 	path := filepath.Join(repoRoot, "GEMINI.md")
-	raw, err := os.ReadFile(path)
+	block, err := renderSkillPackBlock(repoRoot, "gemini")
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		return os.WriteFile(path, []byte(geminiManagedBlock+"\n"), 0o644)
+		return err
 	}
-	text := string(raw)
-	if strings.Contains(strings.ToLower(text), "docket") {
-		return nil
-	}
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	text += "\n" + geminiManagedBlock + "\n"
-	return os.WriteFile(path, []byte(text), 0o644)
+	return upsertManagedSkillBlock(path, block)
 }
 
 func geminiSkillPath() (string, error) {
@@ -110,18 +97,16 @@ func geminiSkillPath() (string, error) {
 	return filepath.Join(home, ".gemini", "skills", "docket", "SKILL.md"), nil
 }
 
-func ensureGeminiSkill() error {
+func ensureGeminiSkill(repoRoot string) error {
 	path, err := geminiSkillPath()
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	block, err := renderSkillPackBlock(repoRoot, "gemini")
+	if err != nil {
 		return err
 	}
-	if fileExists(path) {
-		return nil
-	}
-	return os.WriteFile(path, []byte("# Docket Skill\nUse docket commands for deterministic ticket workflows.\n"), 0o644)
+	return upsertManagedSkillBlock(path, block)
 }
 
 func geminiSettingsPath() (string, error) {

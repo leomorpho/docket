@@ -1167,7 +1167,7 @@
     },
     "TKT-222": {
       "title": "Generate minimal cross-platform skill pack v1 from canonical contract",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },

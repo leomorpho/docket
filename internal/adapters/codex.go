@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const codexAgentsManagedBlock = "# Docket\nUse `docket start` to pick up prioritized ticket work."
-
 type codexAdapter struct{}
 
 func newCodexAdapter() Adapter {
@@ -80,22 +78,11 @@ func codexConfigPath(repoRoot string) string {
 
 func ensureCodexAgentsFile(repoRoot string) error {
 	path := filepath.Join(repoRoot, "AGENTS.md")
-	raw, err := os.ReadFile(path)
+	block, err := renderSkillPackBlock(repoRoot, "codex")
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		return os.WriteFile(path, []byte(codexAgentsManagedBlock+"\n"), 0o644)
+		return err
 	}
-	text := string(raw)
-	if strings.Contains(strings.ToLower(text), "docket") {
-		return nil
-	}
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	text += "\n" + codexAgentsManagedBlock + "\n"
-	return os.WriteFile(path, []byte(text), 0o644)
+	return upsertManagedSkillBlock(path, block)
 }
 
 func ensureCodexConfig(repoRoot string) error {

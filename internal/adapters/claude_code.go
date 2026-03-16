@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const claudeManagedBlock = "## Docket Managed Block\nUse `docket start` to get the next prioritized task."
-
 type claudeCodeAdapter struct{}
 
 func newClaudeCodeAdapter() Adapter {
@@ -76,22 +74,11 @@ func (a claudeCodeAdapter) Status(ctx context.Context, repoRoot string) (StatusR
 
 func ensureClaudeDoc(repoRoot string) error {
 	path := filepath.Join(repoRoot, "CLAUDE.md")
-	raw, err := os.ReadFile(path)
+	block, err := renderSkillPackBlock(repoRoot, "claude-code")
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		return os.WriteFile(path, []byte(claudeManagedBlock+"\n"), 0o644)
+		return err
 	}
-	text := string(raw)
-	if strings.Contains(strings.ToLower(text), "docket") {
-		return nil
-	}
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	text += "\n" + claudeManagedBlock + "\n"
-	return os.WriteFile(path, []byte(text), 0o644)
+	return upsertManagedSkillBlock(path, block)
 }
 
 func ensureClaudeMCPConfig(repoRoot string) error {
