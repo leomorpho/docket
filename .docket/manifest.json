@@ -1220,7 +1220,7 @@
     },
     "TKT-231": {
       "title": "Implement transactional docket backlog apply command",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     },
