@@ -1090,12 +1090,12 @@
     },
     "TKT-209": {
       "title": "Epic: Cross-platform agent capability foundation for Codex, Claude Code, and Gemini",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1
     },
     "TKT-210": {
       "title": "Define capabilities contract v1 for workflow, hooks, and skills",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
