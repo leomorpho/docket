@@ -1149,7 +1149,7 @@
     },
     "TKT-219": {
       "title": "Implement docket doctor health checks for MCP, skills, hooks, and contract state",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
