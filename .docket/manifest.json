@@ -1214,7 +1214,7 @@
     },
     "TKT-230": {
       "title": "Implement transactional docket ticket apply command",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     },
