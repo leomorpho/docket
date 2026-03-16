@@ -33,6 +33,8 @@ var helpJSONCmd = &cobra.Command{
 					"quick_path_preference": "Prefer transactional authoring via scaffold/apply commands over multi-step manual edits.",
 					"ticket_apply":          "docket ticket scaffold > ticket-spec.json && docket --automation ticket apply --spec ticket-spec.json",
 					"backlog_apply":         "docket backlog scaffold > backlog-spec.json && docket --automation backlog apply --spec backlog-spec.json",
+					"proof_attach":          "docket proof add TKT-NNN --file artifacts/screenshot.png --proof-title \"Before fix\" --note \"What this screenshot proves\" --captured-at 2026-03-16T18:40:00Z --format json",
+					"proof_verify":          "docket proof list TKT-NNN --format json && docket show TKT-NNN --format json",
 				},
 			},
 			"global_flags": map[string]any{

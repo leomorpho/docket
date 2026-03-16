@@ -39,13 +39,19 @@ func TestHelpJSONCommand(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow guidance missing in agent_instructions")
 	}
-	for _, key := range []string{"quick_path_preference", "ticket_apply", "backlog_apply"} {
+	for _, key := range []string{"quick_path_preference", "ticket_apply", "backlog_apply", "proof_attach", "proof_verify"} {
 		if workflow[key] == nil {
 			t.Fatalf("workflow.%s missing", key)
 		}
 	}
 	if !strings.Contains(workflow["ticket_apply"].(string), "--automation") {
 		t.Fatalf("ticket_apply guidance must include automation mode hint: %v", workflow["ticket_apply"])
+	}
+	if !strings.Contains(workflow["proof_attach"].(string), "proof add") || !strings.Contains(workflow["proof_attach"].(string), "--proof-title") || !strings.Contains(workflow["proof_attach"].(string), "--note") {
+		t.Fatalf("proof_attach guidance must include canonical proof add command: %v", workflow["proof_attach"])
+	}
+	if !strings.Contains(workflow["proof_verify"].(string), "proof list") || !strings.Contains(workflow["proof_verify"].(string), "show") {
+		t.Fatalf("proof_verify guidance must include list + show validation path: %v", workflow["proof_verify"])
 	}
 
 	commands, ok := manifest["commands"].([]any)

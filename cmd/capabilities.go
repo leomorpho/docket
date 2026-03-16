@@ -80,6 +80,8 @@ func renderCapabilitiesMarkdown(view capabilitiesView) string {
 		"- "+view.QuickPath.Preference,
 		"- `"+view.QuickPath.TicketApply+"`",
 		"- `"+view.QuickPath.BacklogApply+"`",
+		"- `"+view.QuickPath.ProofAttach+"`",
+		"- `"+view.QuickPath.ProofVerify+"`",
 		"- "+view.QuickPath.AutomationHint,
 	)
 	return strings.Join(lines, "\n")

@@ -1297,7 +1297,7 @@
     },
     "TKT-244": {
       "title": "Add end-to-end screenshot proof integration suite and quick-path guidance",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

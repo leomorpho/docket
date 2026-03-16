@@ -48,8 +48,12 @@ func TestStartAndCapabilitiesPrioritizeApplyQuickPath(t *testing.T) {
 	trace := strings.Join([]string{
 		startQuick["ticket_apply"].(string),
 		startQuick["backlog_apply"].(string),
+		startQuick["proof_attach"].(string),
+		startQuick["proof_verify"].(string),
 		capQuick["ticket_apply"].(string),
 		capQuick["backlog_apply"].(string),
+		capQuick["proof_attach"].(string),
+		capQuick["proof_verify"].(string),
 	}, "\n")
 	startFixture := h.writeFixture(filepath.Join("quick-path", "start.json"), []byte(startOut))
 	capFixture := h.writeFixture(filepath.Join("quick-path", "capabilities.json"), []byte(capOut))
@@ -59,7 +63,7 @@ func TestStartAndCapabilitiesPrioritizeApplyQuickPath(t *testing.T) {
 
 func assertQuickPathFields(t *testing.T, payload map[string]any) {
 	t.Helper()
-	for _, key := range []string{"preference", "ticket_apply", "backlog_apply", "automation_hint"} {
+	for _, key := range []string{"preference", "ticket_apply", "backlog_apply", "proof_attach", "proof_verify", "automation_hint"} {
 		if payload[key] == nil {
 			t.Fatalf("quick path missing %s field: %#v", key, payload)
 		}
@@ -69,6 +73,15 @@ func assertQuickPathFields(t *testing.T, payload map[string]any) {
 	}
 	if !strings.Contains(payload["backlog_apply"].(string), "backlog apply") || !strings.Contains(payload["backlog_apply"].(string), "--automation") {
 		t.Fatalf("backlog quick path must prioritize transactional apply + automation: %#v", payload)
+	}
+	if !strings.Contains(payload["proof_attach"].(string), "proof add") || !strings.Contains(payload["proof_attach"].(string), "--proof-title") || !strings.Contains(payload["proof_attach"].(string), "--note") {
+		t.Fatalf("proof_attach quick path must include canonical proof add command with title+note: %#v", payload)
+	}
+	if !strings.Contains(payload["proof_verify"].(string), "proof list") || !strings.Contains(payload["proof_verify"].(string), "show") {
+		t.Fatalf("proof_verify quick path must include list/show verification commands: %#v", payload)
+	}
+	if !strings.Contains(payload["proof_attach"].(string), "--format json") || !strings.Contains(payload["proof_verify"].(string), "--format json") {
+		t.Fatalf("proof quick path should include machine-readable JSON hints: %#v", payload)
 	}
 	if !strings.Contains(strings.ToLower(payload["preference"].(string)), "transactional") {
 		t.Fatalf("preference should emphasize transactional apply flow: %#v", payload)
