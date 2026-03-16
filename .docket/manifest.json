@@ -1191,7 +1191,7 @@
     },
     "TKT-226": {
       "title": "Create fake-repo integration harness simulating LLM goal-driven runs",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
