@@ -1203,12 +1203,12 @@
     },
     "TKT-228": {
       "title": "Epic: LLM-friendly ticket authoring and automation surface",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1
     },
     "TKT-229": {
       "title": "Define ticket and backlog apply spec schema with validator",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     },
