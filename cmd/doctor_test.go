@@ -196,6 +196,51 @@ func TestCodexBootstrapCreatesMCPConfigAndDoctorPassesReadiness(t *testing.T) {
 	}
 }
 
+func TestClaudeBootstrapCreatesMCPConfigAndDoctorPassesReadiness(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	t.Setenv("DOCKET_ADAPTER", "")
+	docketHome = ""
+	repo = tmpRepo
+	format = "human"
+
+	if err := os.MkdirAll(filepath.Join(tmpRepo, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "CLAUDE.md"), []byte("claude marker"), 0o644); err != nil {
+		t.Fatalf("write CLAUDE.md failed: %v", err)
+	}
+
+	before := buildDoctorReport(tmpRepo)
+	if statusByName(before.Checks, "mcp") != "FAIL" {
+		t.Fatalf("expected mcp FAIL before claude bootstrap when MCP config is absent")
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"bootstrap", "--adapter", "claude-code"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bootstrap failed: %v\n%s", err, out.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpRepo, ".cursor", "mcp.json")); err != nil {
+		t.Fatalf("expected claude bootstrap to create .cursor/mcp.json: %v", err)
+	}
+
+	after := buildDoctorReport(tmpRepo)
+	if statusByName(after.Checks, "mcp") != "PASS" {
+		t.Fatalf("expected mcp PASS after claude bootstrap")
+	}
+	if statusByName(after.Checks, "skills") != "PASS" {
+		t.Fatalf("expected skills PASS after claude bootstrap")
+	}
+	if statusByName(after.Checks, "hooks") != "PASS" {
+		t.Fatalf("expected hooks PASS after claude bootstrap")
+	}
+}
+
 func statusByName(checks []doctorCheck, name string) string {
 	for _, c := range checks {
 		if c.Name == name {

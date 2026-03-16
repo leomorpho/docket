@@ -1125,7 +1125,7 @@
     },
     "TKT-215": {
       "title": "Implement Claude Code adapter for bootstrap, status, and doctor",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },
