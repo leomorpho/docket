@@ -1137,7 +1137,7 @@
     },
     "TKT-217": {
       "title": "Upgrade docket start with capability digest, status strip, and bootstrap remediation",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },

@@ -107,6 +107,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			return fmt.Errorf("recording run routing metadata: %w", err)
 		}
 		instruction := startInstruction(t.ID, startYolo)
+		capabilityDigest := buildStartCapabilityDigest(repo)
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
@@ -120,6 +121,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 				"active_workflow_hash": activeWorkflowHash,
 				"yolo_mode":            startYolo,
 				"agent_instruction":    instruction,
+				"capability_digest":    capabilityDigest,
 			})
 			return nil
 		}
@@ -131,6 +133,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
 		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
 		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
 		fmt.Fprintf(cmd.OutOrStdout(), "\nAcceptance Criteria:\n")
 		for _, ac := range t.AC {
 			status := "[ ]"
