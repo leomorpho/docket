@@ -1173,7 +1173,7 @@
     },
     "TKT-223": {
       "title": "Implement learning capture parser and storage for LEARN rules",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },

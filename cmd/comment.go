@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/leomorpho/docket/internal/learning"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -21,6 +22,11 @@ var commentCmd = &cobra.Command{
 	Short: "Add a comment to a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			// Reset global variables for test isolation.
+			commentBody = ""
+		}()
+
 		id := args[0]
 		if commentBody == "" {
 			return fmt.Errorf("--body is required")
@@ -52,6 +58,10 @@ var commentCmd = &cobra.Command{
 		if err := s.AddComment(ctx, id, c); err != nil {
 			return fmt.Errorf("adding comment: %w", err)
 		}
+		learnStore := learning.NewStore(repo, func() time.Time { return now })
+		if _, err := learnStore.IngestText("comment:"+id, commentBody); err != nil {
+			return fmt.Errorf("capturing learn rules: %w", err)
+		}
 
 		// 4. Output
 		if format == "json" {
@@ -63,9 +73,6 @@ var commentCmd = &cobra.Command{
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Comment added to %s.\n", id)
 		}
-
-		// Reset global variables for test isolation
-		commentBody = ""
 
 		return nil
 	},

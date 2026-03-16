@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
+	"github.com/leomorpho/docket/internal/learning"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -36,6 +38,11 @@ var sessionAttachCmd = &cobra.Command{
 		}
 		if err := s.AddComment(ctx, id, c); err != nil {
 			return err
+		}
+		learnStore := learning.NewStore(repo, nil)
+		sourceLabel := "session:" + id + ":" + filepath.Base(relPath)
+		if _, err := learnStore.IngestFile(sourceLabel, sessionAttachFile); err != nil {
+			return fmt.Errorf("capturing learn rules from session: %w", err)
 		}
 
 		if format == "json" {
