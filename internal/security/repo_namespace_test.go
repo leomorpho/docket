@@ -386,3 +386,72 @@ func TestTrustedLedgerHeadMissingAndCorruptAnchor(t *testing.T) {
 		t.Fatalf("expected malformed anchor error, got: %v", err)
 	}
 }
+
+func TestTrustedLedgerHeadRejectsDuplicateOrConflictingPrivilegedApprovals(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(t.TempDir(), "repo-priv-dup")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir repo docket failed: %v", err)
+	}
+
+	store := NewRepoNamespaceStore(home)
+	ks := NewFileKeystore(home)
+	if err := ks.Create("pw-1"); err != nil {
+		t.Fatalf("create keystore failed: %v", err)
+	}
+	ledger := NewEventLedger(repo, ks, "dev-test")
+
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:     EventPrivilegedTransitionApprove,
+		RepoID:   "drid_test",
+		TicketID: "TKT-901",
+		Actor:    "human:test",
+		Metadata: map[string]any{"action": "state transition TKT-901 -> done"},
+	}); err != nil {
+		t.Fatalf("append first privileged event failed: %v", err)
+	}
+	if err := store.VerifyAndAdvanceTrustedLedgerHead(repo); err != nil {
+		t.Fatalf("seed trusted head failed: %v", err)
+	}
+
+	// Duplicate privileged approval for same ticket + action should be rejected.
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:     EventPrivilegedTransitionApprove,
+		RepoID:   "drid_test",
+		TicketID: "TKT-901",
+		Actor:    "human:test",
+		Metadata: map[string]any{"action": "state transition TKT-901 -> done"},
+	}); err != nil {
+		t.Fatalf("append duplicate privileged event failed: %v", err)
+	}
+	err := store.VerifyAndAdvanceTrustedLedgerHead(repo)
+	if !errors.Is(err, ErrLedgerInvalidChain) {
+		t.Fatalf("expected duplicate privileged approval to fail with invalid chain, got: %v", err)
+	}
+
+	// Remove duplicate line and append conflicting approval for same ticket.
+	data, err := os.ReadFile(LedgerPath(repo))
+	if err != nil {
+		t.Fatalf("read ledger failed: %v", err)
+	}
+	lines := bytesSplitLines(data)
+	if len(lines) < 2 {
+		t.Fatalf("expected at least two ledger lines, got %d", len(lines))
+	}
+	if err := os.WriteFile(LedgerPath(repo), append(lines[0], '\n'), 0o644); err != nil {
+		t.Fatalf("truncate ledger to first event failed: %v", err)
+	}
+	if _, err := ledger.Append(LedgerAppendInput{
+		Type:     EventPrivilegedTransitionApprove,
+		RepoID:   "drid_test",
+		TicketID: "TKT-901",
+		Actor:    "human:test",
+		Metadata: map[string]any{"action": "state transition TKT-901 -> archived"},
+	}); err != nil {
+		t.Fatalf("append conflicting privileged event failed: %v", err)
+	}
+	err = store.VerifyAndAdvanceTrustedLedgerHead(repo)
+	if !errors.Is(err, ErrLedgerInvalidChain) {
+		t.Fatalf("expected conflicting privileged approval to fail with invalid chain, got: %v", err)
+	}
+}

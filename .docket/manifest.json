@@ -989,7 +989,7 @@
     },
     "TKT-192": {
       "title": "Verify ledger chain integrity and signatures on privileged mutations",
-      "state": "todo",
+      "state": "in-review",
       "priority": 3,
       "parent": "TKT-175"
     },

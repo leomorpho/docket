@@ -193,6 +193,9 @@ func (s *RepoNamespaceStore) VerifyAndAdvanceTrustedLedgerHead(repoRoot string) 
 	if err != nil {
 		return fmt.Errorf("loading ledger: %w", err)
 	}
+	if err := validatePrivilegedApprovalConsistency(events); err != nil {
+		return err
+	}
 	currentHead := ""
 	if len(events) > 0 {
 		currentHead = strings.TrimSpace(events[len(events)-1].Hash)
@@ -229,6 +232,55 @@ func (s *RepoNamespaceStore) VerifyAndAdvanceTrustedLedgerHead(repoRoot string) 
 		shortHash(trustedHead),
 		filepath.Join(s.repoNamespaceDir(repoID), "trusted_ledger_head.json"),
 	)
+}
+
+func validatePrivilegedApprovalConsistency(events []LedgerEvent) error {
+	type approval struct {
+		action string
+		hash   string
+	}
+	seen := map[string]approval{}
+	for _, ev := range events {
+		if ev.Type != EventPrivilegedTransitionApprove {
+			continue
+		}
+		ticketID := strings.TrimSpace(ev.TicketID)
+		if ticketID == "" {
+			return fmt.Errorf("%w: privileged approval event is missing ticket_id", ErrLedgerInvalidChain)
+		}
+		action := ""
+		if ev.Metadata != nil {
+			if raw, ok := ev.Metadata["action"].(string); ok {
+				action = strings.TrimSpace(raw)
+			}
+		}
+		if action == "" {
+			return fmt.Errorf("%w: privileged approval event for %s is missing metadata.action", ErrLedgerInvalidChain, ticketID)
+		}
+		prev, ok := seen[ticketID]
+		if !ok {
+			seen[ticketID] = approval{action: action, hash: ev.Hash}
+			continue
+		}
+		if prev.action == action {
+			return fmt.Errorf(
+				"%w: duplicate privileged approval for %s action %q (%s and %s)",
+				ErrLedgerInvalidChain,
+				ticketID,
+				action,
+				shortHash(prev.hash),
+				shortHash(ev.Hash),
+			)
+		}
+		return fmt.Errorf(
+			"%w: conflicting privileged approvals for %s (%q vs %q)",
+			ErrLedgerInvalidChain,
+			ticketID,
+			prev.action,
+			action,
+		)
+	}
+	return nil
 }
 
 func (s *RepoNamespaceStore) SetActiveWorkflowHash(repoRoot, workflowHash, actor string) (string, error) {
