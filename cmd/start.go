@@ -122,6 +122,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, lifecycle.StatusOK)
 		instruction := startInstruction(t.ID, startYolo)
 		capabilityDigest := buildStartCapabilityDigest(repo)
+		learnReplay := buildLearnReplay(repo, t, 3)
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
@@ -136,6 +137,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 				"yolo_mode":            startYolo,
 				"agent_instruction":    instruction,
 				"capability_digest":    capabilityDigest,
+				"learn_replay":         learnReplay,
 			})
 			return nil
 		}
@@ -148,6 +150,14 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
 		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
+		if len(learnReplay) == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Learn replay: none\n")
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "Learn replay (top %d):\n", len(learnReplay))
+			for _, rule := range learnReplay {
+				fmt.Fprintf(cmd.OutOrStdout(), "- [%s] %s\n", rule.Category, rule.Rule)
+			}
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "\nAcceptance Criteria:\n")
 		for _, ac := range t.AC {
 			status := "[ ]"

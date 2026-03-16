@@ -1179,7 +1179,7 @@
     },
     "TKT-224": {
       "title": "Add learning replay in docket start with top 3 relevant rules",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },
