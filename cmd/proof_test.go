@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -206,5 +207,101 @@ func TestProofCmd_RemoveNotFoundEnvelopeJSON(t *testing.T) {
 	}
 	if envAny["field"] != "proof_id" {
 		t.Fatalf("expected proof_id field, got %+v", envAny)
+	}
+}
+
+func TestProofListFiltersAndOrderingJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	setupProofTicket(t, tmpDir)
+
+	fixtureRel := filepath.Join("fixtures", "proof.png")
+	fixtureAbs := filepath.Join(tmpDir, fixtureRel)
+	writeProofPNGFixture(t, fixtureAbs)
+
+	s := local.New(tmpDir)
+	ctx := context.Background()
+	seed := []proof.AddInput{
+		{TicketID: "TKT-001", SourcePath: fixtureRel, ProofTitle: "old-a", Note: "a", AddedAt: "2026-03-16T18:00:00Z", Actor: "agent:a"},
+		{TicketID: "TKT-001", SourcePath: fixtureRel, ProofTitle: "new-b", Note: "b", AddedAt: "2026-03-16T18:10:00Z", Actor: "agent:b"},
+		{TicketID: "TKT-001", SourcePath: fixtureRel, ProofTitle: "mid-a", Note: "c", AddedAt: "2026-03-16T18:05:00Z", Actor: "agent:a"},
+	}
+	for _, in := range seed {
+		if _, err := s.AddProof(ctx, in); err != nil {
+			t.Fatalf("seed add proof failed: %v", err)
+		}
+	}
+
+	out := new(bytes.Buffer)
+	errOut := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(errOut)
+
+	rootCmd.SetArgs([]string{"proof", "list", "TKT-001"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("proof list default failed: %v", err)
+	}
+	var base struct {
+		Proofs []struct {
+			ProofTitle string `json:"proof_title"`
+			AddedAt    string `json:"added_at"`
+			Actor      string `json:"actor"`
+		} `json:"proofs"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &base); err != nil {
+		t.Fatalf("parse base list json: %v; body=%s", err, out.String())
+	}
+	if len(base.Proofs) != 3 {
+		t.Fatalf("expected 3 proofs in base list, got %d", len(base.Proofs))
+	}
+	if base.Proofs[0].ProofTitle != "new-b" || base.Proofs[1].ProofTitle != "mid-a" || base.Proofs[2].ProofTitle != "old-a" {
+		t.Fatalf("expected newest-first deterministic ordering, got %+v", base.Proofs)
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"proof", "list", "TKT-001", "--since", "2026-03-16T18:05:00Z", "--actor", "agent:a", "--limit", "1", "--kind", "screenshot"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("proof list filtered failed: %v", err)
+	}
+	var filtered struct {
+		Proofs []struct {
+			ProofTitle string `json:"proof_title"`
+			Actor      string `json:"actor"`
+		} `json:"proofs"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &filtered); err != nil {
+		t.Fatalf("parse filtered list json: %v; body=%s", err, out.String())
+	}
+	if len(filtered.Proofs) != 1 || filtered.Proofs[0].ProofTitle != "mid-a" || filtered.Proofs[0].Actor != "agent:a" {
+		t.Fatalf("unexpected filtered proofs payload: %+v", filtered)
+	}
+}
+
+func TestProofListFilterValidationEnvelopeJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	setupProofTicket(t, tmpDir)
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(new(bytes.Buffer))
+
+	rootCmd.SetArgs([]string{"proof", "list", "TKT-001", "--kind", "binary"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected invalid kind validation error")
+	}
+	var payload map[string]any
+	if unmarshalErr := json.Unmarshal(out.Bytes(), &payload); unmarshalErr != nil {
+		t.Fatalf("parse error payload: %v; body=%s", unmarshalErr, out.String())
+	}
+	envAny, ok := payload["error_envelope"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing error_envelope payload: %+v", payload)
+	}
+	if envAny["field"] != "kind" {
+		t.Fatalf("expected kind field validation error, got %+v", envAny)
 	}
 }

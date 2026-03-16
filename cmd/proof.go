@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/leomorpho/docket/internal/proof"
@@ -17,6 +19,10 @@ var (
 	proofNote       string
 	proofCapturedAt string
 	proofID         string
+	proofListKind   string
+	proofListSince  string
+	proofListActor  string
+	proofListLimit  int
 )
 
 var proofCmd = &cobra.Command{
@@ -77,9 +83,19 @@ var proofListCmd = &cobra.Command{
 		defer func() {
 			runErr = renderProofMutationError(cmd, runErr)
 		}()
+		defer func() {
+			proofListKind = ""
+			proofListSince = ""
+			proofListActor = ""
+			proofListLimit = 0
+		}()
 
 		s := local.New(repo)
 		recs, err := s.ListProofs(context.Background(), args[0])
+		if err != nil {
+			return err
+		}
+		recs, err = filterAndSortProofs(recs, proofListKind, proofListSince, proofListActor, proofListLimit)
 		if err != nil {
 			return err
 		}
@@ -135,6 +151,81 @@ var proofRemoveCmd = &cobra.Command{
 	},
 }
 
+func filterAndSortProofs(recs []proof.Record, kind string, since string, actor string, limit int) ([]proof.Record, error) {
+	var sinceAt time.Time
+	if strings.TrimSpace(since) != "" {
+		parsed, err := time.Parse(time.RFC3339, since)
+		if err != nil {
+			return nil, &proof.FieldError{
+				ErrorCode:    "invalid_timestamp",
+				Field:        "since",
+				Retryable:    false,
+				SuggestedFix: "use RFC3339 timestamp like 2026-03-16T18:00:00Z",
+				Message:      "since must be RFC3339",
+			}
+		}
+		sinceAt = parsed
+	}
+
+	normalizedKind := strings.ToLower(strings.TrimSpace(kind))
+	if normalizedKind != "" && normalizedKind != "image" && normalizedKind != "screenshot" {
+		return nil, &proof.FieldError{
+			ErrorCode:    "invalid_field",
+			Field:        "kind",
+			Retryable:    false,
+			SuggestedFix: "use --kind image or --kind screenshot",
+			Message:      "kind must be one of: image, screenshot",
+		}
+	}
+	if limit < 0 {
+		return nil, &proof.FieldError{
+			ErrorCode:    "invalid_field",
+			Field:        "limit",
+			Retryable:    false,
+			SuggestedFix: "use a positive integer for --limit",
+			Message:      "limit must be >= 0",
+		}
+	}
+
+	filtered := make([]proof.Record, 0, len(recs))
+	for _, rec := range recs {
+		if normalizedKind != "" {
+			k := proofKind(rec)
+			if normalizedKind == "screenshot" && k != "image" {
+				continue
+			}
+			if normalizedKind == "image" && k != "image" {
+				continue
+			}
+		}
+		if !sinceAt.IsZero() && rec.AddedAt.Before(sinceAt) {
+			continue
+		}
+		if strings.TrimSpace(actor) != "" && rec.Actor != actor {
+			continue
+		}
+		filtered = append(filtered, rec)
+	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].AddedAt.Equal(filtered[j].AddedAt) {
+			return filtered[i].ID < filtered[j].ID
+		}
+		return filtered[i].AddedAt.After(filtered[j].AddedAt)
+	})
+	if limit > 0 && len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+	return filtered, nil
+}
+
+func proofKind(rec proof.Record) string {
+	if strings.HasPrefix(strings.ToLower(rec.File.MIMEType), "image/") {
+		return "image"
+	}
+	return "other"
+}
+
 func renderProofMutationError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
@@ -166,6 +257,10 @@ func init() {
 	proofAddCmd.Flags().StringVar(&proofCapturedAt, "captured-at", "", "RFC3339 timestamp for when screenshot was captured")
 
 	proofRemoveCmd.Flags().StringVar(&proofID, "proof-id", "", "proof id to remove")
+	proofListCmd.Flags().StringVar(&proofListKind, "kind", "", "filter proofs by kind (image|screenshot)")
+	proofListCmd.Flags().StringVar(&proofListSince, "since", "", "filter proofs by added_at >= RFC3339 timestamp")
+	proofListCmd.Flags().StringVar(&proofListActor, "actor", "", "filter proofs by actor")
+	proofListCmd.Flags().IntVar(&proofListLimit, "limit", 0, "limit number of returned proofs (0 = no limit)")
 
 	proofCmd.AddCommand(proofAddCmd)
 	proofCmd.AddCommand(proofListCmd)

@@ -1327,7 +1327,7 @@
     },
     "TKT-249": {
       "title": "Add proof query and filter ergonomics for automation and UI consumption",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },
