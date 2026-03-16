@@ -1309,7 +1309,7 @@
     },
     "TKT-246": {
       "title": "Harden proof intake: MIME sniffing, format allowlist, and filesystem safety",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

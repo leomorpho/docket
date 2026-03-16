@@ -14,14 +14,16 @@ func TestProofBlobPolicy_ContentAddressedPathAndDedupe(t *testing.T) {
 	repoRoot := t.TempDir()
 	r := NewRepository(repoRoot)
 
-	imgA := filepath.Join(repoRoot, "fixtures", "a.png")
-	imgB := filepath.Join(repoRoot, "fixtures", "b.png")
+	imgARel := filepath.Join("fixtures", "a.png")
+	imgBRel := filepath.Join("fixtures", "b.png")
+	imgA := filepath.Join(repoRoot, imgARel)
+	imgB := filepath.Join(repoRoot, imgBRel)
 	writeFixturePNG(t, imgA)
 	writeFixturePNG(t, imgB)
 
 	first, err := r.Add(context.Background(), AddInput{
 		TicketID:   "TKT-245",
-		SourcePath: imgA,
+		SourcePath: imgARel,
 		ProofTitle: "first",
 		Note:       "first",
 		AddedAt:    "2026-03-16T18:10:00Z",
@@ -31,7 +33,7 @@ func TestProofBlobPolicy_ContentAddressedPathAndDedupe(t *testing.T) {
 	}
 	second, err := r.Add(context.Background(), AddInput{
 		TicketID:   "TKT-245",
-		SourcePath: imgB,
+		SourcePath: imgBRel,
 		ProofTitle: "second",
 		Note:       "second",
 		AddedAt:    "2026-03-16T18:11:00Z",
@@ -65,13 +67,14 @@ func TestProofBlobPolicy_RegressesStableAddListCycles(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	r := NewRepository(repoRoot)
-	img := filepath.Join(repoRoot, "fixtures", "a.png")
+	imgRel := filepath.Join("fixtures", "a.png")
+	img := filepath.Join(repoRoot, imgRel)
 	writeFixturePNG(t, img)
 
 	for i, ts := range []string{"2026-03-16T18:20:00Z", "2026-03-16T18:21:00Z", "2026-03-16T18:22:00Z"} {
 		_, err := r.Add(context.Background(), AddInput{
 			TicketID:   "TKT-245",
-			SourcePath: img,
+			SourcePath: imgRel,
 			ProofTitle: "cycle",
 			Note:       "cycle",
 			AddedAt:    ts,

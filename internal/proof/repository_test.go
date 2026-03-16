@@ -32,12 +32,13 @@ func TestProofRepositoryAdd_RequiredFieldsAndTimestampParsing(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	r := NewRepository(repoRoot)
-	img := filepath.Join(repoRoot, "fixtures", "proof.png")
+	imgRel := filepath.Join("fixtures", "proof.png")
+	img := filepath.Join(repoRoot, imgRel)
 	writeFixturePNG(t, img)
 
 	_, err := r.Add(context.Background(), AddInput{
 		TicketID:   "TKT-240",
-		SourcePath: img,
+		SourcePath: imgRel,
 		ProofTitle: "",
 		Note:       "",
 		AddedAt:    "not-a-time",
@@ -61,12 +62,13 @@ func TestProofRepositoryAdd_PersistsAndListsDeterministically(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	r := NewRepository(repoRoot)
-	img := filepath.Join(repoRoot, "fixtures", "proof.png")
+	imgRel := filepath.Join("fixtures", "proof.png")
+	img := filepath.Join(repoRoot, imgRel)
 	writeFixturePNG(t, img)
 
 	first, err := r.Add(context.Background(), AddInput{
 		TicketID:   "TKT-240",
-		SourcePath: img,
+		SourcePath: imgRel,
 		ProofTitle: "Before",
 		Note:       "Before screenshot",
 		AddedAt:    "2026-03-16T17:10:00Z",
@@ -77,7 +79,7 @@ func TestProofRepositoryAdd_PersistsAndListsDeterministically(t *testing.T) {
 	}
 	second, err := r.Add(context.Background(), AddInput{
 		TicketID:   "TKT-240",
-		SourcePath: img,
+		SourcePath: imgRel,
 		ProofTitle: "After",
 		Note:       "After screenshot",
 		AddedAt:    "2026-03-16T17:11:00Z",
@@ -123,7 +125,8 @@ func TestProofRepositoryAdd_RejectsUnsafeTicketIDAndMediaType(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	r := NewRepository(repoRoot)
-	bad := filepath.Join(repoRoot, "fixtures", "proof.txt")
+	badRel := filepath.Join("fixtures", "proof.txt")
+	bad := filepath.Join(repoRoot, badRel)
 	if err := os.MkdirAll(filepath.Dir(bad), 0o755); err != nil {
 		t.Fatalf("mkdir fixture dir: %v", err)
 	}
@@ -133,7 +136,7 @@ func TestProofRepositoryAdd_RejectsUnsafeTicketIDAndMediaType(t *testing.T) {
 
 	_, err := r.Add(context.Background(), AddInput{
 		TicketID:   "../../etc/passwd",
-		SourcePath: bad,
+		SourcePath: badRel,
 		ProofTitle: "Bad",
 		Note:       "Bad",
 		AddedAt:    time.Now().UTC().Format(time.RFC3339),
@@ -151,7 +154,7 @@ func TestProofRepositoryAdd_RejectsUnsafeTicketIDAndMediaType(t *testing.T) {
 
 	_, err = r.Add(context.Background(), AddInput{
 		TicketID:   "TKT-240",
-		SourcePath: bad,
+		SourcePath: badRel,
 		ProofTitle: "Bad",
 		Note:       "Bad",
 		AddedAt:    time.Now().UTC().Format(time.RFC3339),
@@ -164,5 +167,99 @@ func TestProofRepositoryAdd_RejectsUnsafeTicketIDAndMediaType(t *testing.T) {
 	}
 	if ferr.Field != "mime_type" {
 		t.Fatalf("expected mime_type field error, got %+v", ferr)
+	}
+
+	mismatchRel := filepath.Join("fixtures", "mismatch.jpg")
+	mismatch := filepath.Join(repoRoot, mismatchRel)
+	writeFixturePNG(t, mismatch)
+
+	_, err = r.Add(context.Background(), AddInput{
+		TicketID:   "TKT-240",
+		SourcePath: mismatchRel,
+		ProofTitle: "Mismatch",
+		Note:       "Mismatch",
+		AddedAt:    time.Now().UTC().Format(time.RFC3339),
+	})
+	if err == nil {
+		t.Fatal("expected extension mismatch rejection")
+	}
+	if !errors.As(err, &ferr) {
+		t.Fatalf("expected FieldError, got %T", err)
+	}
+	if ferr.Field != "mime_type" {
+		t.Fatalf("expected mime_type field error for extension mismatch, got %+v", ferr)
+	}
+}
+
+func TestProofRepositoryAdd_RejectsAbsoluteAndTraversalSourcePath(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := NewRepository(repoRoot)
+	img := filepath.Join(repoRoot, "fixtures", "proof.png")
+	writeFixturePNG(t, img)
+
+	_, err := r.Add(context.Background(), AddInput{
+		TicketID:   "TKT-246",
+		SourcePath: img,
+		ProofTitle: "Abs",
+		Note:       "Abs",
+		AddedAt:    "2026-03-16T18:30:00Z",
+	})
+	if err == nil {
+		t.Fatal("expected absolute path rejection")
+	}
+	var ferr *FieldError
+	if !errors.As(err, &ferr) {
+		t.Fatalf("expected FieldError, got %T", err)
+	}
+	if ferr.Field != "source_path" {
+		t.Fatalf("expected source_path field error, got %+v", ferr)
+	}
+
+	_, err = r.Add(context.Background(), AddInput{
+		TicketID:   "TKT-246",
+		SourcePath: "../outside.png",
+		ProofTitle: "Traversal",
+		Note:       "Traversal",
+		AddedAt:    "2026-03-16T18:31:00Z",
+	})
+	if err == nil {
+		t.Fatal("expected traversal path rejection")
+	}
+	if !errors.As(err, &ferr) {
+		t.Fatalf("expected FieldError, got %T", err)
+	}
+	if ferr.Field != "source_path" {
+		t.Fatalf("expected source_path field error, got %+v", ferr)
+	}
+}
+
+func TestProofRepositoryAdd_OptionalMaxSize(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := NewRepository(repoRoot)
+	imgRel := filepath.Join("fixtures", "proof.png")
+	img := filepath.Join(repoRoot, imgRel)
+	writeFixturePNG(t, img)
+
+	_, err := r.Add(context.Background(), AddInput{
+		TicketID:   "TKT-246",
+		SourcePath: imgRel,
+		ProofTitle: "Too large",
+		Note:       "Too large",
+		AddedAt:    "2026-03-16T18:32:00Z",
+		MaxBytes:   8,
+	})
+	if err == nil {
+		t.Fatal("expected max-size rejection")
+	}
+	var ferr *FieldError
+	if !errors.As(err, &ferr) {
+		t.Fatalf("expected FieldError, got %T", err)
+	}
+	if ferr.Field != "size_bytes" {
+		t.Fatalf("expected size_bytes field error, got %+v", ferr)
 	}
 }

@@ -50,6 +50,7 @@ type AddInput struct {
 	AddedAt    string
 	CapturedAt string
 	Actor      string
+	MaxBytes   int64
 }
 
 type FileMetadata struct {
@@ -72,6 +73,13 @@ type Record struct {
 
 type Repository struct {
 	RepoRoot string
+}
+
+var allowedImageMIMEs = map[string][]string{
+	"image/png":  {".png"},
+	"image/jpeg": {".jpg", ".jpeg"},
+	"image/gif":  {".gif"},
+	"image/webp": {".webp"},
 }
 
 func NewRepository(repoRoot string) *Repository {
@@ -112,11 +120,22 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 		capturedAt = &t
 	}
 
-	sourcePath := filepath.Clean(in.SourcePath)
+	sourcePath := filepath.Clean(strings.TrimSpace(in.SourcePath))
 	if sourcePath == "." {
 		return nil, fieldError("invalid_field", "source_path", "source_path must reference a file", "use a concrete image file path")
 	}
-	fi, err := os.Lstat(sourcePath)
+	if filepath.IsAbs(sourcePath) {
+		return nil, fieldError("unsafe_path", "source_path", "absolute source paths are not allowed", "use a repository-relative path such as fixtures/proof.png")
+	}
+	if sourcePath == ".." || strings.HasPrefix(sourcePath, ".."+string(filepath.Separator)) {
+		return nil, fieldError("unsafe_path", "source_path", "path traversal is not allowed", "use a repository-relative path under the current repo")
+	}
+	absSourcePath := filepath.Join(r.RepoRoot, sourcePath)
+	if !withinRoot(absSourcePath, r.RepoRoot) {
+		return nil, fieldError("unsafe_path", "source_path", "source_path escapes repository root", "use a repository-relative path under the current repo")
+	}
+
+	fi, err := os.Lstat(absSourcePath)
 	if err != nil {
 		return nil, fieldError("missing_file", "source_path", "source_path does not exist", "verify the file path exists")
 	}
@@ -127,7 +146,7 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 		return nil, fieldError("invalid_file", "source_path", "source_path must be a regular file", "use a regular image file")
 	}
 
-	data, err := os.ReadFile(sourcePath)
+	data, err := os.ReadFile(absSourcePath)
 	if err != nil {
 		return nil, fieldError("read_failed", "source_path", "failed to read source file", "check file permissions and retry")
 	}
@@ -135,9 +154,18 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 		return nil, fieldError("invalid_file", "source_path", "source file is empty", "capture and attach a non-empty image")
 	}
 
+	if in.MaxBytes > 0 && int64(len(data)) > in.MaxBytes {
+		return nil, fieldError("proof_too_large", "size_bytes", fmt.Sprintf("proof file exceeds max size of %d bytes", in.MaxBytes), "compress the image or raise the max size setting")
+	}
+
 	mimeType := sniffMIME(data)
-	if !strings.HasPrefix(mimeType, "image/") {
+	allowedExts, ok := allowedImageMIMEs[mimeType]
+	if !ok {
 		return nil, fieldError("unsupported_media_type", "mime_type", fmt.Sprintf("unsupported media type %q", mimeType), "attach a PNG, JPEG, GIF, WEBP, or other image media")
+	}
+	sourceExt := sanitizeExt(filepath.Ext(sourcePath))
+	if sourceExt != "" && !containsString(allowedExts, sourceExt) {
+		return nil, fieldError("mime_extension_mismatch", "mime_type", fmt.Sprintf("file extension %q does not match detected media type %q", sourceExt, mimeType), "use a file extension that matches the actual image bytes")
 	}
 
 	hash := sha256.Sum256(data)
@@ -149,7 +177,7 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 	}
 	id := r.nextProofID(records, addedAt, sha)
 
-	ext := extForMIME(mimeType)
+	ext := allowedExts[0]
 	if ext == "" {
 		ext = sanitizeExt(filepath.Ext(sourcePath))
 	}
@@ -300,19 +328,13 @@ func sanitizeExt(ext string) string {
 	return ext
 }
 
-func extForMIME(mimeType string) string {
-	switch mimeType {
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	case "image/gif":
-		return ".gif"
-	case "image/webp":
-		return ".webp"
-	default:
-		return ""
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
 	}
+	return false
 }
 
 func withinRoot(path, root string) bool {

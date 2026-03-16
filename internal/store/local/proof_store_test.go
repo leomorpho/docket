@@ -57,12 +57,13 @@ func TestStoreProofLifecycle_DoesNotMutateTicketMarkdown(t *testing.T) {
 		t.Fatalf("get raw before: %v", err)
 	}
 
-	img := filepath.Join(repoRoot, "fixtures", "proof.png")
+	imgRel := filepath.Join("fixtures", "proof.png")
+	img := filepath.Join(repoRoot, imgRel)
 	writeProofFixturePNG(t, img)
 
 	rec, err := s.AddProof(ctx, proof.AddInput{
 		TicketID:   "TKT-240",
-		SourcePath: img,
+		SourcePath: imgRel,
 		ProofTitle: "CLI output before",
 		Note:       "Capture baseline behavior",
 		AddedAt:    now.Format(time.RFC3339),
@@ -101,12 +102,13 @@ func TestStoreAddProof_RequiresExistingTicket(t *testing.T) {
 	repoRoot := t.TempDir()
 	s := New(repoRoot)
 	ctx := context.Background()
-	img := filepath.Join(repoRoot, "fixtures", "proof.png")
+	imgRel := filepath.Join("fixtures", "proof.png")
+	img := filepath.Join(repoRoot, imgRel)
 	writeProofFixturePNG(t, img)
 
 	_, err := s.AddProof(ctx, proof.AddInput{
 		TicketID:   "TKT-999",
-		SourcePath: img,
+		SourcePath: imgRel,
 		ProofTitle: "Missing",
 		Note:       "Missing",
 		AddedAt:    time.Now().UTC().Format(time.RFC3339),
