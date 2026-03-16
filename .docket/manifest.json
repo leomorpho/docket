@@ -1303,7 +1303,7 @@
     },
     "TKT-245": {
       "title": "Implement content-addressed in-repo proof blob storage policy",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

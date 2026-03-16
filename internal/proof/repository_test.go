@@ -107,8 +107,8 @@ func TestProofRepositoryAdd_PersistsAndListsDeterministically(t *testing.T) {
 	if proofs[0].ID == "" || proofs[1].ID == "" {
 		t.Fatalf("expected deterministic IDs, got %+v", proofs)
 	}
-	if proofs[0].File.Path == proofs[1].File.Path {
-		t.Fatalf("expected unique persisted file path per proof record, got %q", proofs[0].File.Path)
+	if proofs[0].File.Path != proofs[1].File.Path {
+		t.Fatalf("expected content-addressed dedupe path to match, got %q and %q", proofs[0].File.Path, proofs[1].File.Path)
 	}
 
 	for _, p := range proofs {

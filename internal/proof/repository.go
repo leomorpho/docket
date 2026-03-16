@@ -149,15 +149,15 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 	}
 	id := r.nextProofID(records, addedAt, sha)
 
-	ext := sanitizeExt(filepath.Ext(sourcePath))
+	ext := extForMIME(mimeType)
 	if ext == "" {
-		ext = extForMIME(mimeType)
+		ext = sanitizeExt(filepath.Ext(sourcePath))
 	}
 	if ext == "" {
 		ext = ".img"
 	}
 
-	relPath := filepath.ToSlash(filepath.Join(".docket", "proofs", in.TicketID, "files", id+ext))
+	relPath := filepath.ToSlash(filepath.Join(".docket", "proofs", "by-hash", sha+ext))
 	absPath := filepath.Join(r.RepoRoot, filepath.FromSlash(relPath))
 	if !withinRoot(absPath, r.RepoRoot) {
 		return nil, fieldError("unsafe_path", "path", "resolved proof path escapes repository root", "use a valid repository path")
@@ -165,8 +165,13 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return nil, fieldError("io_failed", "path", "failed to create proof storage directory", "check repository write permissions")
 	}
-	if err := os.WriteFile(absPath, data, 0o644); err != nil {
-		return nil, fieldError("io_failed", "path", "failed to write proof file", "check repository write permissions")
+	if _, statErr := os.Stat(absPath); statErr != nil {
+		if !os.IsNotExist(statErr) {
+			return nil, fieldError("io_failed", "path", "failed to stat proof blob path", "check repository permissions and retry")
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			return nil, fieldError("io_failed", "path", "failed to write proof file", "check repository write permissions")
+		}
 	}
 
 	rec := Record{
