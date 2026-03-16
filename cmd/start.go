@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/leomorpho/docket/internal/hooks"
+	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -68,10 +69,22 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
 			actor = "agent:" + agentID
 		}
+		recorder := lifecycleStart(cmd.ErrOrStderr(), "start", t.ID, actor)
+		runStatus := lifecycle.StatusOK
+		defer func() {
+			lifecycleRunEnd(cmd.ErrOrStderr(), recorder, runStatus)
+		}()
+
+		failStart := func(tool string, err error) error {
+			runStatus = lifecycle.StatusFailed
+			lifecycleToolFailure(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, tool, err)
+			lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, lifecycle.StatusFailed)
+			return err
+		}
 
 		t, worktreePath, err := deps.workflow.StartTask(ctx, t.ID, actor, cfg)
 		if err != nil {
-			return err
+			return failStart("workflow.start_task", err)
 		}
 		if worktreePath == "" {
 			worktreePath = repo
@@ -91,21 +104,22 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
 		}
 		if hookErr != nil {
-			return fmt.Errorf("start hook failed: %w", hookErr)
+			return failStart("hooks.run_start", fmt.Errorf("start hook failed: %w", hookErr))
 		}
 		if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
-			return fmt.Errorf("recording run manifest: %w", err)
+			return failStart("security.record_run_start", fmt.Errorf("recording run manifest: %w", err))
 		}
 		tokenEstimate, risk, failureCount := routingInputs(t)
 		preferredTier := workflow.SelectCapabilityTier(tokenEstimate, risk, failureCount)
 		adapter := workflow.DefaultProviderAdapter()
 		model, decision, routeErr := workflow.ResolveModelForTask(adapter, preferredTier)
 		if routeErr != nil {
-			return fmt.Errorf("resolving model route: %w", routeErr)
+			return failStart("workflow.resolve_model_route", fmt.Errorf("resolving model route: %w", routeErr))
 		}
 		if err := ns.RecordRunRoutingDecision(repo, t.ID, string(decision.SelectedTier), adapter.ProviderName(), model.ID, decision.Rationale); err != nil {
-			return fmt.Errorf("recording run routing metadata: %w", err)
+			return failStart("security.record_run_routing", fmt.Errorf("recording run routing metadata: %w", err))
 		}
+		lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, lifecycle.StatusOK)
 		instruction := startInstruction(t.ID, startYolo)
 		capabilityDigest := buildStartCapabilityDigest(repo)
 

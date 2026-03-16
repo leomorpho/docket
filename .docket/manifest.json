@@ -1161,7 +1161,7 @@
     },
     "TKT-221": {
       "title": "Implement minimal lifecycle event set with stable payload schema",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },
