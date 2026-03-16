@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 	_ "modernc.org/sqlite"
@@ -259,6 +260,30 @@ func (s *Store) LinkCommit(ctx context.Context, id string, sha string) error {
 	t.LinkedCommits = append(t.LinkedCommits, sha)
 	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 	return s.UpdateTicket(ctx, t)
+}
+
+func (s *Store) AddProof(ctx context.Context, in proof.AddInput) (*proof.Record, error) {
+	t, err := s.GetTicket(ctx, in.TicketID)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, fmt.Errorf("ticket %s not found", in.TicketID)
+	}
+	repo := proof.NewRepository(s.RepoRoot)
+	return repo.Add(ctx, in)
+}
+
+func (s *Store) ListProofs(ctx context.Context, ticketID string) ([]proof.Record, error) {
+	t, err := s.GetTicket(ctx, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, fmt.Errorf("ticket %s not found", ticketID)
+	}
+	repo := proof.NewRepository(s.RepoRoot)
+	return repo.List(ctx, ticketID)
 }
 
 func (s *Store) NextID(ctx context.Context) (id string, seq int, err error) {

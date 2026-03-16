@@ -1273,7 +1273,7 @@
     },
     "TKT-240": {
       "title": "Define screenshot proof metadata schema (`proof_title` + `note`) and durable storage",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },
