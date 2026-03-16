@@ -38,10 +38,13 @@ var updateCmd = &cobra.Command{
 	Use:   "update <TKT-NNN>",
 	Short: "Update ticket fields",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			resetUpdateGlobals()
 			resetUpdateFlagChanges(cmd)
+		}()
+		defer func() {
+			runErr = renderMutationError(cmd, runErr)
 		}()
 
 		id := args[0]

@@ -21,10 +21,13 @@ var commentCmd = &cobra.Command{
 	Use:   "comment <TKT-NNN>",
 	Short: "Add a comment to a ticket",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			// Reset global variables for test isolation.
 			commentBody = ""
+		}()
+		defer func() {
+			runErr = renderMutationError(cmd, runErr)
 		}()
 
 		id := args[0]

@@ -18,7 +18,10 @@ var sessionAttachCmd = &cobra.Command{
 	Use:   "attach <TKT-NNN>",
 	Short: "Attach a session log file to a ticket",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		defer func() {
+			runErr = renderMutationError(cmd, runErr)
+		}()
 		if sessionAttachFile == "" {
 			return fmt.Errorf("--file is required")
 		}

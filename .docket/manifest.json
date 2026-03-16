@@ -1238,7 +1238,7 @@
     },
     "TKT-234": {
       "title": "Add machine-readable error envelope for mutating commands",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-228"
     },

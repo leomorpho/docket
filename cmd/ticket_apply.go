@@ -40,12 +40,15 @@ type ticketApplyOutput struct {
 var ticketApplyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Create or update a ticket transactionally from a spec",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			ticketApplySpecPath = ""
 			if f := cmd.Flags().Lookup("spec"); f != nil {
 				f.Changed = false
 			}
+		}()
+		defer func() {
+			runErr = renderMutationError(cmd, runErr)
 		}()
 
 		if strings.TrimSpace(ticketApplySpecPath) == "" {
@@ -62,13 +65,11 @@ var ticketApplyCmd = &cobra.Command{
 			return fmt.Errorf("parse spec JSON: %w", err)
 		}
 		if !report.Valid() {
-			if format == "json" {
-				printJSON(cmd, map[string]any{
-					"error":      "validation_failed",
-					"validation": report,
-				})
+			field := ""
+			if len(report.Errors) > 0 {
+				field = report.Errors[0].Path
 			}
-			return fmt.Errorf("ticket apply spec validation failed")
+			return renderMutationValidationError(cmd, fmt.Errorf("ticket apply spec validation failed"), field, report)
 		}
 
 		presence, err := parseTicketPresence(raw)

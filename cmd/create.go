@@ -27,10 +27,13 @@ var (
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new ticket",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			resetCreateGlobals()
 			resetCreateFlagChanges(cmd)
+		}()
+		defer func() {
+			runErr = renderMutationError(cmd, runErr)
 		}()
 
 		if title == "" {

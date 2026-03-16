@@ -28,12 +28,15 @@ type backlogApplyOutput struct {
 var backlogApplyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Create a backlog transactionally from a single spec",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			backlogApplySpecPath = ""
 			if f := cmd.Flags().Lookup("spec"); f != nil {
 				f.Changed = false
 			}
+		}()
+		defer func() {
+			runErr = renderMutationError(cmd, runErr)
 		}()
 
 		if strings.TrimSpace(backlogApplySpecPath) == "" {
@@ -48,13 +51,11 @@ var backlogApplyCmd = &cobra.Command{
 			return fmt.Errorf("parse spec JSON: %w", err)
 		}
 		if !report.Valid() {
-			if format == "json" {
-				printJSON(cmd, map[string]any{
-					"error":      "validation_failed",
-					"validation": report,
-				})
+			field := ""
+			if len(report.Errors) > 0 {
+				field = report.Errors[0].Path
 			}
-			return fmt.Errorf("backlog apply spec validation failed")
+			return renderMutationValidationError(cmd, fmt.Errorf("backlog apply spec validation failed"), field, report)
 		}
 
 		res, err := executeBacklogApply(context.Background(), repo, spec)
