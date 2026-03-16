@@ -20,6 +20,7 @@ const (
 	EventRunEnd        = "run.end"
 	EventToolFailure   = "tool.failure"
 	EventProofMutation = "proof.mutation"
+	EventStateTransition = "state.transition"
 
 	StatusOK     = "ok"
 	StatusFailed = "failed"
@@ -135,8 +136,15 @@ func ValidateEvent(event Event) ValidationReport {
 		if action != "" && action != "add" && action != "remove" {
 			v.add("payload.action", CodeInvalidValue, "must be add or remove")
 		}
+	case EventStateTransition:
+		requireString(v, event.Payload, "payload.command", "command")
+		requireString(v, event.Payload, "payload.ticket_id", "ticket_id")
+		requireString(v, event.Payload, "payload.actor", "actor")
+		requireString(v, event.Payload, "payload.from_state", "from_state")
+		requireString(v, event.Payload, "payload.to_state", "to_state")
+		requireString(v, event.Payload, "payload.reason", "reason")
 	default:
-		v.add("type", CodeInvalidValue, "must be run.start,phase.end,run.end,tool.failure,proof.mutation")
+		v.add("type", CodeInvalidValue, "must be run.start,phase.end,run.end,tool.failure,proof.mutation,state.transition")
 	}
 
 	report.Errors = v.sortedErrors()

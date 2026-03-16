@@ -82,10 +82,21 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			return err
 		}
 
+		previousState := t.State
 		t, worktreePath, err := deps.workflow.StartTask(ctx, t.ID, actor, cfg)
 		if err != nil {
 			return failStart("workflow.start_task", err)
 		}
+		emitStateTransitionEvent(
+			cmd.ErrOrStderr(),
+			"start",
+			t.ID,
+			actor,
+			string(previousState),
+			string(t.State),
+			"start selected next ticket",
+			[]string{"state_transition_validated", "next_ticket_selected"},
+		)
 		if worktreePath == "" {
 			worktreePath = repo
 		}

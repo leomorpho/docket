@@ -55,15 +55,19 @@ var showCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("listing proofs: %w", err)
 		}
+		transitions, err := loadTicketTransitionHistory(repo, id)
+		if err != nil {
+			return fmt.Errorf("loading transition history: %w", err)
+		}
 		agg := aggregateDescendantAC(ctx, s, id)
 
 		switch format {
 		case "json":
-			printTicketJSON(cmd, t, proofs)
+			printTicketJSON(cmd, t, proofs, transitions)
 		case "context":
-			printTicketContext(cmd, t, agg, proofs)
+			printTicketContext(cmd, t, agg, proofs, transitions)
 		default:
-			printTicketHuman(cmd, t, agg, proofs)
+			printTicketHuman(cmd, t, agg, proofs, transitions)
 		}
 
 		return nil
@@ -76,7 +80,7 @@ type acAggregate struct {
 	Done        int
 }
 
-func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, proofs []proof.Record) {
+func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, proofs []proof.Record, transitions []transitionHistoryEntry) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s · %s · P%d · %s\n\n", t.ID, t.State, t.Priority, strings.Join(t.Labels, ", "))
 	fmt.Fprintf(out, "  %s\n\n", t.Title)
@@ -134,6 +138,25 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, pro
 		}
 	}
 
+	if len(transitions) > 0 {
+		fmt.Fprintf(out, "  Transition History (%d)\n", len(transitions))
+		fmt.Fprintln(out, "  ──────────────────────")
+		for _, tr := range transitions {
+			fmt.Fprintf(out, "  %s — %s\n", tr.At, tr.Actor)
+			fmt.Fprintf(out, "    %s -> %s (%s)\n", tr.FromState, tr.ToState, tr.Reason)
+			if len(tr.Checks) > 0 {
+				fmt.Fprintf(out, "    checks: %s\n", strings.Join(tr.Checks, ", "))
+			}
+			if tr.WorkflowLockHash != "" {
+				fmt.Fprintf(out, "    workflow_lock: %s\n", tr.WorkflowLockHash)
+			}
+			if tr.ManagedRun {
+				fmt.Fprintf(out, "    managed_run: true (%s)\n", tr.RunBranch)
+			}
+		}
+		fmt.Fprintln(out)
+	}
+
 	if t.Handoff != "" {
 		fmt.Fprintln(out, "  Handoff")
 		fmt.Fprintln(out, "  ───────")
@@ -171,7 +194,7 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, pro
 	}
 }
 
-func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, proofs []proof.Record) {
+func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, proofs []proof.Record, transitions []transitionHistoryEntry) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "TICKET: %s · %s · P%d\n", t.ID, t.State, t.Priority)
 	fmt.Fprintf(out, "TITLE: %s\n", t.Title)
@@ -206,6 +229,10 @@ func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, p
 		}
 		fmt.Fprintf(out, "PROOFS: %s\n", strings.Join(proofSummaries, " "))
 	}
+	if len(transitions) > 0 {
+		last := transitions[len(transitions)-1]
+		fmt.Fprintf(out, "TRANSITIONS: %d total; last=%s %s->%s reason=%s\n", len(transitions), last.Actor, last.FromState, last.ToState, last.Reason)
+	}
 
 	if t.Handoff != "" {
 		fmt.Fprintf(out, "HANDOFF: %s\n", strings.ReplaceAll(t.Handoff, "\n", " "))
@@ -228,8 +255,8 @@ func printTicketContext(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, p
 	}
 }
 
-func printTicketJSON(cmd *cobra.Command, t *ticket.Ticket, proofs []proof.Record) {
-	if len(proofs) == 0 {
+func printTicketJSON(cmd *cobra.Command, t *ticket.Ticket, proofs []proof.Record, transitions []transitionHistoryEntry) {
+	if len(proofs) == 0 && len(transitions) == 0 {
 		printJSON(cmd, t)
 		return
 	}
@@ -243,7 +270,12 @@ func printTicketJSON(cmd *cobra.Command, t *ticket.Ticket, proofs []proof.Record
 		printJSON(cmd, t)
 		return
 	}
-	payload["proofs"] = proofs
+	if len(proofs) > 0 {
+		payload["proofs"] = proofs
+	}
+	if len(transitions) > 0 {
+		payload["transition_history"] = transitions
+	}
 	printJSON(cmd, payload)
 }
 

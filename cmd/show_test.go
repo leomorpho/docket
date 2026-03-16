@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -213,5 +214,75 @@ func TestShowCmd_ProofMetadataAppearsWhenPresent(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "PROOFS:") {
 		t.Fatalf("expected PROOFS summary in context output, got:\n%s", b.String())
+	}
+}
+
+func TestShowCmd_JSONIncludesTransitionHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Title:       "Transition Ticket",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		Description: "desc",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+	}); err != nil {
+		t.Fatalf("create ticket failed: %v", err)
+	}
+
+	if err := lifecycle.Append(tmpDir, lifecycle.Event{
+		Version:   lifecycle.SchemaVersionV1,
+		Type:      lifecycle.EventStateTransition,
+		EmittedAt: now.Add(time.Minute).Format(time.RFC3339Nano),
+		Payload: map[string]any{
+			"command":            "update",
+			"ticket_id":          "TKT-001",
+			"actor":              "human:test",
+			"from_state":         "todo",
+			"to_state":           "in-review",
+			"reason":             "update --state in-review",
+			"checks":             []any{"state_transition_validated", "managed_run_commit_linkage"},
+			"workflow_lock_hash": "hash-123",
+			"managed_run":        true,
+			"run_branch":         "docket/TKT-001",
+		},
+	}); err != nil {
+		t.Fatalf("append transition event failed: %v", err)
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"show", "TKT-001", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("show json failed: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(b.Bytes(), &payload); err != nil {
+		t.Fatalf("parse show json failed: %v", err)
+	}
+	historyAny, ok := payload["transition_history"].([]any)
+	if !ok || len(historyAny) != 1 {
+		t.Fatalf("expected one transition history entry, got %#v", payload["transition_history"])
+	}
+	first, ok := historyAny[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected transition object, got %#v", historyAny[0])
+	}
+	if first["from_state"] != "todo" || first["to_state"] != "in-review" {
+		t.Fatalf("unexpected transition states: %#v", first)
+	}
+	if first["actor"] != "human:test" {
+		t.Fatalf("unexpected transition actor: %#v", first)
 	}
 }

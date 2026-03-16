@@ -977,7 +977,7 @@
     },
     "TKT-190": {
       "title": "Build semantic diff views for workflow and state transitions",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-174"
     },

@@ -63,8 +63,17 @@ var updateCmd = &cobra.Command{
 			return cfgErr
 		}
 		cascadeRequested := cmd.Flags().Changed("cascade") && updateCascade
+		actor := detectActor()
+		if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
+			actor = "agent:" + agentID
+		}
 
 		var updatedFields []string
+		var transitionFrom ticket.State
+		var transitionTo ticket.State
+		var transitionReason string
+		var transitionChecks []string
+		transitionChanged := false
 
 		// 1. Title
 		if cmd.Flags().Changed("title") {
@@ -78,6 +87,7 @@ var updateCmd = &cobra.Command{
 
 		// 2. State
 		if cmd.Flags().Changed("state") {
+			transitionFrom = t.State
 			nextState := strings.TrimSpace(updateState)
 			if nextState == "" {
 				return fmt.Errorf("state cannot be empty")
@@ -111,11 +121,13 @@ var updateCmd = &cobra.Command{
 				if err := enforceManagedRunCommitLinkage(t.ID, newState); err != nil {
 					return err
 				}
+				transitionChecks = append(transitionChecks, "managed_run_commit_linkage")
 			}
 			if newState == "done" {
 				if err := enforceStructuredACClosureGate(t); err != nil {
 					return err
 				}
+				transitionChecks = append(transitionChecks, "structured_ac_closure_gate")
 			}
 			if newState == "done" || newState == "archived" {
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
@@ -124,10 +136,12 @@ var updateCmd = &cobra.Command{
 				if err := runPrivilegedHooks(cmd, t.ID, string(newState)); err != nil {
 					return err
 				}
+				transitionChecks = append(transitionChecks, "privileged_surface_authorized")
 			}
 			if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
 				return err
 			}
+			transitionChecks = append(transitionChecks, "state_transition_validated")
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s: state %s → %s\n", t.ID, t.State, newState)
 
 			// Use WorkflowManager for run lifecycle transitions that own worktree merge-back.
@@ -162,6 +176,9 @@ var updateCmd = &cobra.Command{
 			if newState == ticket.State("in-review") || newState == ticket.State("done") {
 				_ = releaseLockForTicket(repo, t.ID)
 			}
+			transitionTo = newState
+			transitionReason = fmt.Sprintf("update --state %s", newState)
+			transitionChanged = transitionFrom != transitionTo
 		}
 
 		// 2b. Parent
@@ -312,6 +329,18 @@ var updateCmd = &cobra.Command{
 			if depth, err := s.ParentDepth(ctx, t.ID); err == nil && depth > 3 {
 				fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s depth is %d (>3)\n", t.ID, depth)
 			}
+		}
+		if transitionChanged {
+			emitStateTransitionEvent(
+				cmd.ErrOrStderr(),
+				"update",
+				t.ID,
+				actor,
+				string(transitionFrom),
+				string(transitionTo),
+				transitionReason,
+				transitionChecks,
+			)
 		}
 
 		if format == "json" {

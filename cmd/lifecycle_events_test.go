@@ -37,8 +37,8 @@ func TestLifecycleEventsSimulatedRunOrderAndSchemaFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loading lifecycle log failed: %v", err)
 	}
-	if len(events) != 7 {
-		t.Fatalf("expected 7 lifecycle events (start + failing hook run), got %d", len(events))
+	if len(events) != 8 {
+		t.Fatalf("expected 8 lifecycle events (start with state transition + failing hook run), got %d", len(events))
 	}
 
 	gotTypes := make([]string, 0, len(events))
@@ -59,6 +59,7 @@ func TestLifecycleEventsSimulatedRunOrderAndSchemaFixtures(t *testing.T) {
 
 	wantOrder := []string{
 		lifecycle.EventRunStart,
+		lifecycle.EventStateTransition,
 		lifecycle.EventPhaseEnd,
 		lifecycle.EventRunEnd,
 		lifecycle.EventRunStart,

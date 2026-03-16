@@ -53,6 +53,13 @@ var blameCmd = &cobra.Command{
 					if len(proofs) > 0 {
 						res["proofs"] = proofs
 					}
+					transitions, err := loadTicketTransitionHistory(repo, ticketID)
+					if err != nil {
+						return fmt.Errorf("loading transition history for %s: %w", ticketID, err)
+					}
+					if len(transitions) > 0 {
+						res["transition_history"] = transitions
+					}
 				}
 			}
 			printJSON(cmd, res)
@@ -96,7 +103,11 @@ var blameCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("loading proofs for %s: %w", ticketID, err)
 		}
-		printTicketContext(cmd, t, acAggregate{}, proofs)
+		transitions, err := loadTicketTransitionHistory(repo, ticketID)
+		if err != nil {
+			return fmt.Errorf("loading transition history for %s: %w", ticketID, err)
+		}
+		printTicketContext(cmd, t, acAggregate{}, proofs, transitions)
 
 		return nil
 	},

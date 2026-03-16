@@ -73,7 +73,8 @@ func TestWorkflowLockValidateRejectsStale(t *testing.T) {
 		t.Fatalf("write proposal failed: %v", err)
 	}
 
-	rootCmd.SetOut(new(bytes.Buffer))
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
 	rootCmd.SetArgs([]string{"secure", "unlock", "--password", "pw-1", "--ttl", "5m"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("secure unlock failed: %v", err)
@@ -92,6 +93,12 @@ func TestWorkflowLockValidateRejectsStale(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "stale") {
 		t.Fatalf("expected stale lock error, got: %v", err)
+	}
+	if !strings.Contains(out.String(), "Semantic diff") {
+		t.Fatalf("expected semantic diff output for stale lock, got: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "todo") {
+		t.Fatalf("expected transition diff details in output, got: %s", out.String())
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/workflow"
@@ -94,6 +95,16 @@ var workflowLockValidateCmd = &cobra.Command{
 			return err
 		}
 		if err := workflow.ValidateWorkflowLock(repo, lock); err != nil {
+			if errors.Is(err, workflow.ErrWorkflowLockStale) {
+				proposalPath := filepath.Join(repo, lock.ProposalPath)
+				proposal, readErr := os.ReadFile(proposalPath)
+				if readErr == nil {
+					diff, diffErr := workflow.DiffWorkflowPolicy(lock.Policy, proposal)
+					if diffErr == nil {
+						fmt.Fprintf(cmd.OutOrStdout(), "Semantic diff (workflow.lock -> proposal):\n%s\n", workflow.RenderWorkflowPolicyDiffHuman(diff))
+					}
+				}
+			}
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "%s is valid and current.\n", workflow.DefaultWorkflowLock)
