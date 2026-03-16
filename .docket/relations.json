@@ -279,6 +279,16 @@
       "from": "TKT-237",
       "to": "TKT-238",
       "relation": "depends-on"
+    },
+    {
+      "from": "TKT-251",
+      "to": "TKT-252",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-252",
+      "to": "TKT-198",
+      "relation": "depends-on"
     }
   ]
 }
