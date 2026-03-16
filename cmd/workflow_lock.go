@@ -45,14 +45,8 @@ var workflowLockGenerateCmd = &cobra.Command{
 		}
 
 		action := "generate workflow.lock"
-		if !workflowConfirmYes {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, workflowTicketID, action)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, workflowConfirmYes, workflowTicketID, action); err != nil {
+			return err
 		}
 
 		ksProvider, err := keystoreProvider()
@@ -120,14 +114,8 @@ var workflowLockActivateCmd = &cobra.Command{
 		}
 
 		action := "activate workflow.lock"
-		if !workflowConfirmYes {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, workflowTicketID, action)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, workflowConfirmYes, workflowTicketID, action); err != nil {
+			return err
 		}
 
 		lock, err := workflow.ParseWorkflowLock(repo)

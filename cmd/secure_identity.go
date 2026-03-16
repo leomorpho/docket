@@ -56,14 +56,8 @@ var secureIdentityRecoverCmd = &cobra.Command{
 		if err := mgr.RequireActive(repo); err != nil {
 			return err
 		}
-		if !identityYes {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, identityTicket, "recover identity metadata")
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, identityYes, identityTicket, "recover identity metadata"); err != nil {
+			return err
 		}
 		im, err := ensureIdentityManager()
 		if err != nil {
@@ -99,14 +93,8 @@ var secureIdentityEnrollCmd = &cobra.Command{
 			return err
 		}
 		action := fmt.Sprintf("enroll device key %s", identityDeviceID)
-		if !identityYes {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, identityTicket, action)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, identityYes, identityTicket, action); err != nil {
+			return err
 		}
 		im, err := ensureIdentityManager()
 		if err != nil {
@@ -138,14 +126,8 @@ var secureIdentityRevokeCmd = &cobra.Command{
 			return err
 		}
 		action := fmt.Sprintf("revoke device key %s", identityDeviceID)
-		if !identityYes {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, identityTicket, action)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, identityYes, identityTicket, action); err != nil {
+			return err
 		}
 		im, err := ensureIdentityManager()
 		if err != nil {
@@ -181,14 +163,8 @@ var secureIdentityRotateCmd = &cobra.Command{
 			return err
 		}
 		action := fmt.Sprintf("rotate current device key to %s", identityDeviceID)
-		if !identityYes {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, identityTicket, action)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, identityYes, identityTicket, action); err != nil {
+			return err
 		}
 		im, err := ensureIdentityManager()
 		if err != nil {

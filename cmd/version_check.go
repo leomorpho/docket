@@ -74,6 +74,9 @@ func shouldSkipVersionCheck(cmd *cobra.Command) bool {
 	if os.Getenv("DOCKET_DISABLE_VERSION_CHECK") == "1" {
 		return true
 	}
+	if isAutomationMode() {
+		return true
+	}
 	if strings.Contains(filepath.Base(os.Args[0]), ".test") {
 		return true
 	}

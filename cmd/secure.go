@@ -85,15 +85,8 @@ var secureApproveCmd = &cobra.Command{
 			return err
 		}
 
-		confirmed := secureYes
-		if !confirmed {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, secureTicket, secureAction)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, secureYes, secureTicket, secureAction); err != nil {
+			return err
 		}
 
 		if err := mgr.RecordPrivilegedAction(repo, secureTicket, secureAction); err != nil {
@@ -121,15 +114,8 @@ var secureAnchorSetCmd = &cobra.Command{
 		}
 
 		action := fmt.Sprintf("set trust anchor signer=%s", secureSignerID)
-		confirmed := secureYes
-		if !confirmed {
-			ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, secureTicket, action)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("privileged action cancelled")
-			}
+		if err := confirmPrivilegedPrompt(cmd, secureYes, secureTicket, action); err != nil {
+			return err
 		}
 
 		ns := security.NewRepoNamespaceStore(docketHome)

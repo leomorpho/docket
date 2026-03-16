@@ -41,6 +41,11 @@ var rootCmd = &cobra.Command{
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		flushVersionNotice(cmd)
+		// The CLI process handles one command per invocation; reset globals for in-process tests.
+		automationMode = false
+		if f := cmd.Root().PersistentFlags().Lookup("automation"); f != nil {
+			f.Changed = false
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -63,4 +68,5 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&repo, "repo", cwd, "path to repo root")
 	rootCmd.PersistentFlags().StringVar(&format, "format", "human", "output format (human or json)")
+	rootCmd.PersistentFlags().BoolVar(&automationMode, "automation", false, "enable non-interactive deterministic automation mode")
 }

@@ -51,7 +51,7 @@ var uiCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "Docket UI already running — registered %q\n", filepath.Base(cwd))
 			fmt.Fprintf(cmd.OutOrStdout(), "Open: %s\n", openURL)
 			shouldOpen := uiOpen
-			if !uiOpen && !uiNoOpen && isInteractiveStdin() {
+			if !uiOpen && !uiNoOpen && isInteractiveStdin() && !isAutomationMode() {
 				shouldOpen = promptOpen(cmd, openURL)
 			}
 			if shouldOpen {
@@ -85,7 +85,7 @@ var uiCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Starting Docket UI on %s\n", fallbackURL)
 
 		shouldOpen := uiOpen
-		if !uiOpen && !uiNoOpen && isInteractiveStdin() {
+		if !uiOpen && !uiNoOpen && isInteractiveStdin() && !isAutomationMode() {
 			shouldOpen = promptOpen(cmd, fallbackURL)
 		}
 

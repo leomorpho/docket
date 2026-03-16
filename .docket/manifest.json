@@ -1226,7 +1226,7 @@
     },
     "TKT-232": {
       "title": "Add global automation mode for non-interactive deterministic CLI behavior",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     },

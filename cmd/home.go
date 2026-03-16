@@ -41,7 +41,7 @@ func resolveDocketHome() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if docketHomeInteractiveFn() {
+		if docketHomeInteractiveFn() && !isAutomationMode() {
 			ok, err := docketHomePromptFn(defaultPath)
 			if err != nil {
 				return "", err

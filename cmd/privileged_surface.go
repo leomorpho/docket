@@ -15,14 +15,8 @@ func requirePrivilegedSurface(cmd *cobra.Command, ticketID, action string, yes b
 	if err := session.RequireActive(repo); err != nil {
 		return err
 	}
-	if !yes {
-		ok, err := security.ConfirmPrivilegedAction(cmd.InOrStdin(), cmd.OutOrStdout(), repo, ticketID, action)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("privileged action cancelled")
-		}
+	if err := confirmPrivilegedPrompt(cmd, yes, ticketID, action); err != nil {
+		return err
 	}
 	return session.RecordPrivilegedAction(repo, ticketID, action)
 }
