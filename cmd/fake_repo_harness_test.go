@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -23,11 +25,17 @@ type fakeRepoHarness struct {
 }
 
 func newFakeRepoHarness(t *testing.T) *fakeRepoHarness {
+	return newFakeRepoHarnessForAdapter(t, "codex")
+}
+
+func newFakeRepoHarnessForAdapter(t *testing.T, adapterID string) *fakeRepoHarness {
 	t.Helper()
 
 	repoRoot := t.TempDir()
 	home := filepath.Join(t.TempDir(), "docket-home")
+	userHome := filepath.Join(t.TempDir(), "home")
 	t.Setenv("DOCKET_HOME", home)
+	t.Setenv("HOME", userHome)
 	t.Setenv("DOCKET_AGENT_ID", "harness-agent")
 	docketHome = ""
 	repo = repoRoot
@@ -39,11 +47,31 @@ func newFakeRepoHarness(t *testing.T) *fakeRepoHarness {
 	if err := os.WriteFile(filepath.Join(repoRoot, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
 		t.Fatalf("write seed failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "AGENTS.md"), []byte("codex marker"), 0o644); err != nil {
-		t.Fatalf("write AGENTS.md failed: %v", err)
-	}
 	if err := os.WriteFile(filepath.Join(repoRoot, "doombox.json"), []byte(`{"mcp":"docket"}`), 0o644); err != nil {
 		t.Fatalf("write doombox.json failed: %v", err)
+	}
+	switch adapterID {
+	case "codex":
+		if err := os.WriteFile(filepath.Join(repoRoot, "AGENTS.md"), []byte("codex marker"), 0o644); err != nil {
+			t.Fatalf("write AGENTS.md failed: %v", err)
+		}
+	case "claude-code":
+		if err := os.WriteFile(filepath.Join(repoRoot, "CLAUDE.md"), []byte("claude marker"), 0o644); err != nil {
+			t.Fatalf("write CLAUDE.md failed: %v", err)
+		}
+	case "gemini":
+		if err := os.WriteFile(filepath.Join(repoRoot, "GEMINI.md"), []byte("gemini marker"), 0o644); err != nil {
+			t.Fatalf("write GEMINI.md failed: %v", err)
+		}
+		skillPath := filepath.Join(userHome, ".gemini", "skills", "docket", "SKILL.md")
+		if err := os.MkdirAll(filepath.Dir(skillPath), 0o755); err != nil {
+			t.Fatalf("mkdir gemini skill path failed: %v", err)
+		}
+		if err := os.WriteFile(skillPath, []byte("# skill"), 0o644); err != nil {
+			t.Fatalf("write gemini SKILL.md failed: %v", err)
+		}
+	default:
+		t.Fatalf("unsupported adapter fixture %q", adapterID)
 	}
 	runGitSession(t, repoRoot, "add", ".")
 	runGitSession(t, repoRoot, "commit", "-m", "chore: seed harness")
@@ -200,4 +228,125 @@ func TestFakeRepoHarnessFailureRetryIntegration(t *testing.T) {
 	failFixture := h.writeFixture("failure-retry/fail-trace.txt", []byte(failOut))
 	retryFixture := h.writeFixture("failure-retry/retry-trace.txt", []byte(retryOut))
 	t.Logf("failure-retry fixtures: %s, %s", failFixture, retryFixture)
+}
+
+type adapterMatrixFixture struct {
+	AdapterID             string
+	ExpectedRepoArtifacts []string
+}
+
+func buildAdapterMatrixFixtures() []adapterMatrixFixture {
+	fixtures := []adapterMatrixFixture{
+		{
+			AdapterID:             "codex",
+			ExpectedRepoArtifacts: []string{"AGENTS.md", ".git/hooks/pre-commit", "CLAUDE.md", ".docket/install.json"},
+		},
+		{
+			AdapterID:             "claude-code",
+			ExpectedRepoArtifacts: []string{"CLAUDE.md", ".git/hooks/pre-commit", ".docket/install.json"},
+		},
+		{
+			AdapterID:             "gemini",
+			ExpectedRepoArtifacts: []string{"GEMINI.md", ".git/hooks/pre-commit", "CLAUDE.md", ".docket/install.json"},
+		},
+	}
+	return fixtures
+}
+
+func TestAdapterMatrixFixtureBuilders(t *testing.T) {
+	fixtures := buildAdapterMatrixFixtures()
+	if len(fixtures) != 3 {
+		t.Fatalf("expected 3 matrix fixtures, got %d", len(fixtures))
+	}
+	gotIDs := []string{fixtures[0].AdapterID, fixtures[1].AdapterID, fixtures[2].AdapterID}
+	sort.Strings(gotIDs)
+	if strings.Join(gotIDs, ",") != "claude-code,codex,gemini" {
+		t.Fatalf("unexpected adapter fixture ids: %v", gotIDs)
+	}
+	for _, fixture := range fixtures {
+		if len(fixture.ExpectedRepoArtifacts) == 0 {
+			t.Fatalf("expected artifact patterns for %s", fixture.AdapterID)
+		}
+	}
+}
+
+func TestAdapterMatrixIntegration(t *testing.T) {
+	fixtures := buildAdapterMatrixFixtures()
+
+	for i, fixture := range fixtures {
+		h := newFakeRepoHarnessForAdapter(t, fixture.AdapterID)
+		ticketID := fmt.Sprintf("TKT-%03d", 920+i)
+		h.seedTicket(ticketID, 920+i, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+
+		doctorBeforeOut, err := h.run("doctor", "--format", "json")
+		if err != nil {
+			t.Fatalf("%s: doctor before bootstrap failed: %v\n%s", fixture.AdapterID, err, doctorBeforeOut)
+		}
+		var before doctorReport
+		if err := json.Unmarshal([]byte(doctorBeforeOut), &before); err != nil {
+			t.Fatalf("%s: unmarshal doctor before failed: %v\n%s", fixture.AdapterID, err, doctorBeforeOut)
+		}
+		if statusByName(before.Checks, "hooks") != "FAIL" {
+			t.Fatalf("%s: expected hooks FAIL before bootstrap", fixture.AdapterID)
+		}
+
+		if out, err := h.run("bootstrap", "--adapter", fixture.AdapterID); err != nil {
+			t.Fatalf("%s: bootstrap failed: %v\n%s", fixture.AdapterID, err, out)
+		}
+		for _, rel := range fixture.ExpectedRepoArtifacts {
+			if _, err := os.Stat(filepath.Join(h.repo, rel)); err != nil {
+				t.Fatalf("%s: expected artifact %s after bootstrap: %v", fixture.AdapterID, rel, err)
+			}
+		}
+		// Gemini fixture keeps a dedicated marker; remove CLAUDE.md created by bootstrap
+		// so adapter detection stays pinned to gemini in this matrix scenario.
+		if fixture.AdapterID == "gemini" {
+			if err := os.Remove(filepath.Join(h.repo, "CLAUDE.md")); err != nil {
+				t.Fatalf("gemini: failed to remove CLAUDE.md disambiguator: %v", err)
+			}
+		}
+
+		startOut, err := h.run("start", "--format", "json")
+		if err != nil {
+			t.Fatalf("%s: start failed: %v\n%s", fixture.AdapterID, err, startOut)
+		}
+		var startPayload map[string]any
+		if err := json.Unmarshal([]byte(startOut), &startPayload); err != nil {
+			t.Fatalf("%s: unmarshal start payload failed: %v\n%s", fixture.AdapterID, err, startOut)
+		}
+		capDigest, ok := startPayload["capability_digest"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: expected capability_digest object in start output", fixture.AdapterID)
+		}
+		if capDigest["adapter"] != fixture.AdapterID {
+			t.Fatalf("%s: expected capability adapter %q, got %v", fixture.AdapterID, fixture.AdapterID, capDigest["adapter"])
+		}
+
+		doctorAfterOut, err := h.run("doctor", "--format", "json")
+		if err != nil {
+			t.Fatalf("%s: doctor after bootstrap failed: %v\n%s", fixture.AdapterID, err, doctorAfterOut)
+		}
+		var after doctorReport
+		if err := json.Unmarshal([]byte(doctorAfterOut), &after); err != nil {
+			t.Fatalf("%s: unmarshal doctor after failed: %v\n%s", fixture.AdapterID, err, doctorAfterOut)
+		}
+		if after.Adapter != fixture.AdapterID {
+			t.Fatalf("%s: expected doctor adapter %q, got %q", fixture.AdapterID, fixture.AdapterID, after.Adapter)
+		}
+		if statusByName(after.Checks, "hooks") != "PASS" {
+			t.Fatalf("%s: expected hooks PASS after bootstrap", fixture.AdapterID)
+		}
+
+		ns := security.NewRepoNamespaceStore(h.home)
+		run, ok, err := ns.GetRunManifest(h.repo, ticketID)
+		if err != nil || !ok {
+			t.Fatalf("%s: expected run manifest for %s, ok=%v err=%v", fixture.AdapterID, ticketID, ok, err)
+		}
+		runJSON, _ := json.MarshalIndent(run, "", "  ")
+		startFixture := h.writeFixture(filepath.Join("matrix", fixture.AdapterID, "start.json"), []byte(startOut))
+		doctorBeforeFixture := h.writeFixture(filepath.Join("matrix", fixture.AdapterID, "doctor-before.json"), []byte(doctorBeforeOut))
+		doctorAfterFixture := h.writeFixture(filepath.Join("matrix", fixture.AdapterID, "doctor-after.json"), []byte(doctorAfterOut))
+		manifestFixture := h.writeFixture(filepath.Join("matrix", fixture.AdapterID, "run-manifest.json"), append(runJSON, '\n'))
+		t.Logf("%s fixtures: %s | %s | %s | %s", fixture.AdapterID, startFixture, doctorBeforeFixture, doctorAfterFixture, manifestFixture)
+	}
 }

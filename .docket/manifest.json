@@ -1197,7 +1197,7 @@
     },
     "TKT-227": {
       "title": "Add adapter matrix integration tests for Codex, Claude Code, and Gemini",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
