@@ -1265,6 +1265,83 @@
       "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
+    },
+    "TKT-239": {
+      "title": "Epic: Screenshot Proof Evidence Pipeline for Ducca Tickets",
+      "state": "backlog",
+      "priority": 2
+    },
+    "TKT-240": {
+      "title": "Define screenshot proof metadata schema (`proof_title` + `note`) and durable storage",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-241": {
+      "title": "Implement `docket proof` CLI (`add/list/remove`) with `proof_title` and `note`",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-242": {
+      "title": "Expose screenshot proof metadata in `show`, `context`, and JSON ticket outputs",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-243": {
+      "title": "Render screenshot proof evidence in Ducca ticket UI",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-244": {
+      "title": "Add end-to-end screenshot proof integration suite and quick-path guidance",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-245": {
+      "title": "Implement content-addressed in-repo proof blob storage policy",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-246": {
+      "title": "Harden proof intake: MIME sniffing, format allowlist, and filesystem safety",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-247": {
+      "title": "Define proof remove semantics and add garbage collection for unreferenced blobs",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-248": {
+      "title": "Record proof add/remove lifecycle events for integrity and auditability",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-249": {
+      "title": "Add proof query and filter ergonomics for automation and UI consumption",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-250": {
+      "title": "Add lazy-loading and scalable rendering for screenshot proofs in Ducca UI",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-239"
+    },
+    "TKT-251": {
+      "title": "Investigate and fix privileged transition enforcement for `update --state done`",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
     }
   }
 }
