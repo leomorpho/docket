@@ -169,3 +169,41 @@ func TestStartOutputBeforeAndAfterBootstrap(t *testing.T) {
 	}
 	t.Logf("start output after bootstrap:\n%s", after)
 }
+
+func TestBuildStartCapabilityDigest_UnknownAdapterNeedsRemediation(t *testing.T) {
+	repoRoot := t.TempDir()
+	digest := buildStartCapabilityDigest(repoRoot)
+	if digest.Adapter != "unsupported" {
+		t.Fatalf("expected unsupported adapter, got %q", digest.Adapter)
+	}
+	if digest.Readiness.MCP != "needs-setup" || digest.Readiness.Skills != "needs-setup" || digest.Readiness.Hooks != "needs-setup" {
+		t.Fatalf("expected full degraded readiness for unknown adapter, got %#v", digest.Readiness)
+	}
+	if !strings.Contains(digest.Remediation, "docket bootstrap") {
+		t.Fatalf("expected remediation hint, got %q", digest.Remediation)
+	}
+}
+
+func TestBuildStartCapabilityDigest_ClaudeSkillsReadyWhenManagedBlockExists(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "CLAUDE.md"), []byte(claudeManagedBlock()), 0o644); err != nil {
+		t.Fatalf("write CLAUDE.md failed: %v", err)
+	}
+	if _, err := writeHook(repoRoot); err != nil {
+		t.Fatalf("writeHook failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "doombox.json"), []byte(`{"mcp":"docket"}`), 0o644); err != nil {
+		t.Fatalf("write doombox.json failed: %v", err)
+	}
+
+	digest := buildStartCapabilityDigest(repoRoot)
+	if digest.Adapter != "claude-code" {
+		t.Fatalf("expected claude-code adapter, got %q", digest.Adapter)
+	}
+	if digest.Readiness.Skills != "ready" || digest.Readiness.Hooks != "ready" || digest.Readiness.MCP != "ready" {
+		t.Fatalf("expected all readiness checks to be ready, got %#v", digest.Readiness)
+	}
+}

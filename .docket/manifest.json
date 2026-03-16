@@ -1185,7 +1185,7 @@
     },
     "TKT-225": {
       "title": "Expand unit test coverage for contract, bootstrap, start, doctor, and learning modules",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },

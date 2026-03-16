@@ -99,6 +99,36 @@ func TestIntegrationAdapterResolutionMatrix(t *testing.T) {
 	t.Logf("adapter resolution matrix:\n%s", strings.Join(rows, "\n"))
 }
 
+func TestRunFunctionsRejectNilAdapter(t *testing.T) {
+	if err := RunBootstrap(context.Background(), nil, BootstrapInput{}); !errors.Is(err, ErrUnsupportedAdapter) {
+		t.Fatalf("expected ErrUnsupportedAdapter from RunBootstrap, got: %v", err)
+	}
+	if _, err := RunDoctor(context.Background(), nil, "."); !errors.Is(err, ErrUnsupportedAdapter) {
+		t.Fatalf("expected ErrUnsupportedAdapter from RunDoctor, got: %v", err)
+	}
+	if _, err := RunStatus(context.Background(), nil, "."); !errors.Is(err, ErrUnsupportedAdapter) {
+		t.Fatalf("expected ErrUnsupportedAdapter from RunStatus, got: %v", err)
+	}
+	if err := RunInstall(context.Background(), nil, InstallInput{}); !errors.Is(err, ErrUnsupportedAdapter) {
+		t.Fatalf("expected ErrUnsupportedAdapter from RunInstall, got: %v", err)
+	}
+}
+
+func TestUnsupportedAdapterErrorIncludesAvailableIDs(t *testing.T) {
+	r := DefaultRegistry()
+	unsupported := r.Resolve("", "unknown")
+	err := RunInstall(context.Background(), unsupported, InstallInput{})
+	if err == nil {
+		t.Fatal("expected unsupported adapter error")
+	}
+	msg := err.Error()
+	for _, want := range []string{"claude-code", "codex", "gemini"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("expected unsupported error to include %q, got %q", want, msg)
+		}
+	}
+}
+
 type errAdapter struct {
 	metadata     Metadata
 	bootstrapErr error

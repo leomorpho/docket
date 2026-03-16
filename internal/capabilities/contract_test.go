@@ -1,7 +1,9 @@
 package capabilities
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -102,6 +104,49 @@ func TestWriteAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("roundtrip mismatch\nwritten=%#v\nloaded=%#v", written, loaded)
 	}
 	t.Logf("capabilities contract version=%d hash=%s", loaded.Version, loaded.Hash)
+}
+
+func TestLoadRuntimeContractDetectsHashMismatch(t *testing.T) {
+	repo := t.TempDir()
+	written, path, err := WriteRuntimeContract(repo, validContract())
+	if err != nil {
+		t.Fatalf("WriteRuntimeContract failed: %v", err)
+	}
+
+	written.Hash = "deadbeef"
+	data, err := json.MarshalIndent(written, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent failed: %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("Write tampered contract failed: %v", err)
+	}
+
+	_, err = LoadRuntimeContract(repo)
+	if !errors.Is(err, ErrHashMismatch) {
+		t.Fatalf("expected ErrHashMismatch, got: %v", err)
+	}
+}
+
+func TestHashContractDefaultsVersionWhenUnset(t *testing.T) {
+	contract := validContract()
+	contract.Version = 0
+
+	hash, err := HashContract(contract)
+	if err != nil {
+		t.Fatalf("HashContract failed: %v", err)
+	}
+	if hash == "" {
+		t.Fatalf("expected non-empty hash")
+	}
+
+	runtime, _, err := WriteRuntimeContract(t.TempDir(), contract)
+	if err != nil {
+		t.Fatalf("WriteRuntimeContract failed: %v", err)
+	}
+	if runtime.Version != ContractVersion {
+		t.Fatalf("expected default contract version %d, got %d", ContractVersion, runtime.Version)
+	}
 }
 
 func validContract() Contract {

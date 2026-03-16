@@ -123,6 +123,34 @@ func TestDoctorBeforeAfterBootstrapJSONArtifacts(t *testing.T) {
 	t.Logf("doctor json artifacts: before=%s after=%s", beforePath, afterPath)
 }
 
+func TestBuildDoctorReportContractRemediationIncludesPath(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "AGENTS.md"), []byte("codex marker"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "doombox.json"), []byte(`{"mcp":"docket"}`), 0o644); err != nil {
+		t.Fatalf("write doombox.json failed: %v", err)
+	}
+
+	report := buildDoctorReport(repoRoot)
+	for _, check := range report.Checks {
+		if check.Name != "contract" {
+			continue
+		}
+		if check.Status != "FAIL" {
+			t.Fatalf("expected contract FAIL without capabilities file")
+		}
+		if !strings.Contains(check.Remediation, capabilities.DefaultRuntimeContractPath) {
+			t.Fatalf("expected remediation to include contract path, got %q", check.Remediation)
+		}
+		return
+	}
+	t.Fatal("contract check missing from report")
+}
+
 func statusByName(checks []doctorCheck, name string) string {
 	for _, c := range checks {
 		if c.Name == name {
