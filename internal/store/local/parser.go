@@ -87,13 +87,16 @@ func Parse(content string) (*ticket.Ticket, error) {
 			continue
 		}
 
-		// Section (H2)
+		// Section (H2) — only canonical top-level ticket sections should switch parser state.
 		if strings.HasPrefix(line, "## ") {
-			// Save previous section
-			processSection(t, currentSection, sectionBody)
-			currentSection = strings.TrimPrefix(line, "## ")
-			sectionBody = []string{}
-			continue
+			heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			if isTopLevelTicketSection(heading) {
+				// Save previous section
+				processSection(t, currentSection, sectionBody)
+				currentSection = heading
+				sectionBody = []string{}
+				continue
+			}
 		}
 
 		sectionBody = append(sectionBody, line)
@@ -102,6 +105,15 @@ func Parse(content string) (*ticket.Ticket, error) {
 	processSection(t, currentSection, sectionBody)
 
 	return t, nil
+}
+
+func isTopLevelTicketSection(heading string) bool {
+	switch strings.ToLower(strings.TrimSpace(heading)) {
+	case "description", "acceptance criteria", "plan", "comments", "handoff":
+		return true
+	default:
+		return false
+	}
 }
 
 func processSection(t *ticket.Ticket, section string, lines []string) {

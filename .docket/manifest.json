@@ -1262,7 +1262,7 @@
     },
     "TKT-238": {
       "title": "Harden ticket parser so nested markdown headings do not break Description parsing",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     }
