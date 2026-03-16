@@ -1244,7 +1244,7 @@
     },
     "TKT-235": {
       "title": "Add scaffold commands for ticket and backlog spec templates",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-228"
     },
