@@ -263,3 +263,52 @@ func TestProofRepositoryAdd_OptionalMaxSize(t *testing.T) {
 		t.Fatalf("expected size_bytes field error, got %+v", ferr)
 	}
 }
+
+func TestProofRepositoryRemove_AddListRemoveCycle(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	r := NewRepository(repoRoot)
+	imgRel := filepath.Join("fixtures", "proof.png")
+	img := filepath.Join(repoRoot, imgRel)
+	writeFixturePNG(t, img)
+
+	rec, err := r.Add(context.Background(), AddInput{
+		TicketID:   "TKT-241",
+		SourcePath: imgRel,
+		ProofTitle: "Cycle",
+		Note:       "Cycle",
+		AddedAt:    "2026-03-16T18:45:00Z",
+	})
+	if err != nil {
+		t.Fatalf("add proof: %v", err)
+	}
+
+	removed, err := r.Remove(context.Background(), "TKT-241", rec.ID)
+	if err != nil {
+		t.Fatalf("remove proof: %v", err)
+	}
+	if removed.ID != rec.ID {
+		t.Fatalf("expected removed proof id %q, got %q", rec.ID, removed.ID)
+	}
+
+	remaining, err := r.List(context.Background(), "TKT-241")
+	if err != nil {
+		t.Fatalf("list proofs after remove: %v", err)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("expected no remaining proofs, got %d", len(remaining))
+	}
+
+	_, err = r.Remove(context.Background(), "TKT-241", rec.ID)
+	if err == nil {
+		t.Fatal("expected not-found error removing already removed proof")
+	}
+	var ferr *FieldError
+	if !errors.As(err, &ferr) {
+		t.Fatalf("expected FieldError, got %T", err)
+	}
+	if ferr.Field != "proof_id" || ferr.ErrorCode == "" {
+		t.Fatalf("unexpected remove error envelope: %+v", ferr)
+	}
+}

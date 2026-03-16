@@ -242,6 +242,40 @@ func (r *Repository) List(ctx context.Context, ticketID string) ([]Record, error
 	return out, nil
 }
 
+func (r *Repository) Remove(ctx context.Context, ticketID string, proofID string) (*Record, error) {
+	_ = ctx
+	if !ticketIDPattern.MatchString(ticketID) {
+		return nil, fieldError("invalid_field", "ticket_id", "ticket_id must match TKT-<number>", "use a canonical ticket ID such as TKT-240")
+	}
+	if strings.TrimSpace(proofID) == "" {
+		return nil, fieldError("required_field", "proof_id", "proof_id is required", "pass a proof id returned by `docket proof add` or `docket proof list`")
+	}
+
+	records, err := r.load(ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	index := -1
+	for i, rec := range records {
+		if rec.ID == proofID {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return nil, fieldError("not_found", "proof_id", fmt.Sprintf("proof %q was not found on ticket %s", proofID, ticketID), "run `docket proof list <TKT-ID>` and choose an existing proof id")
+	}
+
+	removed := records[index]
+	records = append(records[:index], records[index+1:]...)
+	sortRecords(records)
+	if err := r.save(ticketID, records); err != nil {
+		return nil, err
+	}
+	return &removed, nil
+}
+
 func (r *Repository) metadataPath(ticketID string) string {
 	return filepath.Join(r.RepoRoot, ".docket", "proofs", ticketID, "metadata.json")
 }

@@ -286,6 +286,18 @@ func (s *Store) ListProofs(ctx context.Context, ticketID string) ([]proof.Record
 	return repo.List(ctx, ticketID)
 }
 
+func (s *Store) RemoveProof(ctx context.Context, ticketID string, proofID string) (*proof.Record, error) {
+	t, err := s.GetTicket(ctx, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, fmt.Errorf("ticket %s not found", ticketID)
+	}
+	repo := proof.NewRepository(s.RepoRoot)
+	return repo.Remove(ctx, ticketID, proofID)
+}
+
 func (s *Store) NextID(ctx context.Context) (id string, seq int, err error) {
 	return ticket.NextID(s.RepoRoot)
 }

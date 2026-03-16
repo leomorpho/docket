@@ -1279,7 +1279,7 @@
     },
     "TKT-241": {
       "title": "Implement `docket proof` CLI (`add/list/remove`) with `proof_title` and `note`",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },
