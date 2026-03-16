@@ -21,7 +21,9 @@ func (s *Store) ensureAnnotationSchemaReady(ctx context.Context) error {
 			return
 		}
 		defer db.Close()
-		s.annotationSchemaErr = ensureAnnotationSchema(db)
+		s.annotationSchemaErr = withSQLiteBusyRetry(ctx, "ensure annotation schema", func() error {
+			return ensureAnnotationSchema(db)
+		})
 	})
 	return s.annotationSchemaErr
 }
@@ -33,36 +35,37 @@ func (s *Store) UpsertAnnotations(ctx context.Context, annotations []Annotation)
 	if err := s.ensureAnnotationSchemaReady(ctx); err != nil {
 		return err
 	}
-
-	db, err := s.openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM annotations`); err != nil {
-		return fmt.Errorf("clearing annotations: %w", err)
-	}
-
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO annotations (ticket_id, file_path, line_num, context) VALUES (?, ?, ?, ?)`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, a := range annotations {
-		if _, err := stmt.ExecContext(ctx, a.TicketID, a.FilePath, a.LineNum, a.Context); err != nil {
+	return withSQLiteBusyRetry(ctx, "upsert annotations", func() error {
+		db, err := s.openDB()
+		if err != nil {
 			return err
 		}
-	}
+		defer db.Close()
 
-	return tx.Commit()
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if _, err := tx.ExecContext(ctx, `DELETE FROM annotations`); err != nil {
+			return fmt.Errorf("clearing annotations: %w", err)
+		}
+
+		stmt, err := tx.PrepareContext(ctx, `INSERT INTO annotations (ticket_id, file_path, line_num, context) VALUES (?, ?, ?, ?)`)
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, a := range annotations {
+			if _, err := stmt.ExecContext(ctx, a.TicketID, a.FilePath, a.LineNum, a.Context); err != nil {
+				return err
+			}
+		}
+
+		return tx.Commit()
+	})
 }
 
 func (s *Store) GetAnnotationsByTicket(ctx context.Context, ticketID string) ([]Annotation, error) {

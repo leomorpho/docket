@@ -1232,7 +1232,7 @@
     },
     "TKT-233": {
       "title": "Harden sqlite write paths with busy timeout and bounded retry policy",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-228"
     },

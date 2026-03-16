@@ -47,6 +47,12 @@ func (s *Store) ensureIndex(ctx context.Context) error {
 }
 
 func (s *Store) SyncIndex(ctx context.Context) error {
+	return withSQLiteBusyRetry(ctx, "sync index", func() error {
+		return s.syncIndexOnce(ctx)
+	})
+}
+
+func (s *Store) syncIndexOnce(ctx context.Context) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
