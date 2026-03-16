@@ -1090,7 +1090,7 @@
     },
     "TKT-209": {
       "title": "Epic: Cross-platform agent capability foundation for Codex, Claude Code, and Gemini",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1
     },
     "TKT-210": {
