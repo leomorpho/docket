@@ -17,6 +17,7 @@ import (
 
 var (
 	startAuto bool
+	startYolo bool
 )
 
 var startCmd = &cobra.Command{
@@ -24,7 +25,8 @@ var startCmd = &cobra.Command{
 	Short: "Automatically pick up and start the next best ticket",
 	Long: `Identify the next unblocked high-priority ticket in an open state,
 claims it, creates a worktree for it if needed, and transitions it to 'in-progress'.
-In --auto mode, it will continue to the next ticket after each completion.`,
+In --auto mode, it will continue to the next ticket after each completion.
+In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM agents.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deps := newRuntimeDeps(repo)
 		s := deps.store
@@ -104,6 +106,7 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		if err := ns.RecordRunRoutingDecision(repo, t.ID, string(decision.SelectedTier), adapter.ProviderName(), model.ID, decision.Rationale); err != nil {
 			return fmt.Errorf("recording run routing metadata: %w", err)
 		}
+		instruction := startInstruction(t.ID, startYolo)
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
@@ -115,7 +118,8 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 				"runtime_policy_mode":  runtimePolicyMode,
 				"runtime_policy_note":  runtimePolicyMessage,
 				"active_workflow_hash": activeWorkflowHash,
-				"agent_instruction":    "Analyze the requirements and implement the changes. Use 'docket' tools to track your progress.",
+				"yolo_mode":            startYolo,
+				"agent_instruction":    instruction,
 			})
 			return nil
 		}
@@ -135,11 +139,38 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "- %s %s\n", status, ac.Description)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "\nInstruction: Analyze the requirements and implement the changes. Use 'docket' tools to track your progress.\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "\nInstruction:\n%s\n", instruction)
 		fmt.Fprintf(cmd.OutOrStdout(), "====================\n")
 
 		return nil
 	},
+}
+
+func startInstruction(ticketID string, yolo bool) string {
+	perTicket := []string{
+		"Use test-driven development.",
+		"Analyze requirements, write or update tests first, then implement the smallest passing change.",
+		"Before moving on, update ticket state/comments with `docket` commands and commit with a `Ticket: <TKT-NNN>` trailer.",
+	}
+	if !yolo {
+		lines := []string{
+			fmt.Sprintf("Work only ticket %s in this run.", ticketID),
+		}
+		lines = append(lines, perTicket...)
+		lines = append(lines, fmt.Sprintf("Use `Ticket: %s` in your commit trailer for this ticket.", ticketID))
+		return strings.Join(lines, "\n")
+	}
+	lines := []string{
+		"YOLO mode: Work through all viable open tickets one at a time.",
+		"At each step, run `docket list --state open --format context` and pick the most viable unblocked ticket.",
+		"If a ticket is underspecified or non-viable, groom it first: analyze code impact, update the ticket details/AC with `docket` commands, then implement.",
+	}
+	lines = append(lines, perTicket...)
+	lines = append(lines,
+		"After each ticket commit, identify the next best ticket and repeat.",
+		"Stop when no viable tickets remain.",
+	)
+	return strings.Join(lines, "\n")
 }
 
 func routingInputs(t *ticket.Ticket) (tokenEstimate int, risk string, failureCount int) {
@@ -210,5 +241,6 @@ func isEpicTicket(t *ticket.Ticket) bool {
 
 func init() {
 	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion")
+	startCmd.Flags().BoolVar(&startYolo, "yolo", false, "print a multi-ticket autonomous prompt for LLM agents")
 	rootCmd.AddCommand(startCmd)
 }

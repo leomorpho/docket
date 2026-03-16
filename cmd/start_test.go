@@ -14,6 +14,45 @@ import (
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
+func TestStartInstruction_Default(t *testing.T) {
+	got := startInstruction("TKT-123", false)
+	wantContains := []string{
+		"Work only ticket TKT-123",
+		"test-driven development",
+		"write or update tests first",
+		"smallest passing change",
+		"`Ticket: <TKT-NNN>` trailer",
+		"`Ticket: TKT-123`",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(got, want) {
+			t.Fatalf("default instruction missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(strings.ToLower(got), "yolo mode") {
+		t.Fatalf("default instruction should not contain yolo guidance: %q", got)
+	}
+}
+
+func TestStartInstruction_Yolo(t *testing.T) {
+	got := startInstruction("TKT-123", true)
+	wantContains := []string{
+		"YOLO mode",
+		"test-driven development",
+		"`docket list --state open --format context`",
+		"underspecified or non-viable",
+		"update the ticket details/AC",
+		"`Ticket: <TKT-NNN>` trailer",
+		"identify the next best ticket and repeat",
+		"Stop when no viable tickets remain",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(got, want) {
+			t.Fatalf("yolo instruction missing %q in %q", want, got)
+		}
+	}
+}
+
 func TestSelectNextTicket(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := local.New(tmpDir)
