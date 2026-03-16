@@ -1060,7 +1060,7 @@
       "parent": "TKT-177"
     },
     "TKT-204": {
-      "title": "Add lightweight learning capture with human approval and scoped replay",
+      "title": "Phase 2: Add human-approval and scoped-replay controls atop baseline learning engine",
       "state": "backlog",
       "priority": 3,
       "parent": "TKT-177"
@@ -1087,6 +1087,184 @@
       "title": "Fix docket ui project registration 404s",
       "state": "done",
       "priority": 10
+    },
+    "TKT-209": {
+      "title": "Epic: Cross-platform agent capability foundation for Codex, Claude Code, and Gemini",
+      "state": "backlog",
+      "priority": 1
+    },
+    "TKT-210": {
+      "title": "Define capabilities contract v1 for workflow, hooks, and skills",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-211": {
+      "title": "Implement adapter interface and registry for Codex, Claude Code, and Gemini",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-212": {
+      "title": "Add adapter auto-detection with explicit override and ambiguity handling",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-213": {
+      "title": "Create idempotent docket bootstrap command with cross-link to docket start",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-214": {
+      "title": "Implement Codex adapter for bootstrap, status, and doctor",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-215": {
+      "title": "Implement Claude Code adapter for bootstrap, status, and doctor",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-216": {
+      "title": "Implement Gemini adapter for bootstrap, status, and doctor",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-217": {
+      "title": "Upgrade docket start with capability digest, status strip, and bootstrap remediation",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-218": {
+      "title": "Add docket capabilities command with md and json outputs",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-219": {
+      "title": "Implement docket doctor health checks for MCP, skills, hooks, and contract state",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-220": {
+      "title": "Eliminate interactive AC or hook prompts and enforce deterministic non-blocking flow",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-221": {
+      "title": "Implement minimal lifecycle event set with stable payload schema",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-222": {
+      "title": "Generate minimal cross-platform skill pack v1 from canonical contract",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-223": {
+      "title": "Implement learning capture parser and storage for LEARN rules",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-224": {
+      "title": "Add learning replay in docket start with top 3 relevant rules",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-225": {
+      "title": "Expand unit test coverage for contract, bootstrap, start, doctor, and learning modules",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-226": {
+      "title": "Create fake-repo integration harness simulating LLM goal-driven runs",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-227": {
+      "title": "Add adapter matrix integration tests for Codex, Claude Code, and Gemini",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-228": {
+      "title": "Epic: LLM-friendly ticket authoring and automation surface",
+      "state": "backlog",
+      "priority": 1
+    },
+    "TKT-229": {
+      "title": "Define ticket and backlog apply spec schema with validator",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-230": {
+      "title": "Implement transactional docket ticket apply command",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-231": {
+      "title": "Implement transactional docket backlog apply command",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-232": {
+      "title": "Add global automation mode for non-interactive deterministic CLI behavior",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-233": {
+      "title": "Harden sqlite write paths with busy timeout and bounded retry policy",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-234": {
+      "title": "Add machine-readable error envelope for mutating commands",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-228"
+    },
+    "TKT-235": {
+      "title": "Add scaffold commands for ticket and backlog spec templates",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-228"
+    },
+    "TKT-236": {
+      "title": "Update help-json, start, and capabilities with LLM quick-path guidance",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-228"
+    },
+    "TKT-237": {
+      "title": "Add fake-repo integration suite for LLM ticket authoring reliability",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-238": {
+      "title": "Harden ticket parser so nested markdown headings do not break Description parsing",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
     }
   }
 }

@@ -1,0 +1,284 @@
+{
+  "relations": [
+    {
+      "from": "TKT-204",
+      "to": "TKT-223",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-204",
+      "to": "TKT-224",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-211",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-212",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-213",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-213",
+      "to": "TKT-211",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-214",
+      "to": "TKT-211",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-214",
+      "to": "TKT-213",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-215",
+      "to": "TKT-211",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-215",
+      "to": "TKT-213",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-216",
+      "to": "TKT-211",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-216",
+      "to": "TKT-213",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-217",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-217",
+      "to": "TKT-213",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-218",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-219",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-219",
+      "to": "TKT-211",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-219",
+      "to": "TKT-213",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-221",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-222",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-223",
+      "to": "TKT-222",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-224",
+      "to": "TKT-213",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-224",
+      "to": "TKT-222",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-225",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-226",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-226",
+      "to": "TKT-225",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-227",
+      "to": "TKT-210",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-227",
+      "to": "TKT-211",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-227",
+      "to": "TKT-225",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-228",
+      "to": "TKT-209",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-230",
+      "to": "TKT-229",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-230",
+      "to": "TKT-232",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-230",
+      "to": "TKT-233",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-230",
+      "to": "TKT-238",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-231",
+      "to": "TKT-229",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-231",
+      "to": "TKT-230",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-231",
+      "to": "TKT-232",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-231",
+      "to": "TKT-233",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-231",
+      "to": "TKT-238",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-232",
+      "to": "TKT-220",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-235",
+      "to": "TKT-229",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-119",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-217",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-218",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-229",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-230",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-234",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-236",
+      "to": "TKT-235",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-226",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-229",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-230",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-232",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-233",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-234",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-235",
+      "relation": "depends-on"
+    },
+    {
+      "from": "TKT-237",
+      "to": "TKT-238",
+      "relation": "depends-on"
+    }
+  ]
+}
