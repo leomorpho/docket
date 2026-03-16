@@ -1101,7 +1101,7 @@
     },
     "TKT-211": {
       "title": "Implement adapter interface and registry for Codex, Claude Code, and Gemini",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
