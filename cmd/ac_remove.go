@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -40,13 +38,7 @@ var acRemoveCmd = &cobra.Command{
 		}
 
 		if !acRemoveYes {
-			fmt.Fprintf(cmd.OutOrStdout(), "Remove AC %d on %s (%q)? [y/N]: ", idx+1, id, t.AC[idx].Description)
-			reader := bufio.NewReader(os.Stdin)
-			answer, _ := reader.ReadString('\n')
-			n := strings.ToLower(strings.TrimSpace(answer))
-			if n != "y" && n != "yes" {
-				return fmt.Errorf("aborted")
-			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Removing AC %d on %s without interactive confirmation. Use --yes for compatibility.\n", idx+1, id)
 		}
 
 		t.AC = append(t.AC[:idx], t.AC[idx+1:]...)

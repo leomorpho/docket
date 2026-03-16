@@ -31,7 +31,7 @@ func (s *Store) isIndexStale() bool {
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".md" {
 			info, err := entry.Info()
-			if err == nil && info.ModTime().After(dbInfo.ModTime()) {
+			if err == nil && !info.ModTime().Before(dbInfo.ModTime()) {
 				return true
 			}
 		}

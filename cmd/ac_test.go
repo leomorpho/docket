@@ -202,7 +202,7 @@ func TestACUpdateAndRemove(t *testing.T) {
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"ac", "remove", "TKT-004", "--step", "2", "--yes"})
+	rootCmd.SetArgs([]string{"ac", "remove", "TKT-004", "--step", "2"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("ac remove failed: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestHookACCheckRespectsSkipEnv(t *testing.T) {
 	}
 }
 
-func TestHookACCheckInteractivePrompt(t *testing.T) {
+func TestHookACCheckNonInteractiveAdvisoryDefault(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
@@ -250,32 +250,101 @@ func TestHookACCheckInteractivePrompt(t *testing.T) {
 		t.Fatalf("create ticket: %v", err)
 	}
 
+	out := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-006"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected advisory non-blocking hook behavior, got: %v", err)
+	}
+	first := errBuf.String()
+	if !strings.Contains(first, "advisory") || !strings.Contains(first, "docket ac complete TKT-006 --step 1") {
+		t.Fatalf("expected deterministic remediation advisory, got: %s", first)
+	}
+	tracePath := filepath.Join(tmpDir, "hook-ac-advisory-trace.txt")
+	if err := os.WriteFile(tracePath, []byte(first), 0o644); err != nil {
+		t.Fatalf("write remediation trace artifact failed: %v", err)
+	}
+
+	// Same input should produce identical deterministic remediation.
+	errBuf.Reset()
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-006"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected second advisory run to be non-blocking, got: %v", err)
+	}
+	if errBuf.String() != first {
+		t.Fatalf("expected deterministic advisory output across identical runs\nfirst:\n%s\nsecond:\n%s", first, errBuf.String())
+	}
+	t.Logf("deterministic remediation trace artifact: %s", tracePath)
+
+	tk, _ := s.GetTicket(context.Background(), "TKT-006")
+	if tk.AC[0].Done {
+		t.Fatal("manual AC without --run should remain incomplete in advisory mode")
+	}
+}
+
+func TestHookACCheckEnforcedFailsDeterministically(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	t.Setenv("DOCKET_HOOK_AC_ENFORCE", "1")
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-007", Seq: 7, Title: "Hook Enforced", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+		AC: []ticket.AcceptanceCriterion{{Description: "Manual check"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-007"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("expected enforced hook mode to fail on incomplete AC")
+	}
+}
+
+func TestHookACCheckNonInteractiveDoesNotWaitOnPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-008", Seq: 8, Title: "No Prompt Wait", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+		AC: []ticket.AcceptanceCriterion{{Description: "Manual check"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
 	origStdin := os.Stdin
 	defer func() { os.Stdin = origStdin }()
 	r, w, _ := os.Pipe()
-	_, _ = w.WriteString("n\n")
 	_ = w.Close()
 	os.Stdin = r
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetErr(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-006"})
-	if err := rootCmd.Execute(); err == nil {
-		t.Fatal("expected hook prompt denial to fail")
-	}
 
-	// Retry with yes.
-	r2, w2, _ := os.Pipe()
-	_, _ = w2.WriteString("y\n")
-	_ = w2.Close()
-	os.Stdin = r2
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetErr(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-006"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected hook prompt approval to pass, got: %v", err)
-	}
-	tk, _ := s.GetTicket(context.Background(), "TKT-006")
-	if !tk.AC[0].Done {
-		t.Fatal("expected AC to be marked done after y confirmation")
+	done := make(chan error, 1)
+	go func() {
+		rootCmd.SetOut(new(bytes.Buffer))
+		rootCmd.SetErr(new(bytes.Buffer))
+		rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-008"})
+		done <- rootCmd.Execute()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected non-interactive advisory mode to return nil, got: %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("hook AC check blocked waiting for interactive prompt")
 	}
 }

@@ -65,7 +65,7 @@ if [ "${DOCKET_SKIP_AC:-0}" != "1" ]; then
     if command -v "$DOCKET_BIN" >/dev/null 2>&1; then
       "$DOCKET_BIN" __hook-ac-check "$ID" || exit 1
     else
-      echo "docket: warning: docket binary not found in PATH; skipping AC prompt checks" >&2
+      echo "docket: warning: docket binary not found in PATH; skipping AC hook checks" >&2
       break
     fi
   done

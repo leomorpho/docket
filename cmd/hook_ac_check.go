@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -32,8 +31,8 @@ var hookACCheckCmd = &cobra.Command{
 			return nil
 		}
 
-		reader := bufio.NewReader(os.Stdin)
 		updated := false
+		enforce := os.Getenv("DOCKET_HOOK_AC_ENFORCE") == "1" || os.Getenv("DOCKET_ENFORCE_HOOKS") == "1"
 		for i := range t.AC {
 			ac := &t.AC[i]
 			if ac.Done {
@@ -43,8 +42,13 @@ var hookACCheckCmd = &cobra.Command{
 				fmt.Fprintf(cmd.ErrOrStderr(), "docket: running AC %d command for %s: %s\n", i+1, id, ac.Run)
 				exitCode, evidence := runACCommand(ac.Run)
 				if exitCode != 0 {
-					fmt.Fprintf(cmd.ErrOrStderr(), "docket: AC %d failed for %s\n%s\n", i+1, id, evidence)
-					return fmt.Errorf("acceptance criteria check failed for %s", id)
+					msg := fmt.Sprintf("docket: AC %d failed for %s\n%s\n", i+1, id, evidence)
+					if enforce {
+						fmt.Fprint(cmd.ErrOrStderr(), msg)
+						return fmt.Errorf("acceptance criteria check failed for %s", id)
+					}
+					fmt.Fprintf(cmd.ErrOrStderr(), "docket: advisory: %sRun `docket ac complete %s --step %d --evidence \"...\"` after remediation.\n", strings.TrimSpace(msg)+"\n", id, i+1)
+					return nil
 				}
 				ac.Done = true
 				ac.Evidence = evidence
@@ -53,15 +57,11 @@ var hookACCheckCmd = &cobra.Command{
 				continue
 			}
 
-			fmt.Fprintf(cmd.ErrOrStderr(), "docket: Did you complete AC %d for %s: %q? [y/N]: ", i+1, id, ac.Description)
-			answer, _ := reader.ReadString('\n')
-			normalized := strings.ToLower(strings.TrimSpace(answer))
-			if normalized != "y" && normalized != "yes" {
+			if enforce {
 				return fmt.Errorf("acceptance criteria check failed for %s (use `docket ac complete %s --step %d --evidence \"...\"`)", id, id, i+1)
 			}
-			ac.Done = true
-			ac.Evidence = "confirmed in pre-commit prompt"
-			updated = true
+			fmt.Fprintf(cmd.ErrOrStderr(), "docket: advisory: AC %d incomplete for %s (%q). Run `docket ac complete %s --step %d --evidence \"...\"`.\n", i+1, id, ac.Description, id, i+1)
+			return nil
 		}
 
 		if updated {

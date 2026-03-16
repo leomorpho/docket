@@ -1155,7 +1155,7 @@
     },
     "TKT-220": {
       "title": "Eliminate interactive AC or hook prompts and enforce deterministic non-blocking flow",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
