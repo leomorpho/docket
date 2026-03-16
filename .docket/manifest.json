@@ -1203,7 +1203,7 @@
     },
     "TKT-228": {
       "title": "Epic: LLM-friendly ticket authoring and automation surface",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1
     },
     "TKT-229": {
