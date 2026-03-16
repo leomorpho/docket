@@ -76,6 +76,7 @@
 		ticket?.handoff?.trim() ? marked.parse(ticket.handoff, { gfm: true, breaks: true }) : ''
 	);
 	const proofs = $derived.by(() => ticket?.proofs ?? []);
+	const initialVisibleProofCount = 12;
 	const frontmatterEntries = $derived.by(() =>
 		Object.entries(ticket?.frontmatter ?? {}).sort(([left], [right]) => left.localeCompare(right))
 	);
@@ -96,6 +97,9 @@
 	let relatedTickets = $state<RelatedTicket[]>([]);
 	let loadingRelated = $state(false);
 	let proofPreviewErrors = $state<Record<string, boolean>>({});
+	let proofPreviewLoaded = $state<Record<string, boolean>>({});
+	let visibleProofCount = $state(initialVisibleProofCount);
+	const visibleProofs = $derived.by(() => proofs.slice(0, visibleProofCount));
 
 	$effect(() => {
 		if (!ticket) {
@@ -118,6 +122,8 @@
 	$effect(() => {
 		ticket?.id;
 		proofPreviewErrors = {};
+		proofPreviewLoaded = {};
+		visibleProofCount = initialVisibleProofCount;
 	});
 
 	$effect(() => {
@@ -439,7 +445,7 @@
 								</div>
 							{:else}
 								<div class="grid gap-3">
-									{#each proofs as entry (entry.id)}
+									{#each visibleProofs as entry (entry.id)}
 										<article class="rounded-lg border border-border bg-background p-3">
 											<div class="flex flex-wrap items-center justify-between gap-2">
 												<p class="text-sm font-semibold text-foreground">{entry.proof_title}</p>
@@ -453,7 +459,19 @@
 												{/if}
 											</div>
 											<div class="mt-3 overflow-hidden rounded-md border border-border bg-muted/20">
-												{#if proofPreviewErrors[entry.id]}
+												{#if !proofPreviewLoaded[entry.id]}
+													<div class="px-3 py-4">
+														<Button
+															size="sm"
+															variant="outline"
+															onclick={() => {
+																proofPreviewLoaded = { ...proofPreviewLoaded, [entry.id]: true };
+															}}
+														>
+															Load preview
+														</Button>
+													</div>
+												{:else if proofPreviewErrors[entry.id]}
 													<p class="px-3 py-4 text-xs text-red-700">
 														Preview failed to load. Use the open-image link below.
 													</p>
@@ -484,6 +502,19 @@
 										</article>
 									{/each}
 								</div>
+								{#if proofs.length > visibleProofs.length}
+									<div class="mt-2">
+										<Button
+											size="sm"
+											variant="outline"
+											onclick={() => {
+												visibleProofCount = Math.min(proofs.length, visibleProofCount + initialVisibleProofCount);
+											}}
+										>
+											show more proofs
+										</Button>
+									</div>
+								{/if}
 							{/if}
 						</section>
 

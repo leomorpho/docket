@@ -1333,7 +1333,7 @@
     },
     "TKT-250": {
       "title": "Add lazy-loading and scalable rendering for screenshot proofs in Ducca UI",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

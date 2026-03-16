@@ -20,5 +20,8 @@ describe('DetailSheet proof rendering contract', () => {
 		expect(source).toContain('Open full image');
 		expect(source).toContain('proofPreviewErrors');
 		expect(source).toContain('Preview failed to load. Use the open-image link below.');
+		expect(source).toContain('Load preview');
+		expect(source).toContain('show more proofs');
+		expect(source).toContain('visibleProofCount');
 	});
 });
