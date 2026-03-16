@@ -1107,7 +1107,7 @@
     },
     "TKT-212": {
       "title": "Add adapter auto-detection with explicit override and ambiguity handling",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-209"
     },

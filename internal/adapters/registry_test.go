@@ -27,6 +27,29 @@ func TestRegistryResolveByIDAndFallback(t *testing.T) {
 	}
 }
 
+func TestRegistryResolveWithInfoEnvAndConfigHeuristics(t *testing.T) {
+	r := DefaultRegistry()
+	repo := t.TempDir()
+
+	t.Setenv("DOCKET_ADAPTER", "gemini")
+	envDecision := r.ResolveWithInfo(repo, "")
+	if envDecision.AdapterID != "gemini" || envDecision.Source != "env" {
+		t.Fatalf("expected env heuristic to select gemini, got %+v", envDecision)
+	}
+
+	t.Setenv("DOCKET_ADAPTER", "")
+	if err := os.MkdirAll(filepath.Join(repo, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir .docket: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".docket", "adapter"), []byte("claude-code\n"), 0o644); err != nil {
+		t.Fatalf("write .docket/adapter: %v", err)
+	}
+	cfgDecision := r.ResolveWithInfo(repo, "")
+	if cfgDecision.AdapterID != "claude-code" || cfgDecision.Source != "config" {
+		t.Fatalf("expected config heuristic to select claude-code, got %+v", cfgDecision)
+	}
+}
+
 func TestRegistryResolveAutoDetectDeterministicOrder(t *testing.T) {
 	r := DefaultRegistry()
 	repo := t.TempDir()
@@ -41,6 +64,14 @@ func TestRegistryResolveAutoDetectDeterministicOrder(t *testing.T) {
 	got := r.Resolve(repo, "")
 	if got.Metadata().ID != "codex" {
 		t.Fatalf("expected codex first in deterministic order, got %q", got.Metadata().ID)
+	}
+
+	decision := r.ResolveWithInfo(repo, "")
+	if decision.Warning == "" || !strings.Contains(decision.Warning, "ambiguous adapter detection") {
+		t.Fatalf("expected ambiguity warning, got %+v", decision)
+	}
+	if strings.Join(decision.Candidates, ",") != "codex,claude-code" {
+		t.Fatalf("expected deterministic candidates codex,claude-code, got %v", decision.Candidates)
 	}
 }
 
@@ -97,6 +128,20 @@ func TestIntegrationAdapterResolutionMatrix(t *testing.T) {
 		rows = append(rows, fmt.Sprintf("%s -> %s", tc.name, got))
 	}
 	t.Logf("adapter resolution matrix:\n%s", strings.Join(rows, "\n"))
+}
+
+func TestRegistryResolveWithInfoInvalidHints(t *testing.T) {
+	r := DefaultRegistry()
+	repo := t.TempDir()
+	t.Setenv("DOCKET_ADAPTER", "unknown-hint")
+
+	envDecision := r.ResolveWithInfo(repo, "")
+	if envDecision.AdapterID != "unsupported" || envDecision.Source != "env" {
+		t.Fatalf("expected unsupported env decision, got %+v", envDecision)
+	}
+	if envDecision.Warning == "" {
+		t.Fatalf("expected warning for invalid env hint, got %+v", envDecision)
+	}
 }
 
 func TestRunFunctionsRejectNilAdapter(t *testing.T) {

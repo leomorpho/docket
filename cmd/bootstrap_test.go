@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -144,6 +145,77 @@ func TestBootstrapCommandRunsTwiceNoOpSafe(t *testing.T) {
 	t.Logf("bootstrap summary second run:\n%s", second)
 	t.Logf("artifact inventory after first run: %s", strings.Join(inventoryAfterFirst, ", "))
 	t.Logf("artifact inventory after second run: %s", strings.Join(inventoryAfterSecond, ", "))
+}
+
+func TestBootstrapCommandOverrideReflectedInJSONOutput(t *testing.T) {
+	tmpRepo := t.TempDir()
+	t.Setenv("DOCKET_HOME", filepath.Join(t.TempDir(), "docket-home"))
+	t.Setenv("DOCKET_ADAPTER", "")
+	docketHome = ""
+	repo = tmpRepo
+	format = "json"
+
+	if err := os.MkdirAll(filepath.Join(tmpRepo, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir .git/hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "AGENTS.md"), []byte("codex marker"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "CLAUDE.md"), []byte("claude marker"), 0o644); err != nil {
+		t.Fatalf("write CLAUDE.md failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"bootstrap", "--adapter", "gemini"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bootstrap --adapter gemini failed: %v\n%s", err, out.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("parse bootstrap json failed: %v\n%s", err, out.String())
+	}
+	adapterObj, ok := payload["adapter"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected adapter object in payload: %#v", payload)
+	}
+	if adapterObj["id"] != "gemini" {
+		t.Fatalf("expected adapter id gemini, got %v", adapterObj["id"])
+	}
+	if payload["adapter_source"] != "override" {
+		t.Fatalf("expected adapter_source override, got %v", payload["adapter_source"])
+	}
+}
+
+func TestBootstrapCommandAmbiguityWarningInHumanOutput(t *testing.T) {
+	tmpRepo := t.TempDir()
+	t.Setenv("DOCKET_HOME", filepath.Join(t.TempDir(), "docket-home"))
+	t.Setenv("DOCKET_ADAPTER", "")
+	docketHome = ""
+	repo = tmpRepo
+	format = "human"
+
+	if err := os.MkdirAll(filepath.Join(tmpRepo, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir .git/hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "AGENTS.md"), []byte("codex marker"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "CLAUDE.md"), []byte("claude marker"), 0o644); err != nil {
+		t.Fatalf("write CLAUDE.md failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"bootstrap"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bootstrap failed: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "Adapter warning: ambiguous adapter detection") {
+		t.Fatalf("expected ambiguity warning in output, got:\n%s", out.String())
+	}
 }
 
 type successAdapter struct {

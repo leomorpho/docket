@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -58,6 +59,14 @@ type Registry struct {
 	adapters   map[string]Adapter
 }
 
+type Resolution struct {
+	Adapter    Adapter  `json:"-"`
+	AdapterID  string   `json:"adapter_id"`
+	Source     string   `json:"source"`
+	Candidates []string `json:"candidates,omitempty"`
+	Warning    string   `json:"warning,omitempty"`
+}
+
 func NewRegistry(adapters ...Adapter) *Registry {
 	r := &Registry{
 		adapters: make(map[string]Adapter, len(adapters)),
@@ -89,22 +98,76 @@ func DefaultRegistry() *Registry {
 }
 
 func (r *Registry) Resolve(repoRoot, requestedID string) Adapter {
+	return r.ResolveWithInfo(repoRoot, requestedID).Adapter
+}
+
+func (r *Registry) ResolveWithInfo(repoRoot, requestedID string) Resolution {
 	if r == nil {
-		return newUnsupportedAdapter("unknown", nil)
+		adapter := newUnsupportedAdapter("unknown", nil)
+		return Resolution{Adapter: adapter, AdapterID: adapter.Metadata().ID, Source: "none"}
 	}
 	if req := strings.TrimSpace(strings.ToLower(requestedID)); req != "" {
 		if adapter, ok := r.adapters[req]; ok {
-			return adapter
+			return Resolution{Adapter: adapter, AdapterID: adapter.Metadata().ID, Source: "override"}
 		}
-		return newUnsupportedAdapter(req, r.AvailableIDs())
+		adapter := newUnsupportedAdapter(req, r.AvailableIDs())
+		return Resolution{
+			Adapter:   adapter,
+			AdapterID: adapter.Metadata().ID,
+			Source:    "override",
+			Warning:   fmt.Sprintf("adapter override %q is unsupported", req),
+		}
 	}
+
+	if env := strings.TrimSpace(strings.ToLower(os.Getenv("DOCKET_ADAPTER"))); env != "" {
+		if adapter, ok := r.adapters[env]; ok {
+			return Resolution{Adapter: adapter, AdapterID: adapter.Metadata().ID, Source: "env"}
+		}
+		adapter := newUnsupportedAdapter(env, r.AvailableIDs())
+		return Resolution{
+			Adapter:   adapter,
+			AdapterID: adapter.Metadata().ID,
+			Source:    "env",
+			Warning:   fmt.Sprintf("DOCKET_ADAPTER=%q is unsupported", env),
+		}
+	}
+
+	if configHint := readAdapterHint(repoRoot); configHint != "" {
+		if adapter, ok := r.adapters[configHint]; ok {
+			return Resolution{Adapter: adapter, AdapterID: adapter.Metadata().ID, Source: "config"}
+		}
+		adapter := newUnsupportedAdapter(configHint, r.AvailableIDs())
+		return Resolution{
+			Adapter:   adapter,
+			AdapterID: adapter.Metadata().ID,
+			Source:    "config",
+			Warning:   fmt.Sprintf("configured adapter %q is unsupported", configHint),
+		}
+	}
+
+	candidates := make([]string, 0, len(r.orderedIDs))
 	for _, id := range r.orderedIDs {
 		adapter := r.adapters[id]
 		if adapter != nil && adapter.Detect(repoRoot) {
-			return adapter
+			candidates = append(candidates, id)
 		}
 	}
-	return newUnsupportedAdapter("auto-detect", r.AvailableIDs())
+	if len(candidates) == 0 {
+		adapter := newUnsupportedAdapter("auto-detect", r.AvailableIDs())
+		return Resolution{Adapter: adapter, AdapterID: adapter.Metadata().ID, Source: "auto"}
+	}
+	selectedID := candidates[0]
+	selected := r.adapters[selectedID]
+	out := Resolution{
+		Adapter:    selected,
+		AdapterID:  selected.Metadata().ID,
+		Source:     "auto",
+		Candidates: candidates,
+	}
+	if len(candidates) > 1 {
+		out.Warning = fmt.Sprintf("ambiguous adapter detection (%s); falling back to %q", strings.Join(candidates, ", "), selectedID)
+	}
+	return out
 }
 
 func (r *Registry) AvailableIDs() []string {
@@ -114,6 +177,29 @@ func (r *Registry) AvailableIDs() []string {
 	ids := append([]string(nil), r.orderedIDs...)
 	sort.Strings(ids)
 	return ids
+}
+
+func readAdapterHint(repoRoot string) string {
+	if strings.TrimSpace(repoRoot) == "" {
+		return ""
+	}
+	adapterPath := filepath.Join(repoRoot, ".docket", "adapter")
+	if raw, err := os.ReadFile(adapterPath); err == nil {
+		if hint := strings.TrimSpace(strings.ToLower(string(raw))); hint != "" {
+			return hint
+		}
+	}
+	cfgPath := filepath.Join(repoRoot, ".docket", "config.json")
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ""
+	}
+	hint, _ := payload["adapter"].(string)
+	return strings.TrimSpace(strings.ToLower(hint))
 }
 
 func RunBootstrap(ctx context.Context, adapter Adapter, input BootstrapInput) error {
