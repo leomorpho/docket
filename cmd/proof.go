@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
@@ -48,6 +49,7 @@ var proofAddCmd = &cobra.Command{
 
 		s := local.New(repo)
 		now := time.Now().UTC().Truncate(time.Second)
+		actor := detectActor()
 		rec, err := s.AddProof(context.Background(), proof.AddInput{
 			TicketID:   args[0],
 			SourcePath: proofFile,
@@ -55,11 +57,12 @@ var proofAddCmd = &cobra.Command{
 			Note:       proofNote,
 			AddedAt:    now.Format(time.RFC3339),
 			CapturedAt: proofCapturedAt,
-			Actor:      detectActor(),
+			Actor:      actor,
 		})
 		if err != nil {
 			return err
 		}
+		emitProofMutationEvent(cmd, "add", "proof.add", args[0], rec, actor)
 
 		if format == "json" {
 			printJSON(cmd, map[string]any{
@@ -137,6 +140,7 @@ var proofRemoveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		emitProofMutationEvent(cmd, "remove", "proof.remove", args[0], removed, detectActor())
 
 		if format == "json" {
 			printJSON(cmd, map[string]any{
@@ -258,6 +262,28 @@ func proofKind(rec proof.Record) string {
 		return "image"
 	}
 	return "other"
+}
+
+func emitProofMutationEvent(cmd *cobra.Command, action string, commandName string, ticketID string, rec *proof.Record, actor string) {
+	if rec == nil {
+		return
+	}
+	err := lifecycle.Append(repo, lifecycle.Event{
+		Version:   lifecycle.SchemaVersionV1,
+		Type:      lifecycle.EventProofMutation,
+		EmittedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Payload: map[string]any{
+			"command":     commandName,
+			"ticket_id":   ticketID,
+			"proof_id":    rec.ID,
+			"blob_sha256": rec.File.SHA256,
+			"actor":       actor,
+			"action":      action,
+		},
+	})
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "docket: warning: proof lifecycle event emit failed: %v\n", err)
+	}
 }
 
 func renderProofMutationError(cmd *cobra.Command, err error) error {

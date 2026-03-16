@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -404,5 +405,67 @@ func TestProofRemoveAndGCSharedBlobSafetyJSON(t *testing.T) {
 	}
 	if gcPayload.GC.Removed != 1 {
 		t.Fatalf("expected exactly one blob removal, got %+v", gcPayload)
+	}
+}
+
+func TestProofLifecycleEvents_AddRemoveOrderAndSchema(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	setupProofTicket(t, tmpDir)
+
+	fixtureRel := filepath.Join("fixtures", "proof.png")
+	fixtureAbs := filepath.Join(tmpDir, fixtureRel)
+	writeProofPNGFixture(t, fixtureAbs)
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(new(bytes.Buffer))
+
+	rootCmd.SetArgs([]string{"proof", "add", "TKT-001", "--file", fixtureRel, "--proof-title", "Before", "--note", "baseline"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("proof add failed: %v", err)
+	}
+	var addPayload struct {
+		Proof struct {
+			ID string `json:"id"`
+		} `json:"proof"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &addPayload); err != nil {
+		t.Fatalf("parse add payload: %v", err)
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"proof", "remove", "TKT-001", "--proof-id", addPayload.Proof.ID})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("proof remove failed: %v", err)
+	}
+
+	events, err := lifecycle.Load(tmpDir)
+	if err != nil {
+		t.Fatalf("load lifecycle events: %v", err)
+	}
+	var proofEvents []lifecycle.Event
+	for _, ev := range events {
+		if ev.Type == lifecycle.EventProofMutation {
+			proofEvents = append(proofEvents, ev)
+		}
+	}
+	if len(proofEvents) != 2 {
+		t.Fatalf("expected 2 proof mutation events, got %d (%+v)", len(proofEvents), proofEvents)
+	}
+	if proofEvents[0].Payload["action"] != "add" || proofEvents[1].Payload["action"] != "remove" {
+		t.Fatalf("unexpected proof event action order: %+v", proofEvents)
+	}
+	for i, ev := range proofEvents {
+		report := lifecycle.ValidateEvent(ev)
+		if !report.Valid() {
+			t.Fatalf("proof event %d failed schema validation: %+v", i, report.Errors)
+		}
+		for _, key := range []string{"ticket_id", "proof_id", "blob_sha256", "actor", "command"} {
+			if value, ok := ev.Payload[key].(string); !ok || value == "" {
+				t.Fatalf("proof event %d missing payload %s: %+v", i, key, ev.Payload)
+			}
+		}
 	}
 }

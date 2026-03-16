@@ -15,10 +15,11 @@ import (
 const (
 	SchemaVersionV1 = "docket.lifecycle/v1"
 
-	EventRunStart    = "run.start"
-	EventPhaseEnd    = "phase.end"
-	EventRunEnd      = "run.end"
-	EventToolFailure = "tool.failure"
+	EventRunStart      = "run.start"
+	EventPhaseEnd      = "phase.end"
+	EventRunEnd        = "run.end"
+	EventToolFailure   = "tool.failure"
+	EventProofMutation = "proof.mutation"
 
 	StatusOK     = "ok"
 	StatusFailed = "failed"
@@ -124,8 +125,18 @@ func ValidateEvent(event Event) ValidationReport {
 		requireString(v, event.Payload, "payload.phase", "phase")
 		requireString(v, event.Payload, "payload.tool", "tool")
 		requireString(v, event.Payload, "payload.error", "error")
+	case EventProofMutation:
+		requireString(v, event.Payload, "payload.command", "command")
+		requireString(v, event.Payload, "payload.ticket_id", "ticket_id")
+		requireString(v, event.Payload, "payload.proof_id", "proof_id")
+		requireString(v, event.Payload, "payload.blob_sha256", "blob_sha256")
+		requireString(v, event.Payload, "payload.actor", "actor")
+		action := requireString(v, event.Payload, "payload.action", "action")
+		if action != "" && action != "add" && action != "remove" {
+			v.add("payload.action", CodeInvalidValue, "must be add or remove")
+		}
 	default:
-		v.add("type", CodeInvalidValue, "must be run.start,phase.end,run.end,tool.failure")
+		v.add("type", CodeInvalidValue, "must be run.start,phase.end,run.end,tool.failure,proof.mutation")
 	}
 
 	report.Errors = v.sortedErrors()

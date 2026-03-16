@@ -1321,7 +1321,7 @@
     },
     "TKT-248": {
       "title": "Record proof add/remove lifecycle events for integrity and auditability",
-      "state": "backlog",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-239"
     },

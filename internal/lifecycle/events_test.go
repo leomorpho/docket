@@ -57,6 +57,19 @@ func TestValidateEventSchemasAndRequiredFields(t *testing.T) {
 				"command": "__hook-ac-check",
 			},
 		},
+		{
+			Version:   SchemaVersionV1,
+			Type:      EventProofMutation,
+			EmittedAt: now.Format(time.RFC3339Nano),
+			Payload: map[string]any{
+				"command":     "proof.add",
+				"ticket_id":   "TKT-241",
+				"proof_id":    "PRF-1",
+				"blob_sha256": "abc123",
+				"actor":       "human:test",
+				"action":      "add",
+			},
+		},
 	}
 
 	for _, ev := range validCases {
@@ -128,6 +141,24 @@ func TestValidateEventSchemasAndRequiredFields(t *testing.T) {
 			},
 			path: "payload.status",
 			code: CodeRequired,
+		},
+		{
+			name: "proof.mutation invalid action",
+			ev: Event{
+				Version:   SchemaVersionV1,
+				Type:      EventProofMutation,
+				EmittedAt: now.Format(time.RFC3339Nano),
+				Payload: map[string]any{
+					"command":     "proof.remove",
+					"ticket_id":   "TKT-241",
+					"proof_id":    "PRF-1",
+					"blob_sha256": "abc123",
+					"actor":       "human:test",
+					"action":      "mutate",
+				},
+			},
+			path: "payload.action",
+			code: CodeInvalidValue,
 		},
 	}
 
