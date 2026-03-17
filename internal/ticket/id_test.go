@@ -89,3 +89,30 @@ func TestConfigRoundTrip(t *testing.T) {
 		t.Errorf("Backends mismatch or missing: %v", loaded.Backends)
 	}
 }
+
+func TestNormalizeID(t *testing.T) {
+	tests := []struct {
+		in       string
+		expected string
+		ok       bool
+	}{
+		{in: "TKT-1", expected: "TKT-001", ok: true},
+		{in: "tkt-042", expected: "TKT-042", ok: true},
+		{in: "[TKT-9]", expected: "TKT-009", ok: true},
+		{in: "12", expected: "TKT-012", ok: true},
+		{in: "  [ tkt-77 ]  ", expected: "TKT-077", ok: true},
+		{in: "", expected: "", ok: false},
+		{in: "TKT-0", expected: "", ok: false},
+		{in: "abc", expected: "", ok: false},
+	}
+
+	for _, tt := range tests {
+		got, ok := NormalizeID(tt.in)
+		if ok != tt.ok {
+			t.Fatalf("NormalizeID(%q) ok=%v, want %v (got=%q)", tt.in, ok, tt.ok, got)
+		}
+		if got != tt.expected {
+			t.Fatalf("NormalizeID(%q)=%q, want %q", tt.in, got, tt.expected)
+		}
+	}
+}

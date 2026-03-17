@@ -19,6 +19,7 @@ type SessionFile struct {
 }
 
 func (s *Store) sessionsDir(id string) string {
+	id = s.normalizeTicketLookupID(id)
 	return filepath.Join(s.RepoRoot, ".docket", "tickets", id, "sessions")
 }
 

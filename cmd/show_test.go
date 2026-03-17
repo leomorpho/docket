@@ -144,6 +144,43 @@ func TestShowCmd(t *testing.T) {
 	}
 }
 
+func TestShowCmd_AcceptsBracketedTicketIDFromContextList(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Bracketed lookup fixture",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"show", "[TKT-001]"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("show with bracketed id failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-001 · todo") {
+		t.Fatalf("expected ticket details for canonical id, got:\n%s", out.String())
+	}
+}
+
 func TestShowCmd_ProofMetadataAppearsWhenPresent(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

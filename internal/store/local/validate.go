@@ -39,6 +39,7 @@ func (s *Store) Validate(ctx context.Context, id string) ([]store.ValidationErro
 // ValidateFile validates a single ticket markdown file by ID.
 // Returns a list of errors (blocking) and warnings (non-blocking).
 func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []store.ValidationError, err error) {
+	id = s.normalizeTicketLookupID(id)
 	cfg, cfgErr := ticket.LoadConfig(s.RepoRoot)
 	if cfgErr != nil {
 		cfg = ticket.DefaultConfig()

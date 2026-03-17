@@ -25,6 +25,9 @@ var showCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
+		if normalized, ok := ticket.NormalizeID(id); ok {
+			id = normalized
+		}
 		s := local.New(repo)
 		ctx := context.Background()
 

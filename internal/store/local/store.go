@@ -60,7 +60,15 @@ func (s *Store) openDB() (*sql.DB, error) {
 }
 
 func (s *Store) ticketPath(id string) string {
+	id = s.normalizeTicketLookupID(id)
 	return filepath.Join(s.RepoRoot, ".docket", "tickets", id+".md")
+}
+
+func (s *Store) normalizeTicketLookupID(id string) string {
+	if normalized, ok := ticket.NormalizeID(id); ok {
+		return normalized
+	}
+	return id
 }
 
 func (s *Store) CreateTicket(ctx context.Context, t *ticket.Ticket) error {
@@ -272,6 +280,7 @@ func (s *Store) AddProof(ctx context.Context, in proof.AddInput) (*proof.Record,
 	if t == nil {
 		return nil, fmt.Errorf("ticket %s not found", in.TicketID)
 	}
+	in.TicketID = t.ID
 	repo := proof.NewRepository(s.RepoRoot)
 	return repo.Add(ctx, in)
 }
@@ -285,7 +294,7 @@ func (s *Store) ListProofs(ctx context.Context, ticketID string) ([]proof.Record
 		return nil, fmt.Errorf("ticket %s not found", ticketID)
 	}
 	repo := proof.NewRepository(s.RepoRoot)
-	return repo.List(ctx, ticketID)
+	return repo.List(ctx, t.ID)
 }
 
 func (s *Store) RemoveProof(ctx context.Context, ticketID string, proofID string) (*proof.Record, error) {
@@ -297,7 +306,7 @@ func (s *Store) RemoveProof(ctx context.Context, ticketID string, proofID string
 		return nil, fmt.Errorf("ticket %s not found", ticketID)
 	}
 	repo := proof.NewRepository(s.RepoRoot)
-	return repo.Remove(ctx, ticketID, proofID)
+	return repo.Remove(ctx, t.ID, proofID)
 }
 
 func (s *Store) GCProofBlobs(ctx context.Context) (proof.GCSummary, error) {
