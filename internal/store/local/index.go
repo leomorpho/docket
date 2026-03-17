@@ -40,13 +40,28 @@ func (s *Store) isIndexStale() bool {
 }
 
 func (s *Store) ensureIndex(ctx context.Context) error {
-	if s.isIndexStale() {
-		return s.SyncIndex(ctx)
+	if !s.isIndexStale() {
+		return nil
 	}
-	return nil
+
+	s.indexSyncMu.Lock()
+	defer s.indexSyncMu.Unlock()
+
+	// Another goroutine may have rebuilt while we were waiting.
+	if !s.isIndexStale() {
+		return nil
+	}
+
+	return s.syncIndexWithRetry(ctx)
 }
 
 func (s *Store) SyncIndex(ctx context.Context) error {
+	s.indexSyncMu.Lock()
+	defer s.indexSyncMu.Unlock()
+	return s.syncIndexWithRetry(ctx)
+}
+
+func (s *Store) syncIndexWithRetry(ctx context.Context) error {
 	return withSQLiteBusyRetry(ctx, "sync index", func() error {
 		return s.syncIndexOnce(ctx)
 	})
@@ -63,7 +78,6 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 		DROP TABLE IF EXISTS labels;
 		DROP TABLE IF EXISTS blocked_by;
 		DROP TABLE IF EXISTS linked_commits;
-		DROP TABLE IF EXISTS annotations;
 		DROP TABLE IF EXISTS tickets;
 
 		CREATE TABLE tickets (
@@ -96,19 +110,10 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 			sha        TEXT NOT NULL
 		);
 
-		CREATE TABLE annotations (
-			id         INTEGER PRIMARY KEY AUTOINCREMENT,
-			ticket_id  TEXT NOT NULL,
-			file_path  TEXT NOT NULL,
-			line_num   INTEGER NOT NULL,
-			context    TEXT NOT NULL
-		);
-
 		CREATE INDEX idx_tickets_state ON tickets(state);
 		CREATE INDEX idx_tickets_priority ON tickets(priority);
 		CREATE INDEX idx_tickets_parent ON tickets(parent);
 		CREATE INDEX idx_labels_ticket ON labels(ticket_id);
-		CREATE INDEX idx_annotations_ticket ON annotations(ticket_id);
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
@@ -124,18 +129,12 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 		return err
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+	type ticketRow struct {
+		t       *ticket.Ticket
+		acTotal int
+		acDone  int
 	}
-	defer tx.Rollback()
-
-	stmtTicket, _ := tx.PrepareContext(ctx, `INSERT INTO tickets (id, seq, state, priority, parent, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	stmtLabel, _ := tx.PrepareContext(ctx, `INSERT INTO labels (ticket_id, label) VALUES (?, ?)`)
-	stmtBlocked, _ := tx.PrepareContext(ctx, `INSERT INTO blocked_by (ticket_id, blocks_id) VALUES (?, ?)`)
-	stmtCommit, _ := tx.PrepareContext(ctx, `INSERT INTO linked_commits (ticket_id, sha) VALUES (?, ?)`)
-
-	count := 0
+	rowsToInsert := make([]ticketRow, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".md" {
 			id := entry.Name()[:len(entry.Name())-3]
@@ -154,22 +153,61 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 					acDone++
 				}
 			}
+			rowsToInsert = append(rowsToInsert, ticketRow{
+				t:       t,
+				acTotal: acTotal,
+				acDone:  acDone,
+			})
+		}
+	}
 
-			_, err = stmtTicket.ExecContext(ctx, t.ID, t.Seq, t.State, t.Priority, t.Parent, t.Title, t.CreatedBy, t.CreatedAt, t.UpdatedAt, t.IsBlocked(), acTotal, acDone)
-			if err != nil {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmtTicket, err := tx.PrepareContext(ctx, `INSERT INTO tickets (id, seq, state, priority, parent, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmtTicket.Close()
+	stmtLabel, err := tx.PrepareContext(ctx, `INSERT INTO labels (ticket_id, label) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmtLabel.Close()
+	stmtBlocked, err := tx.PrepareContext(ctx, `INSERT INTO blocked_by (ticket_id, blocks_id) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmtBlocked.Close()
+	stmtCommit, err := tx.PrepareContext(ctx, `INSERT INTO linked_commits (ticket_id, sha) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmtCommit.Close()
+
+	for _, row := range rowsToInsert {
+		_, err = stmtTicket.ExecContext(ctx, row.t.ID, row.t.Seq, row.t.State, row.t.Priority, row.t.Parent, row.t.Title, row.t.CreatedBy, row.t.CreatedAt, row.t.UpdatedAt, row.t.IsBlocked(), row.acTotal, row.acDone)
+		if err != nil {
+			return err
+		}
+
+		for _, l := range row.t.Labels {
+			if _, err := stmtLabel.ExecContext(ctx, row.t.ID, l); err != nil {
 				return err
 			}
-
-			for _, l := range t.Labels {
-				stmtLabel.ExecContext(ctx, t.ID, l)
+		}
+		for _, b := range row.t.BlockedBy {
+			if _, err := stmtBlocked.ExecContext(ctx, row.t.ID, b); err != nil {
+				return err
 			}
-			for _, b := range t.BlockedBy {
-				stmtBlocked.ExecContext(ctx, t.ID, b)
+		}
+		for _, c := range row.t.LinkedCommits {
+			if _, err := stmtCommit.ExecContext(ctx, row.t.ID, c); err != nil {
+				return err
 			}
-			for _, c := range t.LinkedCommits {
-				stmtCommit.ExecContext(ctx, t.ID, c)
-			}
-			count++
 		}
 	}
 

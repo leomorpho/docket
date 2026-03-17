@@ -21,6 +21,8 @@ type Store struct {
 	mu     sync.RWMutex
 	relIdx *RelationshipIndex
 
+	indexSyncMu sync.Mutex
+
 	annotationSchemaOnce sync.Once
 	annotationSchemaErr  error
 	annotationMu         sync.Mutex
