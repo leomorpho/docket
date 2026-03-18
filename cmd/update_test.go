@@ -143,6 +143,52 @@ func TestUpdateCmd_Handoff(t *testing.T) {
 	}
 }
 
+func TestUpdateCmd_AllowsInProgressBackToBacklog(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	tick := &ticket.Ticket{
+		ID:          "TKT-001",
+		Title:       "Deferred work",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}
+	if err := s.CreateTicket(ctx, tick); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "backlog"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected in-progress -> backlog transition to succeed, got: %v", err)
+	}
+	if !strings.Contains(b.String(), "state in-progress → backlog") {
+		t.Fatalf("expected transition output, got: %s", b.String())
+	}
+
+	updated, err := s.GetTicket(ctx, "TKT-001")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if updated.State != ticket.State("backlog") {
+		t.Fatalf("expected backlog state, got %s", updated.State)
+	}
+}
+
 func TestUpdateCmd_HandoffFromStdin(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

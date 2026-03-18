@@ -1507,7 +1507,7 @@
     },
     "TKT-279": {
       "title": "Allow tickets in todo or in-progress to move back to backlog",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-228"
     },

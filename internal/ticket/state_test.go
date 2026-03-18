@@ -18,6 +18,7 @@ func TestValidateTransition(t *testing.T) {
 		{"todo", "archived", true},
 		{"in-progress", "in-review", true},
 		{"in-progress", "todo", true},
+		{"in-progress", "backlog", true},
 		{"in-progress", "archived", true},
 		{"in-review", "done", true},
 		{"in-review", "in-progress", true},
