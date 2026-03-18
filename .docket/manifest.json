@@ -1584,7 +1584,7 @@
     },
     "TKT-292": {
       "title": "Implement backward-compatible artifact path resolution with legacy read fallback",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-290"
     },

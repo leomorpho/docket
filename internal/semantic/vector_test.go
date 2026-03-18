@@ -7,13 +7,13 @@ import (
 
 func TestSemanticPaths(t *testing.T) {
 	repo := "/repo"
-	if got := SemanticDir(repo); got != "/repo/.docket/semantic" {
+	if got := SemanticDir(repo); got != "/repo/.docket/local/semantic" {
 		t.Fatalf("SemanticDir = %q", got)
 	}
-	if got := VectorDBPath(repo); got != "/repo/.docket/semantic/vector" {
+	if got := VectorDBPath(repo); got != "/repo/.docket/local/semantic/vector" {
 		t.Fatalf("VectorDBPath = %q", got)
 	}
-	if got := MetadataPath(repo); got != "/repo/.docket/semantic/metadata.json" {
+	if got := MetadataPath(repo); got != "/repo/.docket/local/semantic/metadata.json" {
 		t.Fatalf("MetadataPath = %q", got)
 	}
 }

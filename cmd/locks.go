@@ -26,12 +26,12 @@ type locksState struct {
 }
 
 func locksPath(repoRoot string) string {
-	return artifacts.RepoPath(repoRoot, artifacts.RepoLocks)
+	return artifacts.WriteRepoPath(repoRoot, artifacts.RepoLocks)
 }
 
 func loadLocks(repoRoot string) (locksState, error) {
 	var st locksState
-	data, err := os.ReadFile(locksPath(repoRoot))
+	data, err := os.ReadFile(artifacts.ReadRepoPath(repoRoot, artifacts.RepoLocks))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return locksState{}, nil

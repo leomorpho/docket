@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const (
 	ContractVersion            = 1
-	DefaultRuntimeContractPath = ".docket/runtime/capabilities.json"
+	DefaultRuntimeContractPath = ".docket/local/runtime/capabilities.json"
 
 	SkillNamespaceAgent = "docket.skill"
 	HookNamespaceSystem = "docket.hook"
@@ -196,6 +198,7 @@ func WriteRuntimeContract(repoRoot string, contract Contract) (RuntimeContract, 
 	}
 
 	path := filepath.Join(repoRoot, DefaultRuntimeContractPath)
+	path = artifacts.WriteRepoPath(repoRoot, artifacts.RepoRuntimeCapabilities)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return RuntimeContract{}, "", err
 	}
@@ -210,7 +213,7 @@ func WriteRuntimeContract(repoRoot string, contract Contract) (RuntimeContract, 
 }
 
 func LoadRuntimeContract(repoRoot string) (RuntimeContract, error) {
-	path := filepath.Join(repoRoot, DefaultRuntimeContractPath)
+	path := artifacts.ReadRepoPath(repoRoot, artifacts.RepoRuntimeCapabilities)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return RuntimeContract{}, err

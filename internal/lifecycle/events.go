@@ -172,7 +172,7 @@ func requireString(v *validator, payload map[string]any, path, key string) strin
 }
 
 func LogPath(repoRoot string) string {
-	return artifacts.RepoPath(repoRoot, artifacts.RepoLifecycleEvents)
+	return artifacts.WriteRepoPath(repoRoot, artifacts.RepoLifecycleEvents)
 }
 
 func Append(repoRoot string, event Event) error {
@@ -208,7 +208,7 @@ func Append(repoRoot string, event Event) error {
 }
 
 func Load(repoRoot string) ([]Event, error) {
-	path := LogPath(repoRoot)
+	path := artifacts.ReadRepoPath(repoRoot, artifacts.RepoLifecycleEvents)
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -1,6 +1,7 @@
 package artifacts
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 )
@@ -156,6 +157,10 @@ func RepoPath(repoRoot string, key Key, more ...string) string {
 	return filepath.Join(parts...)
 }
 
+func LegacyRepoPath(repoRoot string, key Key, more ...string) string {
+	return RepoPath(repoRoot, key, more...)
+}
+
 func HomePath(docketHome string, key Key, more ...string) string {
 	entry := MustLookup(key)
 	if entry.Root != RootHome {
@@ -197,4 +202,22 @@ func CanonicalRepoPath(repoRoot string, key Key, more ...string) string {
 	}
 	parts := append([]string{repoRoot, base}, more...)
 	return filepath.Join(parts...)
+}
+
+func WriteRepoPath(repoRoot string, key Key, more ...string) string {
+	return CanonicalRepoPath(repoRoot, key, more...)
+}
+
+func ReadRepoPath(repoRoot string, key Key, more ...string) string {
+	canonical := CanonicalRepoPath(repoRoot, key, more...)
+	if _, err := os.Stat(canonical); err == nil {
+		return canonical
+	}
+	legacy := LegacyRepoPath(repoRoot, key, more...)
+	if canonical != legacy {
+		if _, err := os.Stat(legacy); err == nil {
+			return legacy
+		}
+	}
+	return canonical
 }

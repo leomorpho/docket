@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 func TestParseVariantsAndMalformedLines(t *testing.T) {
@@ -81,8 +83,28 @@ LEARN: Add schema validation snapshots.
 			t.Fatalf("expected complete stored entry fields, got %+v", entry)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".docket", "runtime", "learn-rules.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(repo, ".docket", "local", "runtime", "learn-rules.json")); err != nil {
 		t.Fatalf("expected persistent store file: %v", err)
+	}
+}
+
+func TestStoreLoadFallsBackToLegacyRuntimePath(t *testing.T) {
+	repo := t.TempDir()
+	legacyPath := artifacts.LegacyRepoPath(repo, artifacts.RepoLearnRules)
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy path: %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("{\n  \"version\": 1,\n  \"entries\": [{\"category\":\"ci\",\"rule\":\"keep tests deterministic\",\"source\":\"legacy\",\"captured_at\":\"2026-03-16T00:00:00Z\"}]\n}\n"), 0o644); err != nil {
+		t.Fatalf("write legacy path: %v", err)
+	}
+
+	store := NewStore(repo, nil)
+	snap, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(snap.Entries) != 1 || snap.Entries[0].Source != "legacy" {
+		t.Fatalf("unexpected legacy snapshot: %+v", snap)
 	}
 }
 

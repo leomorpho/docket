@@ -2,19 +2,40 @@ package semantic
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestMetadataPath(t *testing.T) {
 	got := MetadataPath("/repo")
-	want := filepath.Join("/repo", ".docket", "semantic", "metadata.json")
+	want := filepath.Join("/repo", ".docket", "local", "semantic", "metadata.json")
 	if got != want {
 		t.Fatalf("MetadataPath = %q, want %q", got, want)
+	}
+}
+
+func TestLoadMetadataFallsBackToLegacyPath(t *testing.T) {
+	repo := t.TempDir()
+	legacyPath := filepath.Join(artifacts.LegacyRepoPath(repo, artifacts.RepoSemanticDir), "metadata.json")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy path: %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("{\n  \"version\": \"v1\",\n  \"provider\": \"legacy\",\n  \"chunks\": {}\n}\n"), 0o644); err != nil {
+		t.Fatalf("write legacy path: %v", err)
+	}
+
+	metadata, err := LoadMetadata(repo)
+	if err != nil {
+		t.Fatalf("LoadMetadata failed: %v", err)
+	}
+	if metadata.Provider != "legacy" {
+		t.Fatalf("expected legacy metadata provider, got %+v", metadata)
 	}
 }
 

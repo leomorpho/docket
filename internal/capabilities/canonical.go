@@ -1,6 +1,6 @@
 package capabilities
 
-import "path/filepath"
+import "github.com/leomorpho/docket/internal/artifacts"
 
 func CanonicalContractV1() Contract {
 	return Contract{
@@ -78,7 +78,7 @@ func CanonicalContractV1() Contract {
 func EnsureRuntimeContract(repoRoot string) (RuntimeContract, string, error) {
 	runtime, err := LoadRuntimeContract(repoRoot)
 	if err == nil {
-		return runtime, filepath.Join(repoRoot, DefaultRuntimeContractPath), nil
+		return runtime, artifacts.WriteRepoPath(repoRoot, artifacts.RepoRuntimeCapabilities), nil
 	}
 	return WriteRuntimeContract(repoRoot, CanonicalContractV1())
 }

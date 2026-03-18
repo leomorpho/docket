@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 type SessionFile struct {
@@ -20,7 +22,12 @@ type SessionFile struct {
 
 func (s *Store) sessionsDir(id string) string {
 	id = s.normalizeTicketLookupID(id)
-	return filepath.Join(s.RepoRoot, ".docket", "tickets", id, "sessions")
+	return artifacts.WriteRepoPath(s.RepoRoot, artifacts.RepoTicketSessions, id, "sessions")
+}
+
+func (s *Store) legacySessionsDir(id string) string {
+	id = s.normalizeTicketLookupID(id)
+	return artifacts.LegacyRepoPath(s.RepoRoot, artifacts.RepoTicketSessions, id, "sessions")
 }
 
 func (s *Store) AttachSession(ctx context.Context, id, sourcePath string) (string, error) {
@@ -70,29 +77,41 @@ func (s *Store) ListSessions(ctx context.Context, id string) ([]SessionFile, err
 		return nil, fmt.Errorf("ticket %s not found", id)
 	}
 
-	entries, err := os.ReadDir(s.sessionsDir(id))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
+	dirs := []string{s.sessionsDir(id)}
+	if legacy := s.legacySessionsDir(id); legacy != dirs[0] {
+		dirs = append(dirs, legacy)
 	}
 
-	out := make([]SessionFile, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		info, err := e.Info()
+	seen := map[string]struct{}{}
+	out := make([]SessionFile, 0)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
 		}
-		out = append(out, SessionFile{
-			Name:       e.Name(),
-			Path:       filepath.Join(s.sessionsDir(id), e.Name()),
-			SizeBytes:  info.Size(),
-			ModTimeUTC: info.ModTime().UTC(),
-		})
+
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if _, ok := seen[e.Name()]; ok {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			seen[e.Name()] = struct{}{}
+			out = append(out, SessionFile{
+				Name:       e.Name(),
+				Path:       filepath.Join(dir, e.Name()),
+				SizeBytes:  info.Size(),
+				ModTimeUTC: info.ModTime().UTC(),
+			})
+		}
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {

@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/capabilities"
 	"github.com/spf13/cobra"
 )
@@ -87,7 +87,7 @@ func newReadinessCheck(name string, ok bool, passDetail, failDetail, adapterID s
 }
 
 func buildContractCheck(repoRoot, adapterID string) doctorCheck {
-	contractPath := filepath.Join(repoRoot, capabilities.DefaultRuntimeContractPath)
+	contractPath := artifacts.ReadRepoPath(repoRoot, artifacts.RepoRuntimeCapabilities)
 	contract, err := capabilities.LoadRuntimeContract(repoRoot)
 	if err == nil {
 		return doctorCheck{

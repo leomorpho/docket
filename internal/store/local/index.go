@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func (s *Store) IndexPath() string {
-	return filepath.Join(s.RepoRoot, ".docket", "index.db")
+	return artifacts.WriteRepoPath(s.RepoRoot, artifacts.RepoIndexDB)
 }
 
 func (s *Store) isIndexStale() bool {

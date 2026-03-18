@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 func TestValidateContractRequiresCoreFields(t *testing.T) {
@@ -127,6 +130,9 @@ func TestWriteAndLoadRoundTrip(t *testing.T) {
 	if path == "" {
 		t.Fatalf("expected output path")
 	}
+	if want := filepath.Join(repo, ".docket", "local", "runtime", "capabilities.json"); path != want {
+		t.Fatalf("expected canonical runtime contract path %q, got %q", want, path)
+	}
 	if written.Hash == "" {
 		t.Fatalf("expected runtime hash")
 	}
@@ -140,6 +146,34 @@ func TestWriteAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("roundtrip mismatch\nwritten=%#v\nloaded=%#v", written, loaded)
 	}
 	t.Logf("capabilities contract version=%d hash=%s", loaded.Version, loaded.Hash)
+}
+
+func TestLoadRuntimeContractFallsBackToLegacyPath(t *testing.T) {
+	repo := t.TempDir()
+	runtime, _, err := WriteRuntimeContract(t.TempDir(), validContract())
+	if err != nil {
+		t.Fatalf("WriteRuntimeContract failed: %v", err)
+	}
+
+	legacyPath := artifacts.LegacyRepoPath(repo, artifacts.RepoRuntimeCapabilities)
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy path: %v", err)
+	}
+	data, err := json.MarshalIndent(runtime, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent failed: %v", err)
+	}
+	if err := os.WriteFile(legacyPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write legacy path: %v", err)
+	}
+
+	loaded, err := LoadRuntimeContract(repo)
+	if err != nil {
+		t.Fatalf("LoadRuntimeContract failed: %v", err)
+	}
+	if !reflect.DeepEqual(runtime, loaded) {
+		t.Fatalf("legacy fallback mismatch\nwant=%#v\ngot=%#v", runtime, loaded)
+	}
 }
 
 func TestLoadRuntimeContractDetectsHashMismatch(t *testing.T) {

@@ -73,6 +73,9 @@ func TestRegistryHelpersResolvePathsAndIgnorePatterns(t *testing.T) {
 	if got, want := RepoPath(repoRoot, RepoLifecycleEvents), filepath.Join(repoRoot, ".docket", "runtime", "lifecycle-events.jsonl"); got != want {
 		t.Fatalf("RepoPath() mismatch: got %s want %s", got, want)
 	}
+	if got, want := WriteRepoPath(repoRoot, RepoLifecycleEvents), filepath.Join(repoRoot, ".docket", "local", "runtime", "lifecycle-events.jsonl"); got != want {
+		t.Fatalf("WriteRepoPath() mismatch: got %s want %s", got, want)
+	}
 	if got, want := RepoPath(repoRoot, RepoProofsDir, "TKT-123", "metadata.json"), filepath.Join(repoRoot, ".docket", "proofs", "TKT-123", "metadata.json"); got != want {
 		t.Fatalf("RepoPath() nested mismatch: got %s want %s", got, want)
 	}
@@ -91,6 +94,39 @@ func TestRegistryHelpersResolvePathsAndIgnorePatterns(t *testing.T) {
 		if !contains(ignores, want) {
 			t.Fatalf("missing ignore pattern %q from %v", want, ignores)
 		}
+	}
+}
+
+func TestReadRepoPathPrefersCanonicalThenLegacy(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	key := RepoLifecycleEvents
+	canonical := CanonicalRepoPath(repoRoot, key)
+	legacy := LegacyRepoPath(repoRoot, key)
+
+	if got := ReadRepoPath(repoRoot, key); got != canonical {
+		t.Fatalf("ReadRepoPath() without files = %q, want canonical %q", got, canonical)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatalf("mkdir legacy: %v", err)
+	}
+	if err := os.WriteFile(legacy, []byte("legacy"), 0o644); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+	if got := ReadRepoPath(repoRoot, key); got != legacy {
+		t.Fatalf("ReadRepoPath() with only legacy file = %q, want %q", got, legacy)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(canonical), 0o755); err != nil {
+		t.Fatalf("mkdir canonical: %v", err)
+	}
+	if err := os.WriteFile(canonical, []byte("canonical"), 0o644); err != nil {
+		t.Fatalf("write canonical: %v", err)
+	}
+	if got := ReadRepoPath(repoRoot, key); got != canonical {
+		t.Fatalf("ReadRepoPath() with both files = %q, want %q", got, canonical)
 	}
 }
 

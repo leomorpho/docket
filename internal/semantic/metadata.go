@@ -29,11 +29,11 @@ type Metadata struct {
 }
 
 func MetadataPath(repoRoot string) string {
-	return artifacts.RepoPath(repoRoot, artifacts.RepoSemanticDir, "metadata.json")
+	return artifacts.WriteRepoPath(repoRoot, artifacts.RepoSemanticDir, "metadata.json")
 }
 
 func SemanticDir(repoRoot string) string {
-	return artifacts.RepoPath(repoRoot, artifacts.RepoSemanticDir)
+	return artifacts.WriteRepoPath(repoRoot, artifacts.RepoSemanticDir)
 }
 
 func VectorDBPath(repoRoot string) string {
@@ -41,7 +41,7 @@ func VectorDBPath(repoRoot string) string {
 }
 
 func LoadMetadata(repoRoot string) (*Metadata, error) {
-	path := MetadataPath(repoRoot)
+	path := artifacts.ReadRepoPath(repoRoot, artifacts.RepoSemanticDir, "metadata.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

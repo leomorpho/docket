@@ -84,7 +84,7 @@ func Parse(text string) []ParsedRule {
 }
 
 func (s *Store) Load() (Snapshot, error) {
-	path := s.path()
+	path := artifacts.ReadRepoPath(s.repoRoot, artifacts.RepoLearnRules)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -155,7 +155,7 @@ func (s *Store) IngestFile(source, path string) (IngestResult, error) {
 }
 
 func (s *Store) path() string {
-	return artifacts.RepoPath(s.repoRoot, artifacts.RepoLearnRules)
+	return artifacts.WriteRepoPath(s.repoRoot, artifacts.RepoLearnRules)
 }
 
 func (s *Store) save(snapshot Snapshot) error {

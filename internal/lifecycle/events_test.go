@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 func TestValidateEventSchemasAndRequiredFields(t *testing.T) {
@@ -252,8 +254,41 @@ func assertHasError(t *testing.T, report ValidationReport, path, code string) {
 func TestLogPathUnderRuntimeDir(t *testing.T) {
 	repo := "/tmp/repo"
 	got := LogPath(repo)
-	want := filepath.Join(repo, ".docket", "runtime", "lifecycle-events.jsonl")
+	want := filepath.Join(repo, ".docket", "local", "runtime", "lifecycle-events.jsonl")
 	if got != want {
 		t.Fatalf("expected log path %q, got %q", want, got)
+	}
+}
+
+func TestLoadFallsBackToLegacyRuntimeLogPath(t *testing.T) {
+	repo := t.TempDir()
+	legacyPath := artifacts.LegacyRepoPath(repo, artifacts.RepoLifecycleEvents)
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy path: %v", err)
+	}
+	event := Event{
+		Version:   SchemaVersionV1,
+		Type:      EventRunEnd,
+		EmittedAt: "2026-03-16T16:35:00Z",
+		Payload: map[string]any{
+			"run_id":  "run-legacy",
+			"command": "start",
+			"status":  StatusOK,
+		},
+	}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal event: %v", err)
+	}
+	if err := os.WriteFile(legacyPath, append(raw, '\n'), 0o644); err != nil {
+		t.Fatalf("write legacy log: %v", err)
+	}
+
+	events, err := Load(repo)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(events) != 1 || events[0].Payload["run_id"] != "run-legacy" {
+		t.Fatalf("unexpected legacy load result: %+v", events)
 	}
 }
