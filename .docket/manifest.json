@@ -1710,7 +1710,7 @@
     },
     "TKT-313": {
       "title": "Define workflow config v1 schema for semantic roles, per-state behavior, and presentation metadata",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-310"
     },
