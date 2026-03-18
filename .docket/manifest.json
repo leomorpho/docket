@@ -1453,7 +1453,7 @@
     },
     "TKT-270": {
       "title": "Add a context-optimizer command for compact LLM task briefs",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },
