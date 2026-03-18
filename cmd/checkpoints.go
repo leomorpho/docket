@@ -15,6 +15,7 @@ import (
 
 type checkpoint struct {
 	TicketID      string   `json:"ticket_id"`
+	TicketState   string   `json:"ticket_state,omitempty"`
 	CreatedAt     string   `json:"created_at"`
 	ACDone        int      `json:"ac_done"`
 	ACTotal       int      `json:"ac_total"`
@@ -80,7 +81,9 @@ func buildCheckpoint(repoRoot, ticketID string, summary string) checkpoint {
 	linkedCommits := []string{}
 	blockers := []string{}
 	nextSteps := []string{}
+	ticketState := ""
 	if t != nil {
+		ticketState = strings.TrimSpace(string(t.State))
 		total = len(t.AC)
 		for _, ac := range t.AC {
 			if ac.Done {
@@ -103,6 +106,7 @@ func buildCheckpoint(repoRoot, ticketID string, summary string) checkpoint {
 	}
 	return checkpoint{
 		TicketID:      ticketID,
+		TicketState:   ticketState,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		ACDone:        done,
 		ACTotal:       total,

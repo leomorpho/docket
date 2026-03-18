@@ -95,6 +95,9 @@ var sessionResumeCmd = &cobra.Command{
 
 		fmt.Fprintf(cmd.OutOrStdout(), "RESUME_CONTEXT\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "ticket=%s\n", cp.TicketID)
+		if strings.TrimSpace(cp.TicketState) != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "state=%s\n", cp.TicketState)
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "created_at=%s\n", cp.CreatedAt)
 		fmt.Fprintf(cmd.OutOrStdout(), "ac=%d/%d\n", cp.ACDone, cp.ACTotal)
 		fmt.Fprintf(cmd.OutOrStdout(), "branch=%s\n", cp.Branch)

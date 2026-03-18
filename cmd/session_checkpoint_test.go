@@ -220,4 +220,67 @@ func TestBuildCheckpointIncludesStructuredResumeFields(t *testing.T) {
 	if len(cp.NextSteps) != 1 || !strings.Contains(cp.NextSteps[0], "Pending step") {
 		t.Fatalf("expected next steps in checkpoint, got %#v", cp.NextSteps)
 	}
+	if cp.TicketState != "in-progress" {
+		t.Fatalf("expected ticket state in checkpoint, got %q", cp.TicketState)
+	}
+}
+
+func TestSessionCompressResumeContinuityPacket(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "human"
+
+	s := local.New(tmp)
+	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
+	now := time.Now().UTC().Truncate(time.Second)
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-506",
+		Seq:         506,
+		Title:       "Continuity packet",
+		State:       "in-progress",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "desc",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "Done step", Done: true},
+			{Description: "Pending step", Done: false},
+		},
+	})
+
+	sessionSource := filepath.Join(tmp, "session-506.log")
+	_ = os.WriteFile(sessionSource, []byte("session context"), 0o644)
+	if _, err := s.AttachSession(context.Background(), "TKT-506", sessionSource); err != nil {
+		t.Fatalf("attach session failed: %v", err)
+	}
+	summaryPath := filepath.Join(tmp, "summary-506.md")
+	_ = os.WriteFile(summaryPath, []byte("## Handoff\n\nNext up: finish pending AC"), 0o644)
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"session", "compress", "TKT-506", "--summary-file", summaryPath, "--checkpoint"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("session compress failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"session", "resume", "TKT-506"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("session resume failed: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "state=in-progress") {
+		t.Fatalf("expected resume packet to include ticket state, got: %s", got)
+	}
+	if !strings.Contains(got, "next_steps=[Pending step]") {
+		t.Fatalf("expected resume packet to include next steps, got: %s", got)
+	}
+	if !strings.Contains(got, "summary=Next up: finish pending AC") {
+		t.Fatalf("expected resume packet to include handoff summary, got: %s", got)
+	}
+	if !strings.Contains(got, "last_comments=[Session compressed. Handoff updated.]") {
+		t.Fatalf("expected resume packet to include recent execution context comment, got: %s", got)
+	}
 }

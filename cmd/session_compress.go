@@ -65,9 +65,6 @@ var sessionCompressCmd = &cobra.Command{
 		}
 		summary := strings.TrimSpace(string(summaryData))
 		summary = strings.TrimSpace(strings.TrimPrefix(summary, "## Handoff"))
-		if sessionCompressCheckpoint {
-			_, _ = writeCheckpoint(repo, buildCheckpoint(repo, id, summary))
-		}
 
 		t, err := s.GetTicket(ctx, id)
 		if err != nil {
@@ -89,6 +86,9 @@ var sessionCompressCmd = &cobra.Command{
 		}
 		if err := s.AddComment(ctx, id, c); err != nil {
 			return err
+		}
+		if sessionCompressCheckpoint {
+			_, _ = writeCheckpoint(repo, buildCheckpoint(repo, id, summary))
 		}
 
 		finalPath := sessionPath
