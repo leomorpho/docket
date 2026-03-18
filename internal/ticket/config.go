@@ -31,6 +31,31 @@ type SemanticConfig struct {
 	HandoffWeight            float64 `json:"handoff_weight"`
 }
 
+type WorkflowConfig struct {
+	Version int                            `json:"version"`
+	States  map[string]WorkflowStateConfig `json:"states"`
+}
+
+type WorkflowStateConfig struct {
+	Semantics    WorkflowStateSemantics    `json:"semantics"`
+	Presentation WorkflowStatePresentation `json:"presentation"`
+}
+
+type WorkflowStateSemantics struct {
+	Roles             []string `json:"roles,omitempty"`
+	Open              bool     `json:"open"`
+	Terminal          bool     `json:"terminal,omitempty"`
+	Startable         bool     `json:"startable,omitempty"`
+	Reviewable        bool     `json:"reviewable,omitempty"`
+	BlocksDependents  bool     `json:"blocks_dependents,omitempty"`
+	Next              []string `json:"next"`
+}
+
+type WorkflowStatePresentation struct {
+	Label  string `json:"label"`
+	Column int    `json:"column"`
+}
+
 // StateConfig describes a single workflow state.
 type StateConfig struct {
 	// Label is the human-readable name shown in board column headers etc.
@@ -42,12 +67,23 @@ type StateConfig struct {
 	Column int `json:"column"`
 	// Next is the list of states this state can transition to.
 	Next []string `json:"next"`
+	// Roles describes semantic workflow roles like intake, active, review, completed, archived.
+	Roles []string `json:"roles,omitempty"`
+	// Terminal indicates a closed terminal state in the workflow graph.
+	Terminal bool `json:"terminal,omitempty"`
+	// Startable marks states that are valid intake points for work selection.
+	Startable bool `json:"startable,omitempty"`
+	// Reviewable marks states that require or represent review-oriented handoff.
+	Reviewable bool `json:"reviewable,omitempty"`
+	// BlocksDependents indicates whether tickets in this state still block downstream work.
+	BlocksDependents bool `json:"blocks_dependents,omitempty"`
 }
 
 type Config struct {
 	Counter         int                      `json:"counter"`
 	Backend         string                   `json:"backend"`
 	States          map[string]StateConfig   `json:"states"`
+	Workflow        WorkflowConfig           `json:"-"`
 	Labels          []string                 `json:"labels"`
 	CommitSessions  bool                     `json:"commit_sessions"`
 	DefaultState    string                   `json:"default_state"`
@@ -59,12 +95,12 @@ type Config struct {
 
 // defaultStates is the canonical workflow shipped with docket.
 var defaultStates = map[string]StateConfig{
-	"backlog":     {Label: "Backlog", Open: true, Column: 0, Next: []string{"todo", "archived"}},
-	"todo":        {Label: "To Do", Open: true, Column: 1, Next: []string{"in-progress", "backlog", "archived"}},
-	"in-progress": {Label: "In Progress", Open: true, Column: 2, Next: []string{"in-review", "todo", "backlog", "archived"}},
-	"in-review":   {Label: "In Review", Open: true, Column: 3, Next: []string{"done", "in-progress", "archived"}},
-	"done":        {Label: "Done", Open: false, Column: 4, Next: []string{"archived", "in-progress"}},
-	"archived":    {Label: "Archived", Open: false, Column: 5, Next: []string{"backlog"}},
+	"backlog":     {Label: "Backlog", Open: true, Column: 0, Next: []string{"todo", "archived"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+	"todo":        {Label: "To Do", Open: true, Column: 1, Next: []string{"in-progress", "backlog", "archived"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+	"in-progress": {Label: "In Progress", Open: true, Column: 2, Next: []string{"in-review", "todo", "backlog", "archived"}, Roles: []string{"active"}, BlocksDependents: true},
+	"in-review":   {Label: "In Review", Open: true, Column: 3, Next: []string{"done", "in-progress", "archived"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+	"done":        {Label: "Done", Open: false, Column: 4, Next: []string{"archived", "in-progress"}, Roles: []string{"completed"}, Terminal: true},
+	"archived":    {Label: "Archived", Open: false, Column: 5, Next: []string{"backlog"}, Roles: []string{"archived"}, Terminal: true},
 }
 
 var defaultHandoffSections = []string{
@@ -84,6 +120,7 @@ func DefaultConfig() *Config {
 		Counter:         0,
 		Backend:         "local",
 		States:          states,
+		Workflow:        workflowFromStates(states),
 		Labels:          []string{"bug", "feature", "refactor", "chore", "llm-only", "human-only"},
 		CommitSessions:  false,
 		DefaultState:    "backlog",
@@ -178,6 +215,7 @@ type rawConfigForLoad struct {
 	Counter         int                      `json:"counter"`
 	Backend         string                   `json:"backend"`
 	States          json.RawMessage          `json:"states"`
+	Workflow        json.RawMessage          `json:"workflow"`
 	Labels          []string                 `json:"labels"`
 	CommitSessions  bool                     `json:"commit_sessions"`
 	DefaultState    string                   `json:"default_state"`
@@ -213,13 +251,30 @@ func LoadConfig(repoRoot string) (*Config, error) {
 		Semantic:        raw.Semantic,
 	}
 
-	migrated, err := parseStates(raw.States)
-	if err != nil {
-		return nil, fmt.Errorf("corrupt config.json states: %w", err)
+	hadWorkflow := hasWorkflow(raw.Workflow)
+	if hadWorkflow {
+		workflowCfg, err := parseWorkflow(raw.Workflow)
+		if err != nil {
+			return nil, fmt.Errorf("corrupt config.json workflow: %w", err)
+		}
+		cfg.Workflow = workflowCfg
+		cfg.States = statesFromWorkflow(workflowCfg)
+	} else {
+		migrated, err := parseStates(raw.States)
+		if err != nil {
+			return nil, fmt.Errorf("corrupt config.json states: %w", err)
+		}
+		cfg.States = migrated
 	}
-	cfg.States = migrated
 
 	cfg.applyDefaults()
+	if hadWorkflow {
+		if err := cfg.validateWorkflow(); err != nil {
+			return nil, err
+		}
+	} else {
+		cfg.Workflow = workflowFromStates(cfg.States)
+	}
 	if err := cfg.applyEnvOverrides(); err != nil {
 		return nil, err
 	}
@@ -230,6 +285,11 @@ func LoadConfig(repoRoot string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func hasWorkflow(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return len(trimmed) > 0 && trimmed[0] == '{'
 }
 
 // parseStates handles both the legacy []string format and the new map format.
@@ -257,6 +317,14 @@ func parseStates(raw json.RawMessage) (map[string]StateConfig, error) {
 		return nil, err
 	}
 	return states, nil
+}
+
+func parseWorkflow(raw json.RawMessage) (WorkflowConfig, error) {
+	var workflowCfg WorkflowConfig
+	if err := json.Unmarshal(raw, &workflowCfg); err != nil {
+		return WorkflowConfig{}, err
+	}
+	return workflowCfg, nil
 }
 
 // needsMigration reports whether the raw states JSON is in the old array format.
@@ -303,6 +371,9 @@ func (c *Config) applyDefaults() {
 	}
 	if len(c.States) == 0 {
 		c.States = def.States
+	}
+	if c.Workflow.Version == 0 {
+		c.Workflow = workflowFromStates(c.States)
 	}
 	if len(c.Labels) == 0 {
 		c.Labels = append([]string(nil), def.Labels...)
@@ -423,4 +494,107 @@ func userHomeDir() string {
 		return "~"
 	}
 	return home
+}
+
+func workflowFromStates(states map[string]StateConfig) WorkflowConfig {
+	workflowStates := make(map[string]WorkflowStateConfig, len(states))
+	for name, state := range states {
+		workflowStates[name] = WorkflowStateConfig{
+			Semantics: WorkflowStateSemantics{
+				Roles:            append([]string(nil), state.Roles...),
+				Open:             state.Open,
+				Terminal:         state.Terminal,
+				Startable:        state.Startable,
+				Reviewable:       state.Reviewable,
+				BlocksDependents: state.BlocksDependents,
+				Next:             append([]string(nil), state.Next...),
+			},
+			Presentation: WorkflowStatePresentation{
+				Label:  state.Label,
+				Column: state.Column,
+			},
+		}
+	}
+	return WorkflowConfig{
+		Version: 1,
+		States:  workflowStates,
+	}
+}
+
+func statesFromWorkflow(workflowCfg WorkflowConfig) map[string]StateConfig {
+	states := make(map[string]StateConfig, len(workflowCfg.States))
+	for name, state := range workflowCfg.States {
+		states[name] = StateConfig{
+			Label:             state.Presentation.Label,
+			Open:              state.Semantics.Open,
+			Column:            state.Presentation.Column,
+			Next:              append([]string(nil), state.Semantics.Next...),
+			Roles:             append([]string(nil), state.Semantics.Roles...),
+			Terminal:          state.Semantics.Terminal,
+			Startable:         state.Semantics.Startable,
+			Reviewable:        state.Semantics.Reviewable,
+			BlocksDependents:  state.Semantics.BlocksDependents,
+		}
+	}
+	return states
+}
+
+func (c *Config) validateWorkflow() error {
+	const version = 1
+	if c.Workflow.Version != version {
+		return fmt.Errorf("corrupt config.json workflow.version: workflow.version must be %d", version)
+	}
+	if len(c.Workflow.States) == 0 {
+		return fmt.Errorf("corrupt config.json workflow.states: workflow.states must define at least one state")
+	}
+	if c.DefaultState != "" {
+		if _, ok := c.Workflow.States[c.DefaultState]; !ok {
+			return fmt.Errorf("corrupt config.json default_state: default_state %q is not defined in workflow.states", c.DefaultState)
+		}
+	}
+
+	allowedRoles := map[string]bool{
+		"intake":    true,
+		"active":    true,
+		"review":    true,
+		"completed": true,
+		"archived":  true,
+	}
+	columns := map[int]string{}
+	for name, state := range c.Workflow.States {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("corrupt config.json workflow.states: state name must not be empty")
+		}
+		if strings.TrimSpace(state.Presentation.Label) == "" {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.presentation.label: label is required", name)
+		}
+		if state.Presentation.Column < 0 {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.presentation.column: column must be >= 0", name)
+		}
+		if prev, exists := columns[state.Presentation.Column]; exists {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.presentation.column: column %d already used by %s", name, state.Presentation.Column, prev)
+		}
+		columns[state.Presentation.Column] = name
+		for i, role := range state.Semantics.Roles {
+			if !allowedRoles[role] {
+				return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.roles[%d]: invalid role %q", name, i, role)
+			}
+		}
+		if state.Semantics.Terminal && state.Semantics.Open {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.terminal: terminal states must set open=false", name)
+		}
+		if state.Semantics.Startable && !state.Semantics.Open {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.startable: startable states must set open=true", name)
+		}
+		if state.Semantics.Reviewable && !state.Semantics.Open {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.reviewable: reviewable states must set open=true", name)
+		}
+		for i, next := range state.Semantics.Next {
+			if _, ok := c.Workflow.States[next]; !ok {
+				return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.next[%d]: %q is not a defined workflow state", name, i, next)
+			}
+		}
+	}
+	c.States = statesFromWorkflow(c.Workflow)
+	return nil
 }

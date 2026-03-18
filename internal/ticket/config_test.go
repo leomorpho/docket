@@ -61,6 +61,240 @@ func TestDefaultConfigStateDefaults(t *testing.T) {
 	if done.Open {
 		t.Error("done should not be open")
 	}
+	if cfg.Workflow.Version != 1 {
+		t.Fatalf("workflow.version = %d, want 1", cfg.Workflow.Version)
+	}
+	if len(cfg.Workflow.States) != len(cfg.States) {
+		t.Fatalf("workflow states = %d, want %d", len(cfg.Workflow.States), len(cfg.States))
+	}
+}
+
+func TestLoadConfigWorkflowV1Schema(t *testing.T) {
+	tmpDir := t.TempDir()
+	raw := `{
+  "counter": 1,
+  "backend": "local",
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {
+          "roles": ["intake"],
+          "open": true,
+          "startable": true,
+          "blocks_dependents": true,
+          "next": ["building"]
+        },
+        "presentation": {
+          "label": "Queued",
+          "column": 0
+        }
+      },
+      "building": {
+        "semantics": {
+          "roles": ["active"],
+          "open": true,
+          "blocks_dependents": true,
+          "next": ["review"]
+        },
+        "presentation": {
+          "label": "Building",
+          "column": 1
+        }
+      },
+      "review": {
+        "semantics": {
+          "roles": ["review"],
+          "open": true,
+          "reviewable": true,
+          "blocks_dependents": false,
+          "next": ["shipped"]
+        },
+        "presentation": {
+          "label": "Review",
+          "column": 2
+        }
+      },
+      "shipped": {
+        "semantics": {
+          "roles": ["completed"],
+          "open": false,
+          "terminal": true,
+          "next": []
+        },
+        "presentation": {
+          "label": "Shipped",
+          "column": 3
+        }
+      }
+    }
+  },
+  "labels": ["feature"]
+}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(ConfigPath(tmpDir), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Workflow.Version != 1 {
+		t.Fatalf("workflow.version = %d, want 1", cfg.Workflow.Version)
+	}
+	if !cfg.IsValidState("queued") || !cfg.IsValidState("review") {
+		t.Fatalf("expected workflow states to populate state lookup, got %#v", cfg.StateNames())
+	}
+	queued := cfg.States["queued"]
+	if !queued.Startable {
+		t.Fatal("queued should be startable")
+	}
+	if len(queued.Roles) != 1 || queued.Roles[0] != "intake" {
+		t.Fatalf("queued roles = %#v", queued.Roles)
+	}
+	review := cfg.States["review"]
+	if !review.Reviewable {
+		t.Fatal("review should be reviewable")
+	}
+	if review.BlocksDependents {
+		t.Fatal("review should not block dependents")
+	}
+	shipped := cfg.States["shipped"]
+	if !shipped.Terminal {
+		t.Fatal("shipped should be terminal")
+	}
+	if shipped.Open {
+		t.Fatal("shipped should not be open")
+	}
+	if got := cfg.ValidTransitions("queued"); len(got) != 1 || got[0] != "building" {
+		t.Fatalf("queued transitions = %#v", got)
+	}
+}
+
+func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		raw    string
+		substr string
+	}{
+		{
+			name: "unknown role",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["mystery"], "open": true, "next": []},
+        "presentation": {"label": "Queued", "column": 0}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.semantics.roles[0]",
+		},
+		{
+			name: "missing label",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["intake"], "open": true, "next": []},
+        "presentation": {"column": 0}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.presentation.label",
+		},
+		{
+			name: "negative column",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["intake"], "open": true, "next": []},
+        "presentation": {"label": "Queued", "column": -1}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.presentation.column",
+		},
+		{
+			name: "unknown transition target",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["intake"], "open": true, "next": ["missing"]},
+        "presentation": {"label": "Queued", "column": 0}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.semantics.next[0]",
+		},
+		{
+			name: "terminal cannot be open",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["completed"], "open": true, "terminal": true, "next": []},
+        "presentation": {"label": "Queued", "column": 0}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.semantics.terminal",
+		},
+		{
+			name: "startable must be open",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["intake"], "open": false, "startable": true, "next": []},
+        "presentation": {"label": "Queued", "column": 0}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.semantics.startable",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.WriteFile(ConfigPath(tmpDir), []byte(tc.raw), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			_, err := LoadConfig(tmpDir)
+			if err == nil || !strings.Contains(err.Error(), tc.substr) {
+				t.Fatalf("expected error containing %q, got %v", tc.substr, err)
+			}
+		})
+	}
 }
 
 // TestLoadConfigMigratesOldArrayFormat verifies that a config with the legacy
