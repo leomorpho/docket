@@ -1393,25 +1393,25 @@
     },
     "TKT-260": {
       "title": "Add an Agent Quickstart block to docket start",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-261": {
       "title": "Add Docket discovery hints to common entry commands",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-262": {
       "title": "Document intro reminder behavior in CLI code comments",
-      "state": "in-review",
+      "state": "done",
       "priority": 3,
       "parent": "TKT-177"
     },
     "TKT-263": {
       "title": "Clarify the UX split between docket status and docket doctor",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-177"
     },
@@ -1423,7 +1423,7 @@
     },
     "TKT-265": {
       "title": "Add CLI commands to inspect and search stored learnings",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-177"
     },
@@ -1435,7 +1435,7 @@
     },
     "TKT-267": {
       "title": "Add an explicit learn-rule capture command",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-177"
     },
@@ -1453,7 +1453,7 @@
     },
     "TKT-270": {
       "title": "Add a context-optimizer command for compact LLM task briefs",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-177"
     },
@@ -1495,7 +1495,7 @@
     },
     "TKT-277": {
       "title": "Add shell-safe groomed ticket creation flow for multi-line descriptions and ACs",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-228"
     },
@@ -1507,7 +1507,7 @@
     },
     "TKT-279": {
       "title": "Allow tickets in todo or in-progress to move back to backlog",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-228"
     },
@@ -1578,7 +1578,7 @@
     },
     "TKT-291": {
       "title": "Define tracked-vs-local artifact policy and canonical .docket/local layout",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-290"
     },
@@ -1848,7 +1848,7 @@
     },
     "TKT-336": {
       "title": "Fix pre-commit ticket AC checks to read the pending commit message instead of the previous commit",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-312"
     },
@@ -1860,7 +1860,7 @@
     },
     "TKT-338": {
       "title": "Define wrapped-key keystore format and protector abstraction",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 3,
       "parent": "TKT-337"
     },
