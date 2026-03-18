@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store/local"
 )
 
@@ -25,7 +26,7 @@ type locksState struct {
 }
 
 func locksPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "locks.json")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoLocks)
 }
 
 func loadLocks(repoRoot string) (locksState, error) {
@@ -56,7 +57,7 @@ func saveLocks(repoRoot string, st locksState) error {
 
 func ensureLocksGitignored(repoRoot string) error {
 	path := filepath.Join(repoRoot, ".gitignore")
-	line := ".docket/locks.json"
+	line := artifacts.MustRelPath(artifacts.RepoLocks)
 	data, _ := os.ReadFile(path)
 	content := string(data)
 	if strings.Contains(content, line) {

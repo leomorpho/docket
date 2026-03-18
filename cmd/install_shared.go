@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const (
@@ -26,7 +28,7 @@ func preCommitHookPath(repoRoot string) string {
 }
 
 func installManifestPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "install.json")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoInstallManifest)
 }
 
 func claudePath(repoRoot string) string {
@@ -34,6 +36,7 @@ func claudePath(repoRoot string) string {
 }
 
 func preCommitHookScript() string {
+	ticketsRelDir := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoTicketsDir))
 	return `#!/bin/sh
 set -eu
 
@@ -53,7 +56,7 @@ if [ -z "$TICKETS" ]; then
 fi
 
 for ID in $TICKETS; do
-  TICKET_FILE="$REPO_ROOT/.docket/tickets/$ID.md"
+  TICKET_FILE="$REPO_ROOT/` + ticketsRelDir + `/$ID.md"
   if [ -f "$TICKET_FILE" ] && grep -Eq '^state:[[:space:]]*done$' "$TICKET_FILE"; then
     echo "docket: error: referenced ticket $ID is already in done state" >&2
     exit 1
@@ -189,7 +192,7 @@ func artifactStatus(repoRoot string) (hookStale bool, claudeStale bool, err erro
 }
 
 func ensureConfigYAML(repoRoot string) error {
-	path := filepath.Join(repoRoot, ".docket", "config.yaml")
+	path := artifacts.RepoPath(repoRoot, artifacts.RepoConfigYAML)
 	template := []string{
 		"# docket managed defaults",
 		"# existing keys are preserved",

@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 var ticketIDPattern = regexp.MustCompile(`^TKT-[0-9]+$`)
@@ -191,7 +193,7 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 		ext = ".img"
 	}
 
-	relPath := filepath.ToSlash(filepath.Join(".docket", "proofs", "by-hash", sha+ext))
+	relPath := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoProofsDir, "by-hash", sha+ext))
 	absPath := filepath.Join(r.RepoRoot, filepath.FromSlash(relPath))
 	if !withinRoot(absPath, r.RepoRoot) {
 		return nil, fieldError("unsafe_path", "path", "resolved proof path escapes repository root", "use a valid repository path")
@@ -285,7 +287,7 @@ func (r *Repository) Remove(ctx context.Context, ticketID string, proofID string
 func (r *Repository) GC(ctx context.Context) (GCSummary, error) {
 	_ = ctx
 	refs := map[string]struct{}{}
-	proofsRoot := filepath.Join(r.RepoRoot, ".docket", "proofs")
+	proofsRoot := artifacts.RepoPath(r.RepoRoot, artifacts.RepoProofsDir)
 	entries, err := os.ReadDir(proofsRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -321,7 +323,7 @@ func (r *Repository) GC(ctx context.Context) (GCSummary, error) {
 			continue
 		}
 		summary.Scanned++
-		rel := filepath.ToSlash(filepath.Join(".docket", "proofs", "by-hash", entry.Name()))
+		rel := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoProofsDir, "by-hash", entry.Name()))
 		if _, ok := refs[rel]; ok {
 			summary.Retained++
 			continue
@@ -336,7 +338,7 @@ func (r *Repository) GC(ctx context.Context) (GCSummary, error) {
 }
 
 func (r *Repository) metadataPath(ticketID string) string {
-	return filepath.Join(r.RepoRoot, ".docket", "proofs", ticketID, "metadata.json")
+	return artifacts.RepoPath(r.RepoRoot, artifacts.RepoProofsDir, ticketID, "metadata.json")
 }
 
 func (r *Repository) load(ticketID string) ([]Record, error) {

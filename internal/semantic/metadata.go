@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const MetadataVersion = "v1"
@@ -27,11 +29,11 @@ type Metadata struct {
 }
 
 func MetadataPath(repoRoot string) string {
-	return filepath.Join(SemanticDir(repoRoot), "metadata.json")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoSemanticDir, "metadata.json")
 }
 
 func SemanticDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "semantic")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoSemanticDir)
 }
 
 func VectorDBPath(repoRoot string) string {

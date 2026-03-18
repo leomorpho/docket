@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 var ErrSecureModeInactive = errors.New("secure mode is inactive")
@@ -36,11 +38,11 @@ func NewSessionManager(docketHome string) *SessionManager {
 }
 
 func (m *SessionManager) sessionPath() string {
-	return filepath.Join(m.docketHome, "security", "session.json")
+	return artifacts.HomePath(m.docketHome, artifacts.HomeSecuritySession)
 }
 
 func (m *SessionManager) approvalsPath() string {
-	return filepath.Join(m.docketHome, "security", "approvals.log")
+	return artifacts.HomePath(m.docketHome, artifacts.HomeSecurityApprovals)
 }
 
 func (m *SessionManager) Unlock(repoRoot, passphrase string, ttl time.Duration) error {

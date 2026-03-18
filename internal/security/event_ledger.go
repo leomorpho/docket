@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const EventLedgerVersion = 1
@@ -76,7 +78,7 @@ func NewEventLedger(repoRoot string, keystore KeystoreProvider, signerID string)
 }
 
 func LedgerPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "ledger", "events.jsonl")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoLedgerEvents)
 }
 
 func (l *EventLedger) Append(input LedgerAppendInput) (LedgerEvent, error) {

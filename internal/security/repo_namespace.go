@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const repoIDFile = "repo_id"
@@ -512,7 +513,7 @@ func GetOrCreateRepoID(repoRoot string) (string, error) {
 	if repoRoot == "" {
 		return "", fmt.Errorf("repo root is required")
 	}
-	path := filepath.Join(repoRoot, ".docket", repoIDFile)
+	path := artifacts.RepoPath(repoRoot, artifacts.RepoRepoID)
 	if data, err := os.ReadFile(path); err == nil {
 		id := string(trimSpace(data))
 		if !repoIDPattern.MatchString(id) {
@@ -534,7 +535,7 @@ func GetOrCreateRepoID(repoRoot string) (string, error) {
 }
 
 func (s *RepoNamespaceStore) repoNamespaceDir(repoID string) string {
-	return filepath.Join(s.docketHome, "repos", repoID)
+	return artifacts.HomePath(s.docketHome, artifacts.HomeReposDir, repoID)
 }
 
 func (s *RepoNamespaceStore) UpdateContextBinding(repoRoot, actor, ticketID, worktreePath, runStartedAt string) (bool, string, error) {

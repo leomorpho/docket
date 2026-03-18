@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const (
@@ -153,7 +155,7 @@ func (s *Store) IngestFile(source, path string) (IngestResult, error) {
 }
 
 func (s *Store) path() string {
-	return filepath.Join(s.repoRoot, ".docket", "runtime", "learn-rules.json")
+	return artifacts.RepoPath(s.repoRoot, artifacts.RepoLearnRules)
 }
 
 func (s *Store) save(snapshot Snapshot) error {

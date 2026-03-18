@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -32,7 +33,7 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 
 		// 1. Create directories
 		docketDir := filepath.Dir(cfgPath)
-		ticketsDir := filepath.Join(docketDir, "tickets")
+		ticketsDir := artifacts.RepoPath(repo, artifacts.RepoTicketsDir)
 		if err := os.MkdirAll(ticketsDir, 0755); err != nil {
 			return fmt.Errorf("creating directories: %w", err)
 		}
@@ -52,14 +53,22 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 
 		// 3. Update gitignore
 		gitignorePath := filepath.Join(repo, ".gitignore")
-		ignoreContent := "\n# docket\n.docket/index.db\n.docket/tickets/*/sessions/\n"
+		ignoreLines := append([]string{"", "# docket"}, artifacts.RepoLocalIgnorePatterns()...)
+		ignoreContent := strings.Join(ignoreLines, "\n") + "\n"
 
 		data, err := os.ReadFile(gitignorePath)
 		if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("reading .gitignore: %w", err)
 		}
 
-		if !strings.Contains(string(data), ".docket/index.db") {
+		needsWrite := false
+		for _, line := range artifacts.RepoLocalIgnorePatterns() {
+			if !strings.Contains(string(data), line) {
+				needsWrite = true
+				break
+			}
+		}
+		if needsWrite {
 			f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				return fmt.Errorf("opening .gitignore: %w", err)

@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const (
@@ -52,7 +54,7 @@ type FileKeystore struct {
 
 func NewFileKeystore(docketHome string) *FileKeystore {
 	return &FileKeystore{
-		path: filepath.Join(docketHome, "security", "keystore.json"),
+		path: artifacts.HomePath(docketHome, artifacts.HomeSecurityKeystore),
 	}
 }
 

@@ -10,16 +10,18 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const (
 	SchemaVersionV1 = "docket.lifecycle/v1"
 
-	EventRunStart      = "run.start"
-	EventPhaseEnd      = "phase.end"
-	EventRunEnd        = "run.end"
-	EventToolFailure   = "tool.failure"
-	EventProofMutation = "proof.mutation"
+	EventRunStart        = "run.start"
+	EventPhaseEnd        = "phase.end"
+	EventRunEnd          = "run.end"
+	EventToolFailure     = "tool.failure"
+	EventProofMutation   = "proof.mutation"
 	EventStateTransition = "state.transition"
 
 	StatusOK     = "ok"
@@ -170,7 +172,7 @@ func requireString(v *validator, payload map[string]any, path, key string) strin
 }
 
 func LogPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "runtime", "lifecycle-events.jsonl")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoLifecycleEvents)
 }
 
 func Append(repoRoot string, event Event) error {

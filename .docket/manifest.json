@@ -1632,7 +1632,7 @@
     },
     "TKT-300": {
       "title": "Add canonical Docket artifact registry to prevent path/policy drift",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-290"
     },

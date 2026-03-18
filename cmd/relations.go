@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 type relationEntry struct {
@@ -18,7 +20,7 @@ type relationState struct {
 }
 
 func relationsPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "relations.json")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoRelations)
 }
 
 func loadRelations(repoRoot string) (relationState, error) {

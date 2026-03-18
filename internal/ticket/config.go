@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -169,7 +170,7 @@ func (c *Config) ColumnOrder() []StateConfig {
 }
 
 func ConfigPath(repoRoot string) string {
-	return filepath.Join(repoRoot, ".docket", "config.json")
+	return artifacts.RepoPath(repoRoot, artifacts.RepoConfigJSON)
 }
 
 // rawConfigForLoad is used only during loading to detect the states field format.

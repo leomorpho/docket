@@ -11,13 +11,18 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 const (
-	WorkflowLockVersion   = 1
-	SignatureAlgorithmV1  = "ed25519"
-	DefaultWorkflowPolicy = ".docket/workflow.proposal.json"
-	DefaultWorkflowLock   = ".docket/workflow.lock.json"
+	WorkflowLockVersion  = 1
+	SignatureAlgorithmV1 = "ed25519"
+)
+
+var (
+	DefaultWorkflowPolicy = filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoWorkflowPolicy))
+	DefaultWorkflowLock   = filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoWorkflowLock))
 )
 
 var (
@@ -121,7 +126,7 @@ func GenerateWorkflowLock(repoRoot, proposalPath, signerID string, signer Workfl
 }
 
 func WriteWorkflowLock(repoRoot string, lock WorkflowLock) error {
-	path := filepath.Join(repoRoot, DefaultWorkflowLock)
+	path := artifacts.RepoPath(repoRoot, artifacts.RepoWorkflowLock)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -133,7 +138,7 @@ func WriteWorkflowLock(repoRoot string, lock WorkflowLock) error {
 }
 
 func ParseWorkflowLock(repoRoot string) (WorkflowLock, error) {
-	path := filepath.Join(repoRoot, DefaultWorkflowLock)
+	path := artifacts.RepoPath(repoRoot, artifacts.RepoWorkflowLock)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return WorkflowLock{}, err
