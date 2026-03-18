@@ -135,6 +135,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		capabilityDigest := buildStartCapabilityDigest(repo)
 		learnReplay := buildLearnReplay(repo, t, 3)
 		quickPath := buildLLMQuickPath()
+		agentQuickstart := buildStartAgentQuickstart()
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
@@ -151,6 +152,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 				"capability_digest":    capabilityDigest,
 				"learn_replay":         learnReplay,
 				"llm_quick_path":       quickPath,
+				"agent_quickstart":     agentQuickstart,
 			})
 			return nil
 		}
@@ -162,6 +164,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
 		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
 		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartAgentQuickstartHuman(agentQuickstart))
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
 		fmt.Fprintf(
 			cmd.OutOrStdout(),
