@@ -1348,6 +1348,228 @@
       "state": "in-review",
       "priority": 2,
       "parent": "TKT-174"
+    },
+    "TKT-253": {
+      "title": "Define Docket skill and hook capability namespaces",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-254": {
+      "title": "Add docket skill commands for capability discovery and invocation",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-255": {
+      "title": "Add docket hook commands for hook introspection and status",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-256": {
+      "title": "Expose Docket skills through MCP",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-257": {
+      "title": "Expose Docket hook metadata and status through MCP",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-258": {
+      "title": "Expose Docket capability discovery through MCP",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-259": {
+      "title": "Add MCP tests for skill, hook, and capability discovery flows",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-260": {
+      "title": "Add an Agent Quickstart block to docket start",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-177"
+    },
+    "TKT-261": {
+      "title": "Add Docket discovery hints to common entry commands",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-262": {
+      "title": "Document intro reminder behavior in CLI code comments",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-177"
+    },
+    "TKT-263": {
+      "title": "Clarify the UX split between docket status and docket doctor",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-264": {
+      "title": "Show hook readiness and active hook events in status surfaces",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-265": {
+      "title": "Add CLI commands to inspect and search stored learnings",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-177"
+    },
+    "TKT-266": {
+      "title": "Add an explicit learning replay command for the current ticket",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-177"
+    },
+    "TKT-267": {
+      "title": "Add an explicit learn-rule capture command",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-268": {
+      "title": "Polish session handoff generation and resume continuity",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-177"
+    },
+    "TKT-269": {
+      "title": "Add a wrap-up command for end-of-session workflow checks",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-177"
+    },
+    "TKT-270": {
+      "title": "Add a context-optimizer command for compact LLM task briefs",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-271": {
+      "title": "Add a smart-commit command tied to ticket context and review readiness",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-272": {
+      "title": "Expand adapter installation with a portable-first fallback model",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-273": {
+      "title": "Add native Claude Code skill and hook installation support",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-274": {
+      "title": "Add native Gemini skill installation support",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-275": {
+      "title": "Improve Codex adapter installation around AGENTS and MCP discovery",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-276": {
+      "title": "Add capability discovery guidance to adapter-installed instruction files",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-277": {
+      "title": "Add shell-safe groomed ticket creation flow for multi-line descriptions and ACs",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-228"
+    },
+    "TKT-278": {
+      "title": "Add bulk roadmap-to-tickets authoring flow for one-line worklists",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-228"
+    },
+    "TKT-279": {
+      "title": "Allow tickets in todo or in-progress to move back to backlog",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-228"
+    },
+    "TKT-280": {
+      "title": "Add first-class skill definitions and metadata for Docket capability surfaces",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-281": {
+      "title": "Add hook event telemetry with CLI and MCP history surfaces",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-282": {
+      "title": "Add adapter-aware skill guidance to docket start and discovery surfaces",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-177"
+    },
+    "TKT-283": {
+      "title": "Add a synchronized capability snapshot shared by CLI, MCP, and adapter docs",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-284": {
+      "title": "Add native slash-command and command-alias installation where supported",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-285": {
+      "title": "Add standard Agent Skills artifact generation for Docket capabilities",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-286": {
+      "title": "Add unified Agent Skills installer for project-local and user-global directories",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-209"
+    },
+    "TKT-287": {
+      "title": "Add canonical Docket skill pack and starter bundle for supported agents",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-288": {
+      "title": "Add self-describing Docket skill export surface for installer and agent discovery",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
+    },
+    "TKT-289": {
+      "title": "Add cross-agent skill sync from canonical Docket skill directory",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-209"
     }
   }
 }
