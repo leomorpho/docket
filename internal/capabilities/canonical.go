@@ -44,7 +44,7 @@ func CanonicalContractV1() Contract {
 					Title:    "Compact Ticket Brief",
 					Summary:  "Generate a bounded brief from ticket context, learnings, and recent activity.",
 					Intent:   "context",
-					Command:  "docket context optimize {ticket_id}",
+					Command:  "docket context-optimize {ticket_id}",
 					Triggers: []string{"llm_context_budget", "ticket_handoff", "task_brief"},
 					Optional: true,
 				},

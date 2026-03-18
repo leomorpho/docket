@@ -71,10 +71,39 @@ func TestHelpJSONCommand(t *testing.T) {
 			t.Fatalf("missing command in manifest: %s", r)
 		}
 	}
+	if !names["context-optimize"] {
+		t.Fatalf("missing command in manifest: context-optimize")
+	}
 	for name := range names {
 		if strings.HasPrefix(name, "__hook-") {
 			t.Fatalf("internal hook command leaked into public manifest: %s", name)
 		}
+	}
+
+	var contextOptimize map[string]any
+	for _, c := range commands {
+		m := c.(map[string]any)
+		if m["name"] == "context-optimize" {
+			contextOptimize = m
+			break
+		}
+	}
+	if contextOptimize == nil {
+		t.Fatal("expected manifest entry for context-optimize")
+	}
+	examples, ok := contextOptimize["examples"].([]any)
+	if !ok || len(examples) == 0 {
+		t.Fatalf("expected examples for context-optimize, got %#v", contextOptimize["examples"])
+	}
+	if got := examples[0].(string); !strings.Contains(got, "docket context-optimize TKT-001") {
+		t.Fatalf("unexpected context-optimize example: %s", got)
+	}
+	output, ok := contextOptimize["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected output shape for context-optimize, got %#v", contextOptimize["output"])
+	}
+	if output["json"] == nil {
+		t.Fatalf("expected json output shape for context-optimize, got %#v", output)
 	}
 
 	env, ok := manifest["environment"].(map[string]any)

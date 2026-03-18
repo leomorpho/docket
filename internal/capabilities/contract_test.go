@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/leomorpho/docket/internal/artifacts"
@@ -238,6 +239,27 @@ func TestValidateContractBackfillsLegacyNamespaceDefaults(t *testing.T) {
 
 	if err := ValidateContract(contract); err != nil {
 		t.Fatalf("expected legacy defaults to validate, got: %v", err)
+	}
+}
+
+func TestCanonicalContractContextOptimizeCommandMatchesCLI(t *testing.T) {
+	contract := CanonicalContractV1()
+
+	var contextOptimize *Skill
+	for i := range contract.Skills.Inventory {
+		if contract.Skills.Inventory[i].Name == "context-optimize" {
+			contextOptimize = &contract.Skills.Inventory[i]
+			break
+		}
+	}
+	if contextOptimize == nil {
+		t.Fatal("expected context-optimize skill in canonical contract")
+	}
+	if got, want := contextOptimize.Command, "docket context-optimize {ticket_id}"; got != want {
+		t.Fatalf("context-optimize command = %q, want %q", got, want)
+	}
+	if strings.Contains(contextOptimize.Command, "context optimize") {
+		t.Fatalf("context-optimize command should use the hyphenated CLI form, got %q", contextOptimize.Command)
 	}
 }
 
