@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/leomorpho/docket/internal/learning"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +29,7 @@ var (
 	learnCaptureCategory string
 	learnCaptureRule     string
 	learnCaptureSource   string
+	learnReplayLimit     int
 )
 
 var learnListCmd = &cobra.Command{
@@ -179,6 +183,50 @@ var learnCaptureCmd = &cobra.Command{
 	},
 }
 
+var learnReplayCmd = &cobra.Command{
+	Use:   "replay <TKT-NNN>",
+	Short: "Replay top relevant learning rules for a ticket",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := strings.TrimSpace(args[0])
+		if normalized, ok := ticket.NormalizeID(id); ok {
+			id = normalized
+		}
+		tkt, err := local.New(repo).GetTicket(context.Background(), id)
+		if err != nil {
+			return err
+		}
+		if tkt == nil {
+			return fmt.Errorf("ticket %s not found", id)
+		}
+
+		limit := learnReplayLimit
+		if limit <= 0 {
+			limit = 3
+		}
+		replay := buildLearnReplay(repo, tkt, limit)
+		if format == "json" {
+			printJSON(cmd, map[string]any{
+				"ticket_id": tkt.ID,
+				"limit":     limit,
+				"total":     len(replay),
+				"entries":   replay,
+			})
+			return nil
+		}
+		if len(replay) == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "No relevant learn rules for %s.\n", tkt.ID)
+			return nil
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Learn replay for %s (%d of %d):\n", tkt.ID, len(replay), limit)
+		for i, rule := range replay {
+			fmt.Fprintf(cmd.OutOrStdout(), "%d. [%s] %s\n", i+1, rule.Category, rule.Rule)
+			fmt.Fprintf(cmd.OutOrStdout(), "   source: %s\n", displayLearnSource(rule.Source))
+		}
+		return nil
+	},
+}
+
 func loadLearnEntries() ([]learnEntryView, error) {
 	snapshot, err := learning.NewStore(repo, nil).Load()
 	if err != nil {
@@ -267,5 +315,7 @@ func init() {
 	learnCaptureCmd.Flags().StringVar(&learnCaptureRule, "rule", "", "learning rule text")
 	learnCaptureCmd.Flags().StringVar(&learnCaptureSource, "source", "", "source metadata (default: manual:<actor>)")
 	learnCmd.AddCommand(learnCaptureCmd)
+	learnReplayCmd.Flags().IntVar(&learnReplayLimit, "limit", 3, "max number of relevant rules to replay")
+	learnCmd.AddCommand(learnReplayCmd)
 	rootCmd.AddCommand(learnCmd)
 }

@@ -27,15 +27,51 @@ func TestValidateContractRequiresCoreFields(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid hook namespace",
+			mut: func(c *Contract) {
+				c.Hooks.Namespace = "hooks"
+			},
+		},
+		{
+			name: "invalid hook invocation",
+			mut: func(c *Contract) {
+				c.Hooks.Invocation = "agent-invoked"
+			},
+		},
+		{
+			name: "invalid hook execution mode",
+			mut: func(c *Contract) {
+				c.Hooks.Execution = "user-invoked"
+			},
+		},
+		{
 			name: "hook event without name",
 			mut: func(c *Contract) {
 				c.Hooks.Events[0].Name = ""
 			},
 		},
 		{
+			name: "invalid hook event mode",
+			mut: func(c *Contract) {
+				c.Hooks.Events[0].Mode = "unknown"
+			},
+		},
+		{
 			name: "missing skills",
 			mut: func(c *Contract) {
 				c.Skills.Inventory = nil
+			},
+		},
+		{
+			name: "invalid skills namespace",
+			mut: func(c *Contract) {
+				c.Skills.Namespace = "hooks"
+			},
+		},
+		{
+			name: "invalid skills invocation",
+			mut: func(c *Contract) {
+				c.Skills.Invocation = "system-run"
 			},
 		},
 		{
@@ -149,6 +185,48 @@ func TestHashContractDefaultsVersionWhenUnset(t *testing.T) {
 	}
 }
 
+func TestValidateContractBackfillsLegacyNamespaceDefaults(t *testing.T) {
+	contract := validContract()
+	contract.Hooks.Namespace = ""
+	contract.Hooks.Invocation = ""
+	contract.Hooks.Execution = ""
+	contract.Hooks.Events[0].Mode = ""
+	contract.Hooks.Events[0].Blocking = true
+	contract.Hooks.Events[1].Mode = ""
+	contract.Hooks.Events[1].Blocking = false
+	contract.Skills.Namespace = ""
+	contract.Skills.Invocation = ""
+	contract.Skills.Inventory[0].Title = ""
+	contract.Skills.Inventory[0].Summary = ""
+	contract.Skills.Inventory[0].Intent = ""
+	contract.Skills.Inventory[0].Command = ""
+	contract.Skills.Inventory[0].Triggers = nil
+
+	if err := ValidateContract(contract); err != nil {
+		t.Fatalf("expected legacy defaults to validate, got: %v", err)
+	}
+}
+
+func TestWriteRuntimeContractBackfillsSkillMetadataDefaults(t *testing.T) {
+	contract := validContract()
+	contract.Skills.Inventory[0].Title = ""
+	contract.Skills.Inventory[0].Summary = ""
+	contract.Skills.Inventory[0].Intent = ""
+	contract.Skills.Inventory[0].Triggers = nil
+
+	runtime, _, err := WriteRuntimeContract(t.TempDir(), contract)
+	if err != nil {
+		t.Fatalf("WriteRuntimeContract failed: %v", err)
+	}
+	got := runtime.Skills.Inventory[0]
+	if got.Title == "" || got.Summary == "" || got.Intent == "" || got.Command == "" {
+		t.Fatalf("expected skill metadata defaults, got %#v", got)
+	}
+	if len(got.Triggers) == 0 || got.Triggers[0] != "manual" {
+		t.Fatalf("expected default manual trigger, got %#v", got.Triggers)
+	}
+}
+
 func validContract() Contract {
 	return Contract{
 		Version: ContractVersion,
@@ -156,15 +234,36 @@ func validContract() Contract {
 			Phases: []string{"plan", "implement", "verify"},
 		},
 		Hooks: HookCapabilities{
+			Namespace:  HookNamespaceSystem,
+			Invocation: HookInvocationSystem,
+			Execution:  HookExecutionInternal,
 			Events: []HookEvent{
-				{Name: "run_start", Blocking: true},
-				{Name: "state_transition", Blocking: false},
+				{Name: "run_start", Mode: HookModeEnforcement},
+				{Name: "state_transition", Mode: HookModeAdvisory},
 			},
 		},
 		Skills: SkillInventory{
+			Namespace:  SkillNamespaceAgent,
+			Invocation: SkillInvocationAgent,
 			Inventory: []Skill{
-				{Name: "skill-installer", Optional: true},
-				{Name: "skill-creator", Optional: true},
+				{
+					Name:     "ticket-discovery",
+					Title:    "Discover Next Ticket",
+					Summary:  "Find the next actionable ticket and inspect context.",
+					Intent:   "planning",
+					Command:  "docket list --state open --format context",
+					Triggers: []string{"session_start", "resume"},
+					Optional: true,
+				},
+				{
+					Name:     "ticket-authoring-apply",
+					Title:    "Transactional Ticket Authoring",
+					Summary:  "Use scaffold/apply for robust structured authoring.",
+					Intent:   "authoring",
+					Command:  "docket ticket scaffold --format json",
+					Triggers: []string{"automation_mode"},
+					Optional: true,
+				},
 			},
 		},
 		Compatibility: CompatibilityNotes{

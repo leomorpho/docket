@@ -323,3 +323,57 @@ func TestShowCmd_JSONIncludesTransitionHistory(t *testing.T) {
 		t.Fatalf("unexpected transition actor: %#v", first)
 	}
 }
+
+func TestShowCmd_DiscoveryHintShownForHumanButNotJSONOrMD(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Hint fixture",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		Description: "desc",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"show", "TKT-001"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("show human failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Hint: Use `docket start --format json`") {
+		t.Fatalf("expected discovery hint in show human output, got:\n%s", out.String())
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"show", "TKT-001", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("show json failed: %v", err)
+	}
+	if strings.Contains(out.String(), "Hint:") {
+		t.Fatalf("expected no discovery hint in show json output, got:\n%s", out.String())
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"show", "TKT-001", "--format", "md"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("show md failed: %v", err)
+	}
+	if strings.Contains(out.String(), "Hint:") {
+		t.Fatalf("expected no discovery hint in show md output, got:\n%s", out.String())
+	}
+}

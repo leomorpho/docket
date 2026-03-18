@@ -310,12 +310,17 @@ func sampleContract() capabilities.Contract {
 			Phases: []string{"bootstrap", "start", "plan", "implement", "verify"},
 		},
 		Hooks: capabilities.HookCapabilities{
+			Namespace:  capabilities.HookNamespaceSystem,
+			Invocation: capabilities.HookInvocationSystem,
+			Execution:  capabilities.HookExecutionInternal,
 			Events: []capabilities.HookEvent{
-				{Name: "run_start", Blocking: true},
-				{Name: "state_transition", Blocking: false},
+				{Name: "run_start", Mode: capabilities.HookModeEnforcement},
+				{Name: "state_transition", Mode: capabilities.HookModeAdvisory},
 			},
 		},
 		Skills: capabilities.SkillInventory{
+			Namespace:  capabilities.SkillNamespaceAgent,
+			Invocation: capabilities.SkillInvocationAgent,
 			Inventory: []capabilities.Skill{
 				{Name: "skill-installer", Optional: true},
 			},

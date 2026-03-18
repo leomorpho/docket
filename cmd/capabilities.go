@@ -57,20 +57,37 @@ func renderCapabilitiesMarkdown(view capabilitiesView) string {
 		lines = append(lines, fmt.Sprintf("- `%s`", phase))
 	}
 	lines = append(lines, "", "## Hook Events")
+	lines = append(lines,
+		fmt.Sprintf("- Namespace: `%s`", view.Contract.Hooks.Namespace),
+		fmt.Sprintf("- Invocation: `%s`", view.Contract.Hooks.Invocation),
+		fmt.Sprintf("- Execution: `%s`", view.Contract.Hooks.Execution),
+	)
 	for _, event := range view.Contract.Hooks.Events {
-		mode := "non-blocking"
-		if event.Blocking {
-			mode = "blocking"
+		mode := event.Mode
+		if strings.TrimSpace(mode) == "" {
+			mode = capabilities.HookModeAdvisory
+			if event.Blocking {
+				mode = capabilities.HookModeEnforcement
+			}
 		}
 		lines = append(lines, fmt.Sprintf("- `%s` (%s)", event.Name, mode))
 	}
 	lines = append(lines, "", "## Skills")
+	lines = append(lines,
+		fmt.Sprintf("- Namespace: `%s`", view.Contract.Skills.Namespace),
+		fmt.Sprintf("- Invocation: `%s`", view.Contract.Skills.Invocation),
+	)
 	for _, skill := range view.Contract.Skills.Inventory {
 		optional := "required"
 		if skill.Optional {
 			optional = "optional"
 		}
 		lines = append(lines, fmt.Sprintf("- `%s` (%s)", skill.Name, optional))
+		lines = append(lines, fmt.Sprintf("  - Title: %s", skill.Title))
+		lines = append(lines, fmt.Sprintf("  - Intent: %s", skill.Intent))
+		lines = append(lines, fmt.Sprintf("  - Command: %s", skill.Command))
+		lines = append(lines, fmt.Sprintf("  - Triggers: %s", strings.Join(skill.Triggers, ", ")))
+		lines = append(lines, fmt.Sprintf("  - Summary: %s", skill.Summary))
 	}
 	if strings.TrimSpace(view.Contract.Compatibility.UpgradeNotes) != "" {
 		lines = append(lines, "", "## Compatibility", view.Contract.Compatibility.UpgradeNotes)

@@ -14,6 +14,16 @@ import (
 const (
 	ContractVersion            = 1
 	DefaultRuntimeContractPath = ".docket/runtime/capabilities.json"
+
+	SkillNamespaceAgent = "docket.skill"
+	HookNamespaceSystem = "docket.hook"
+
+	SkillInvocationAgent  = "agent-invoked"
+	HookInvocationSystem  = "system-run"
+	HookExecutionInternal = "internal-only"
+
+	HookModeAdvisory    = "advisory"
+	HookModeEnforcement = "enforcement"
 )
 
 var (
@@ -35,21 +45,32 @@ type WorkflowCapabilities struct {
 }
 
 type HookCapabilities struct {
-	Events []HookEvent `json:"events"`
+	Namespace  string      `json:"namespace,omitempty"`
+	Invocation string      `json:"invocation,omitempty"`
+	Execution  string      `json:"execution,omitempty"`
+	Events     []HookEvent `json:"events"`
 }
 
 type HookEvent struct {
 	Name     string `json:"name"`
-	Blocking bool   `json:"blocking"`
+	Mode     string `json:"mode,omitempty"`
+	Blocking bool   `json:"blocking,omitempty"`
 }
 
 type SkillInventory struct {
-	Inventory []Skill `json:"inventory"`
+	Namespace  string  `json:"namespace,omitempty"`
+	Invocation string  `json:"invocation,omitempty"`
+	Inventory  []Skill `json:"inventory"`
 }
 
 type Skill struct {
-	Name     string `json:"name"`
-	Optional bool   `json:"optional"`
+	Name     string   `json:"name"`
+	Title    string   `json:"title,omitempty"`
+	Summary  string   `json:"summary,omitempty"`
+	Intent   string   `json:"intent,omitempty"`
+	Command  string   `json:"command,omitempty"`
+	Triggers []string `json:"triggers,omitempty"`
+	Optional bool     `json:"optional"`
 }
 
 // CompatibilityNotes documents versioning and upgrade constraints for future schema evolution.
@@ -80,6 +101,15 @@ func ValidateContract(contract Contract) error {
 			return fmt.Errorf("%w: workflow.phases[%d] cannot be empty", ErrInvalidContract, i)
 		}
 	}
+	if normalized.Hooks.Namespace != HookNamespaceSystem {
+		return fmt.Errorf("%w: hooks.namespace must be %q", ErrInvalidContract, HookNamespaceSystem)
+	}
+	if normalized.Hooks.Invocation != HookInvocationSystem {
+		return fmt.Errorf("%w: hooks.invocation must be %q", ErrInvalidContract, HookInvocationSystem)
+	}
+	if normalized.Hooks.Execution != HookExecutionInternal {
+		return fmt.Errorf("%w: hooks.execution must be %q", ErrInvalidContract, HookExecutionInternal)
+	}
 	if len(normalized.Hooks.Events) == 0 {
 		return fmt.Errorf("%w: hooks.events is required", ErrInvalidContract)
 	}
@@ -87,6 +117,17 @@ func ValidateContract(contract Contract) error {
 		if strings.TrimSpace(event.Name) == "" {
 			return fmt.Errorf("%w: hooks.events[%d].name is required", ErrInvalidContract, i)
 		}
+		switch event.Mode {
+		case HookModeAdvisory, HookModeEnforcement:
+		default:
+			return fmt.Errorf("%w: hooks.events[%d].mode must be %q or %q", ErrInvalidContract, i, HookModeAdvisory, HookModeEnforcement)
+		}
+	}
+	if normalized.Skills.Namespace != SkillNamespaceAgent {
+		return fmt.Errorf("%w: skills.namespace must be %q", ErrInvalidContract, SkillNamespaceAgent)
+	}
+	if normalized.Skills.Invocation != SkillInvocationAgent {
+		return fmt.Errorf("%w: skills.invocation must be %q", ErrInvalidContract, SkillInvocationAgent)
 	}
 	if len(normalized.Skills.Inventory) == 0 {
 		return fmt.Errorf("%w: skills.inventory is required", ErrInvalidContract)
@@ -94,6 +135,21 @@ func ValidateContract(contract Contract) error {
 	for i, skill := range normalized.Skills.Inventory {
 		if strings.TrimSpace(skill.Name) == "" {
 			return fmt.Errorf("%w: skills.inventory[%d].name is required", ErrInvalidContract, i)
+		}
+		if strings.TrimSpace(skill.Title) == "" {
+			return fmt.Errorf("%w: skills.inventory[%d].title is required", ErrInvalidContract, i)
+		}
+		if strings.TrimSpace(skill.Summary) == "" {
+			return fmt.Errorf("%w: skills.inventory[%d].summary is required", ErrInvalidContract, i)
+		}
+		if strings.TrimSpace(skill.Intent) == "" {
+			return fmt.Errorf("%w: skills.inventory[%d].intent is required", ErrInvalidContract, i)
+		}
+		if strings.TrimSpace(skill.Command) == "" {
+			return fmt.Errorf("%w: skills.inventory[%d].command is required", ErrInvalidContract, i)
+		}
+		if len(skill.Triggers) == 0 {
+			return fmt.Errorf("%w: skills.inventory[%d].triggers is required", ErrInvalidContract, i)
 		}
 	}
 	if strings.TrimSpace(normalized.Compatibility.UpgradeNotes) == "" {
@@ -190,6 +246,70 @@ func normalize(contract Contract) (Contract, error) {
 	}
 	if c.Version != ContractVersion {
 		return Contract{}, fmt.Errorf("%w: unsupported version %d", ErrInvalidContract, c.Version)
+	}
+	if strings.TrimSpace(c.Hooks.Namespace) == "" {
+		c.Hooks.Namespace = HookNamespaceSystem
+	}
+	if strings.TrimSpace(c.Hooks.Invocation) == "" {
+		c.Hooks.Invocation = HookInvocationSystem
+	}
+	if strings.TrimSpace(c.Hooks.Execution) == "" {
+		c.Hooks.Execution = HookExecutionInternal
+	}
+	for i := range c.Hooks.Events {
+		mode := strings.TrimSpace(strings.ToLower(c.Hooks.Events[i].Mode))
+		switch mode {
+		case "":
+			if c.Hooks.Events[i].Blocking {
+				mode = HookModeEnforcement
+			} else {
+				mode = HookModeAdvisory
+			}
+		case HookModeAdvisory, HookModeEnforcement:
+		default:
+			return Contract{}, fmt.Errorf("%w: hooks.events[%d].mode must be %q or %q", ErrInvalidContract, i, HookModeAdvisory, HookModeEnforcement)
+		}
+		c.Hooks.Events[i].Mode = mode
+		c.Hooks.Events[i].Blocking = mode == HookModeEnforcement
+	}
+	if strings.TrimSpace(c.Skills.Namespace) == "" {
+		c.Skills.Namespace = SkillNamespaceAgent
+	}
+	if strings.TrimSpace(c.Skills.Invocation) == "" {
+		c.Skills.Invocation = SkillInvocationAgent
+	}
+	for i := range c.Skills.Inventory {
+		id := strings.TrimSpace(c.Skills.Inventory[i].Name)
+		if strings.TrimSpace(c.Skills.Inventory[i].Title) == "" {
+			c.Skills.Inventory[i].Title = id
+		}
+		if strings.TrimSpace(c.Skills.Inventory[i].Summary) == "" {
+			c.Skills.Inventory[i].Summary = fmt.Sprintf("Use `%s` when the task matches this capability.", id)
+		}
+		if strings.TrimSpace(c.Skills.Inventory[i].Intent) == "" {
+			c.Skills.Inventory[i].Intent = "on-demand"
+		}
+		if strings.TrimSpace(c.Skills.Inventory[i].Command) == "" {
+			c.Skills.Inventory[i].Command = fmt.Sprintf("docket skill show %s", id)
+		}
+		seen := map[string]struct{}{}
+		triggers := make([]string, 0, len(c.Skills.Inventory[i].Triggers))
+		for _, raw := range c.Skills.Inventory[i].Triggers {
+			item := strings.TrimSpace(raw)
+			if item == "" {
+				continue
+			}
+			key := strings.ToLower(item)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			triggers = append(triggers, item)
+		}
+		if len(triggers) == 0 {
+			triggers = []string{"manual"}
+		}
+		c.Skills.Inventory[i].Triggers = triggers
 	}
 	return c, nil
 }

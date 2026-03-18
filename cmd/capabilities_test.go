@@ -68,6 +68,28 @@ func TestCapabilitiesCommandJSONIncludesContractAndAdapterMetadata(t *testing.T)
 	if len(workflowObj["phases"].([]any)) == 0 {
 		t.Fatalf("expected workflow phases in output, got %#v", workflowObj)
 	}
+	hooksObj := contractObj["hooks"].(map[string]any)
+	if hooksObj["namespace"] != capabilities.HookNamespaceSystem {
+		t.Fatalf("expected hooks namespace %q, got %v", capabilities.HookNamespaceSystem, hooksObj["namespace"])
+	}
+	if hooksObj["invocation"] != capabilities.HookInvocationSystem {
+		t.Fatalf("expected hooks invocation %q, got %v", capabilities.HookInvocationSystem, hooksObj["invocation"])
+	}
+	skillsObj := contractObj["skills"].(map[string]any)
+	if skillsObj["namespace"] != capabilities.SkillNamespaceAgent {
+		t.Fatalf("expected skills namespace %q, got %v", capabilities.SkillNamespaceAgent, skillsObj["namespace"])
+	}
+	if skillsObj["invocation"] != capabilities.SkillInvocationAgent {
+		t.Fatalf("expected skills invocation %q, got %v", capabilities.SkillInvocationAgent, skillsObj["invocation"])
+	}
+	inv := skillsObj["inventory"].([]any)
+	if len(inv) == 0 {
+		t.Fatalf("expected skills inventory in contract output")
+	}
+	firstSkill := inv[0].(map[string]any)
+	if firstSkill["title"] == nil || firstSkill["summary"] == nil || firstSkill["intent"] == nil || firstSkill["command"] == nil || firstSkill["triggers"] == nil {
+		t.Fatalf("expected first-class skill metadata fields in output, got %#v", firstSkill)
+	}
 }
 
 func TestCapabilitiesCommandIntegrationContractValidationAndSnapshots(t *testing.T) {
@@ -99,6 +121,15 @@ func TestCapabilitiesCommandIntegrationContractValidationAndSnapshots(t *testing
 	md := mdOut.String()
 	if !strings.Contains(md, "# Docket Capabilities") || !strings.Contains(md, "## Workflow Phases") {
 		t.Fatalf("unexpected markdown output: %s", md)
+	}
+	if !strings.Contains(md, "Namespace: `"+capabilities.HookNamespaceSystem+"`") {
+		t.Fatalf("expected markdown to render hook namespace, got: %s", md)
+	}
+	if !strings.Contains(md, "Invocation: `"+capabilities.SkillInvocationAgent+"`") {
+		t.Fatalf("expected markdown to render skill invocation, got: %s", md)
+	}
+	if !strings.Contains(md, "Title:") || !strings.Contains(md, "Command:") || !strings.Contains(md, "Triggers:") || !strings.Contains(md, "Summary:") {
+		t.Fatalf("expected markdown to render first-class skill metadata, got: %s", md)
 	}
 
 	var jsonOut bytes.Buffer

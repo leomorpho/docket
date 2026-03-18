@@ -1351,43 +1351,43 @@
     },
     "TKT-253": {
       "title": "Define Docket skill and hook capability namespaces",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-254": {
       "title": "Add docket skill commands for capability discovery and invocation",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-255": {
       "title": "Add docket hook commands for hook introspection and status",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-256": {
       "title": "Expose Docket skills through MCP",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-257": {
       "title": "Expose Docket hook metadata and status through MCP",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-258": {
       "title": "Expose Docket capability discovery through MCP",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-259": {
       "title": "Add MCP tests for skill, hook, and capability discovery flows",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1399,13 +1399,13 @@
     },
     "TKT-261": {
       "title": "Add Docket discovery hints to common entry commands",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-262": {
       "title": "Document intro reminder behavior in CLI code comments",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 3,
       "parent": "TKT-177"
     },
@@ -1429,7 +1429,7 @@
     },
     "TKT-266": {
       "title": "Add an explicit learning replay command for the current ticket",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-177"
     },
@@ -1447,7 +1447,7 @@
     },
     "TKT-269": {
       "title": "Add a wrap-up command for end-of-session workflow checks",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-177"
     },
@@ -1513,7 +1513,7 @@
     },
     "TKT-280": {
       "title": "Add first-class skill definitions and metadata for Docket capability surfaces",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-209"
     },

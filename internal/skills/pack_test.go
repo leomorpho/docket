@@ -13,8 +13,23 @@ func TestBuildPackValidationAndRendererConsistency(t *testing.T) {
 		Hash:    "hash-123",
 		Skills: capabilities.SkillInventory{
 			Inventory: []capabilities.Skill{
-				{Name: "skill-installer", Optional: true},
-				{Name: "skill-creator", Optional: false},
+				{
+					Name:     "ticket-discovery",
+					Title:    "Discover Next Ticket",
+					Summary:  "Find the next actionable ticket and inspect context.",
+					Intent:   "planning",
+					Command:  "docket list --state open --format context",
+					Triggers: []string{"session_start", "resume"},
+					Optional: true,
+				},
+				{
+					Name:     "ticket-authoring-apply",
+					Title:    "Transactional Ticket Authoring",
+					Summary:  "Use scaffold/apply for robust structured authoring.",
+					Intent:   "authoring",
+					Command:  "docket ticket scaffold --format json",
+					Triggers: []string{"automation_mode"},
+				},
 			},
 		},
 	}
@@ -37,6 +52,15 @@ func TestBuildPackValidationAndRendererConsistency(t *testing.T) {
 		if !strings.Contains(rendered.Content, "docket.skill.ids:") {
 			t.Fatalf("%s output missing machine-readable skill ids marker", adapter)
 		}
+		if !strings.Contains(rendered.Content, "docket.skill.metadata.checksum:") {
+			t.Fatalf("%s output missing metadata checksum marker", adapter)
+		}
+		if rendered.MetadataChecksum != pack.MetadataChecksum {
+			t.Fatalf("%s metadata checksum mismatch: rendered=%s pack=%s", adapter, rendered.MetadataChecksum, pack.MetadataChecksum)
+		}
+		if got := ExtractSkillMetadataChecksum(rendered.Content); got != pack.MetadataChecksum {
+			t.Fatalf("%s extracted metadata checksum mismatch: got=%s want=%s", adapter, got, pack.MetadataChecksum)
+		}
 		gotIDs := ExtractSkillIDs(rendered.Content)
 		mapping := BuildMappingReport(contractIDs, gotIDs)
 		if !mapping.InSync {
@@ -54,9 +78,9 @@ func TestBuildPackRejectsInvalidMetadata(t *testing.T) {
 		Hash:    "hash-duplicate",
 		Skills: capabilities.SkillInventory{
 			Inventory: []capabilities.Skill{
-				{Name: "skill-installer", Optional: true},
-				{Name: "skill-installer", Optional: true},
-				{Name: "", Optional: false},
+				{Name: "ticket-discovery", Title: "Discover", Summary: "Discover", Intent: "planning", Command: "docket list", Triggers: []string{"manual"}, Optional: true},
+				{Name: "ticket-discovery", Title: "Discover", Summary: "Discover", Intent: "planning", Command: "docket list", Triggers: []string{"manual"}, Optional: true},
+				{Name: "", Title: "Missing", Summary: "Missing", Intent: "planning", Command: "docket help-json", Triggers: []string{"manual"}, Optional: false},
 			},
 		},
 	}

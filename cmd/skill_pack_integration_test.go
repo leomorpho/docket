@@ -65,6 +65,14 @@ func TestBootstrapAdapterSkillIDsAlignWithCanonicalContract(t *testing.T) {
 			if !mapping.InSync {
 				t.Fatalf("expected contract skill IDs to match installed artifact for %s, got %+v", fixture.adapterID, mapping)
 			}
+			pack, report := skills.BuildPack(runtime)
+			if !report.Valid() {
+				t.Fatalf("expected canonical skill metadata to build pack, got %+v", report.Errors)
+			}
+			gotMetadataChecksum := skills.ExtractSkillMetadataChecksum(string(content))
+			if gotMetadataChecksum != pack.MetadataChecksum {
+				t.Fatalf("expected metadata checksum %s for %s artifact, got %s", pack.MetadataChecksum, fixture.adapterID, gotMetadataChecksum)
+			}
 
 			reportData, err := json.MarshalIndent(mapping, "", "  ")
 			if err != nil {

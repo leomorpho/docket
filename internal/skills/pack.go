@@ -18,15 +18,21 @@ const (
 )
 
 type SkillMeta struct {
-	ID          string `json:"id"`
-	Optional    bool   `json:"optional"`
-	Instruction string `json:"instruction"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Summary     string   `json:"summary"`
+	Intent      string   `json:"intent"`
+	Command     string   `json:"command"`
+	Triggers    []string `json:"triggers"`
+	Optional    bool     `json:"optional"`
+	Instruction string   `json:"instruction"`
 }
 
 type Pack struct {
-	Version      string      `json:"version"`
-	ContractHash string      `json:"contract_hash"`
-	Skills       []SkillMeta `json:"skills"`
+	Version          string      `json:"version"`
+	ContractHash     string      `json:"contract_hash"`
+	MetadataChecksum string      `json:"metadata_checksum"`
+	Skills           []SkillMeta `json:"skills"`
 }
 
 type ValidationError struct {
@@ -44,10 +50,11 @@ func (r ValidationReport) Valid() bool {
 }
 
 type RenderedArtifact struct {
-	AdapterID string   `json:"adapter_id"`
-	Content   string   `json:"content"`
-	SkillIDs  []string `json:"skill_ids"`
-	Checksum  string   `json:"checksum"`
+	AdapterID        string   `json:"adapter_id"`
+	Content          string   `json:"content"`
+	SkillIDs         []string `json:"skill_ids"`
+	Checksum         string   `json:"checksum"`
+	MetadataChecksum string   `json:"metadata_checksum"`
 }
 
 type MappingReport struct {
@@ -98,12 +105,43 @@ func BuildPack(contract capabilities.RuntimeContract) (Pack, ValidationReport) {
 			continue
 		}
 		seen[key] = i
+		title := strings.TrimSpace(skill.Title)
+		if title == "" {
+			v.add(fmt.Sprintf("skills.inventory[%d].title", i), CodeRequired, "skill title is required")
+			continue
+		}
+		summary := strings.TrimSpace(skill.Summary)
+		if summary == "" {
+			v.add(fmt.Sprintf("skills.inventory[%d].summary", i), CodeRequired, "skill summary is required")
+			continue
+		}
+		intent := strings.TrimSpace(skill.Intent)
+		if intent == "" {
+			v.add(fmt.Sprintf("skills.inventory[%d].intent", i), CodeRequired, "skill intent is required")
+			continue
+		}
+		command := strings.TrimSpace(skill.Command)
+		if command == "" {
+			v.add(fmt.Sprintf("skills.inventory[%d].command", i), CodeRequired, "skill command is required")
+			continue
+		}
+		triggers := normalizeIDs(skill.Triggers)
+		if len(triggers) == 0 {
+			v.add(fmt.Sprintf("skills.inventory[%d].triggers", i), CodeRequired, "skill triggers are required")
+			continue
+		}
 		pack.Skills = append(pack.Skills, SkillMeta{
 			ID:          id,
+			Title:       title,
+			Summary:     summary,
+			Intent:      intent,
+			Command:     command,
+			Triggers:    append([]string{}, triggers...),
 			Optional:    skill.Optional,
-			Instruction: fmt.Sprintf("Use `%s` when the task matches this capability.", id),
+			Instruction: summary,
 		})
 	}
+	pack.MetadataChecksum = MetadataChecksum(pack.Skills)
 	return pack, ValidationReport{Errors: v.sortedErrors()}
 }
 
@@ -142,6 +180,7 @@ func Render(adapterID string, pack Pack) (RenderedArtifact, error) {
 		"",
 		fmt.Sprintf("<!-- docket.skill.pack.version: %s -->", pack.Version),
 		fmt.Sprintf("<!-- docket.contract.hash: %s -->", pack.ContractHash),
+		fmt.Sprintf("<!-- docket.skill.metadata.checksum: %s -->", pack.MetadataChecksum),
 	}
 	for _, s := range pack.Skills {
 		skillIDs = append(skillIDs, s.ID)
@@ -153,14 +192,20 @@ func Render(adapterID string, pack Pack) (RenderedArtifact, error) {
 		if s.Optional {
 			kind = "optional"
 		}
-		lines = append(lines, fmt.Sprintf("- `%s` (%s): %s", s.ID, kind, s.Instruction))
+		lines = append(lines, fmt.Sprintf("- `%s` (%s)", s.ID, kind))
+		lines = append(lines, fmt.Sprintf("  - title: %s", s.Title))
+		lines = append(lines, fmt.Sprintf("  - intent: %s", s.Intent))
+		lines = append(lines, fmt.Sprintf("  - command: %s", s.Command))
+		lines = append(lines, fmt.Sprintf("  - triggers: %s", strings.Join(s.Triggers, ", ")))
+		lines = append(lines, fmt.Sprintf("  - summary: %s", s.Summary))
 	}
 	content := strings.Join(lines, "\n") + "\n"
 	return RenderedArtifact{
-		AdapterID: id,
-		Content:   content,
-		SkillIDs:  skillIDs,
-		Checksum:  IDsChecksum(skillIDs),
+		AdapterID:        id,
+		Content:          content,
+		SkillIDs:         skillIDs,
+		Checksum:         IDsChecksum(skillIDs),
+		MetadataChecksum: pack.MetadataChecksum,
 	}, nil
 }
 
@@ -189,6 +234,20 @@ func ExtractSkillIDs(content string) []string {
 		return out
 	}
 	return nil
+}
+
+func ExtractSkillMetadataChecksum(content string) string {
+	const marker = "<!-- docket.skill.metadata.checksum:"
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, marker) {
+			continue
+		}
+		body := strings.TrimPrefix(line, marker)
+		body = strings.TrimSuffix(strings.TrimSpace(body), "-->")
+		return strings.TrimSpace(body)
+	}
+	return ""
 }
 
 func BuildMappingReport(contractIDs, renderedIDs []string) MappingReport {
@@ -223,6 +282,24 @@ func BuildMappingReport(contractIDs, renderedIDs []string) MappingReport {
 
 func IDsChecksum(ids []string) string {
 	sum := sha256.Sum256([]byte(strings.Join(normalizeIDs(ids), ",")))
+	return hex.EncodeToString(sum[:])
+}
+
+func MetadataChecksum(skills []SkillMeta) string {
+	rows := make([]string, 0, len(skills))
+	for _, skill := range skills {
+		triggers := normalizeIDs(skill.Triggers)
+		rows = append(rows, strings.Join([]string{
+			strings.TrimSpace(skill.ID),
+			strings.TrimSpace(skill.Title),
+			strings.TrimSpace(skill.Summary),
+			strings.TrimSpace(skill.Intent),
+			strings.TrimSpace(skill.Command),
+			strings.Join(triggers, ","),
+			fmt.Sprintf("%t", skill.Optional),
+		}, "|"))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(rows, "\n")))
 	return hex.EncodeToString(sum[:])
 }
 

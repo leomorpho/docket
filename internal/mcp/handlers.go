@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leomorpho/docket/internal/adapters"
+	"github.com/leomorpho/docket/internal/capabilities"
+	"github.com/leomorpho/docket/internal/skills"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -55,6 +58,20 @@ func Dispatch(action string, args map[string]interface{}, deps *DispatchDeps) (i
 		return handleUpdate(ctx, deps.Store, deps.Workflow, cfg, args, deps.RepoRoot)
 	case "comment":
 		return handleComment(ctx, deps.Store, args)
+	case "capabilities":
+		return handleCapabilities(deps.RepoRoot)
+	case "skill.list":
+		return handleSkillList(deps.RepoRoot)
+	case "skill.show":
+		return handleSkillShow(deps.RepoRoot, args)
+	case "skill.invoke":
+		return handleSkillInvoke(ctx, deps.RepoRoot, deps.Store, args)
+	case "hook.list":
+		return handleHookList(deps.RepoRoot)
+	case "hook.show":
+		return handleHookShow(deps.RepoRoot, args)
+	case "hook.status":
+		return handleHookStatus(deps.RepoRoot)
 	case "check":
 		// Return human/check command users can call through CLI for now.
 		return map[string]interface{}{"message": "use CLI for full check output"}, nil
@@ -281,6 +298,374 @@ func handleComment(ctx context.Context, s store.Backend, args map[string]interfa
 		return nil, err
 	}
 	return map[string]interface{}{"ticket_id": id, "at": c.At.Format(time.RFC3339)}, nil
+}
+
+func handleCapabilities(repoRoot string) (interface{}, error) {
+	runtime, _, err := capabilities.EnsureRuntimeContract(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	resolution := adapters.DefaultRegistry().ResolveWithInfo(repoRoot, "")
+	pack, report := skills.BuildPack(runtime)
+	if !report.Valid() {
+		return nil, fmt.Errorf("invalid skill metadata in runtime contract: %#v", report.Errors)
+	}
+	capabilityDigest := buildCapabilityDigestView(repoRoot, resolution.Adapter.Metadata().ID)
+	return map[string]interface{}{
+		"adapter": map[string]any{
+			"id":           resolution.Adapter.Metadata().ID,
+			"display_name": resolution.Adapter.Metadata().DisplayName,
+			"source":       resolution.Source,
+		},
+		"contract":                runtime,
+		"skill_metadata_checksum": pack.MetadataChecksum,
+		"agent_quickstart":        buildAgentQuickstartView(),
+		"llm_quick_path":          buildQuickPathView(),
+		"capability_digest":       capabilityDigest,
+	}, nil
+}
+
+type mcpSkillEntry struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	Summary  string   `json:"summary"`
+	Intent   string   `json:"intent"`
+	Command  string   `json:"command"`
+	Triggers []string `json:"triggers"`
+	Optional bool     `json:"optional"`
+}
+
+func loadSkillCatalog(repoRoot string) ([]mcpSkillEntry, string, error) {
+	runtime, _, err := capabilities.EnsureRuntimeContract(repoRoot)
+	if err != nil {
+		return nil, "", err
+	}
+	pack, report := skills.BuildPack(runtime)
+	if !report.Valid() {
+		return nil, "", fmt.Errorf("invalid skill metadata in runtime contract: %#v", report.Errors)
+	}
+	out := make([]mcpSkillEntry, 0, len(pack.Skills))
+	for _, meta := range pack.Skills {
+		out = append(out, mcpSkillEntry{
+			ID:       meta.ID,
+			Title:    meta.Title,
+			Summary:  meta.Summary,
+			Intent:   meta.Intent,
+			Command:  meta.Command,
+			Triggers: append([]string{}, meta.Triggers...),
+			Optional: meta.Optional,
+		})
+	}
+	return out, pack.MetadataChecksum, nil
+}
+
+func handleSkillList(repoRoot string) (interface{}, error) {
+	items, checksum, err := loadSkillCatalog(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"total":             len(items),
+		"metadata_checksum": checksum,
+		"skills":            items,
+	}, nil
+}
+
+func handleSkillShow(repoRoot string, args map[string]interface{}) (interface{}, error) {
+	id, ok := getString(args, "id")
+	if !ok || strings.TrimSpace(id) == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	items, checksum, err := loadSkillCatalog(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	target := strings.ToLower(strings.TrimSpace(id))
+	for _, item := range items {
+		if strings.ToLower(item.ID) == target {
+			return map[string]interface{}{
+				"skill":             item,
+				"metadata_checksum": checksum,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("skill %s not found", strings.TrimSpace(id))
+}
+
+func handleSkillInvoke(ctx context.Context, repoRoot string, s store.Backend, args map[string]interface{}) (interface{}, error) {
+	id, ok := getString(args, "id")
+	if !ok || strings.TrimSpace(id) == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+	items, _, err := loadSkillCatalog(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	target := strings.ToLower(strings.TrimSpace(id))
+	ticketID := strings.TrimSpace(getStringOr(args, "ticket_id", ""))
+	if normalized, ok := ticket.NormalizeID(ticketID); ok {
+		ticketID = normalized
+	}
+	for _, item := range items {
+		if strings.ToLower(item.ID) != target {
+			continue
+		}
+		command, err := resolveSkillInvokeCommand(item.Command, ticketID)
+		if err != nil {
+			return nil, err
+		}
+		if ticketID != "" {
+			t, err := s.GetTicket(ctx, ticketID)
+			if err != nil {
+				return nil, err
+			}
+			if t == nil {
+				return nil, fmt.Errorf("ticket %s not found", ticketID)
+			}
+		}
+		return map[string]interface{}{
+			"skill_id":  item.ID,
+			"ticket_id": ticketID,
+			"command":   command,
+			"intent":    item.Intent,
+			"summary":   item.Summary,
+		}, nil
+	}
+	return nil, fmt.Errorf("skill %s not found", strings.TrimSpace(id))
+}
+
+func resolveSkillInvokeCommand(template, ticketID string) (string, error) {
+	command := strings.TrimSpace(template)
+	if command == "" {
+		return "", fmt.Errorf("skill command template is empty")
+	}
+	if strings.Contains(command, "{ticket_id}") {
+		if strings.TrimSpace(ticketID) == "" {
+			return "", fmt.Errorf("this skill requires ticket_id")
+		}
+		command = strings.ReplaceAll(command, "{ticket_id}", ticketID)
+	}
+	return command, nil
+}
+
+type mcpHookEventEntry struct {
+	Name     string `json:"name"`
+	Mode     string `json:"mode"`
+	Blocking bool   `json:"blocking"`
+}
+
+type mcpHookStatusView struct {
+	Namespace  string              `json:"namespace"`
+	Invocation string              `json:"invocation"`
+	Execution  string              `json:"execution"`
+	Ready      bool                `json:"ready"`
+	Readiness  string              `json:"readiness"`
+	Events     []mcpHookEventEntry `json:"events"`
+}
+
+func handleHookList(repoRoot string) (interface{}, error) {
+	status, err := loadHookStatus(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"total":      len(status.Events),
+		"events":     status.Events,
+		"namespace":  status.Namespace,
+		"invocation": status.Invocation,
+		"execution":  status.Execution,
+		"ready":      status.Ready,
+		"readiness":  status.Readiness,
+	}, nil
+}
+
+func handleHookShow(repoRoot string, args map[string]interface{}) (interface{}, error) {
+	id := strings.TrimSpace(getStringOr(args, "id", ""))
+	if id == "" {
+		id = strings.TrimSpace(getStringOr(args, "event", ""))
+	}
+	if id == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	status, err := loadHookStatus(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	target := strings.ToLower(id)
+	for _, event := range status.Events {
+		if strings.ToLower(event.Name) != target {
+			continue
+		}
+		return map[string]interface{}{
+			"event":      event,
+			"namespace":  status.Namespace,
+			"invocation": status.Invocation,
+			"execution":  status.Execution,
+			"ready":      status.Ready,
+			"readiness":  status.Readiness,
+		}, nil
+	}
+	return nil, fmt.Errorf("hook event %s not found", id)
+}
+
+func handleHookStatus(repoRoot string) (interface{}, error) {
+	status, err := loadHookStatus(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return status, nil
+}
+
+func loadHookStatus(repoRoot string) (mcpHookStatusView, error) {
+	runtime, _, err := capabilities.EnsureRuntimeContract(repoRoot)
+	if err != nil {
+		return mcpHookStatusView{}, err
+	}
+	events := make([]mcpHookEventEntry, 0, len(runtime.Hooks.Events))
+	for _, event := range runtime.Hooks.Events {
+		events = append(events, mcpHookEventEntry{
+			Name:     event.Name,
+			Mode:     event.Mode,
+			Blocking: event.Blocking,
+		})
+	}
+
+	ready := isHookInstalled(repoRoot)
+	readiness := "needs-setup"
+	if ready {
+		readiness = "ready"
+	}
+	return mcpHookStatusView{
+		Namespace:  runtime.Hooks.Namespace,
+		Invocation: runtime.Hooks.Invocation,
+		Execution:  runtime.Hooks.Execution,
+		Ready:      ready,
+		Readiness:  readiness,
+		Events:     events,
+	}, nil
+}
+
+func isHookInstalled(repoRoot string) bool {
+	path := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
+
+type capabilityDigestReadinessView struct {
+	MCP    string `json:"mcp"`
+	Skills string `json:"skills"`
+	Hooks  string `json:"hooks"`
+}
+
+type capabilityDigestView struct {
+	Adapter     string                        `json:"adapter"`
+	FlowPhases  []string                      `json:"flow_phases"`
+	Readiness   capabilityDigestReadinessView `json:"readiness"`
+	Remediation string                        `json:"remediation,omitempty"`
+}
+
+func buildCapabilityDigestView(repoRoot, adapterID string) capabilityDigestView {
+	if strings.TrimSpace(adapterID) == "" {
+		adapterID = "unknown"
+	}
+	mcpReady := isMCPConfigured(repoRoot)
+	skillsReady := isSkillGuidanceInstalled(repoRoot, adapterID)
+	hooksReady := isHookInstalled(repoRoot)
+	out := capabilityDigestView{
+		Adapter:    adapterID,
+		FlowPhases: []string{"bootstrap", "start", "plan", "implement", "verify"},
+		Readiness: capabilityDigestReadinessView{
+			MCP:    readinessLabel(mcpReady),
+			Skills: readinessLabel(skillsReady),
+			Hooks:  readinessLabel(hooksReady),
+		},
+	}
+	if !(mcpReady && skillsReady && hooksReady) {
+		out.Remediation = "Run `docket bootstrap` to install or repair integration artifacts."
+	}
+	return out
+}
+
+func readinessLabel(ok bool) string {
+	if ok {
+		return "ready"
+	}
+	return "needs-setup"
+}
+
+func isMCPConfigured(repoRoot string) bool {
+	if fileExists(filepath.Join(repoRoot, "doombox.json")) {
+		return true
+	}
+	if fileContains(filepath.Join(repoRoot, ".vscode", "settings.json"), "docket") {
+		return true
+	}
+	if fileContains(filepath.Join(repoRoot, ".cursor", "mcp.json"), "docket") {
+		return true
+	}
+	return false
+}
+
+func isSkillGuidanceInstalled(repoRoot, adapterID string) bool {
+	switch adapterID {
+	case "codex":
+		return fileExists(filepath.Join(repoRoot, "AGENTS.md"))
+	case "claude-code":
+		return fileExists(filepath.Join(repoRoot, "CLAUDE.md"))
+	case "gemini":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		return fileExists(filepath.Join(home, ".gemini", "skills", "docket", "SKILL.md"))
+	default:
+		return false
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func fileContains(path, needle string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), needle)
+}
+
+func buildAgentQuickstartView() map[string]any {
+	return map[string]any{
+		"direct_edit_avoidance": "Never edit .docket/tickets/*.md directly; use `docket` commands so ticket signatures and metadata remain valid.",
+		"core_workflow": []string{
+			"docket list --state open --format context",
+			"docket show TKT-NNN --format context",
+			"docket update TKT-NNN --state in-progress",
+			"docket ac check TKT-NNN",
+		},
+		"capability_discovery": []string{
+			"docket capabilities --format json",
+			"docket doctor --format json",
+			"docket help-json",
+		},
+	}
+}
+
+func buildQuickPathView() map[string]any {
+	return map[string]any{
+		"preference":      "Prefer transactional scaffold/apply commands over multi-step manual create/update flows.",
+		"ticket_apply":    "docket ticket scaffold > ticket-spec.json && docket --automation ticket apply --spec ticket-spec.json",
+		"backlog_apply":   "docket backlog scaffold > backlog-spec.json && docket --automation backlog apply --spec backlog-spec.json",
+		"proof_attach":    "docket proof add TKT-NNN --file artifacts/screenshot.png --proof-title \"Before fix\" --note \"What this screenshot proves\" --captured-at 2026-03-16T18:40:00Z --format json",
+		"proof_verify":    "docket proof list TKT-NNN --format json && docket show TKT-NNN --format json",
+		"automation_hint": "Use --automation (or DOCKET_AUTOMATION=1) for deterministic non-interactive execution.",
+	}
 }
 
 func getString(m map[string]interface{}, key string) (string, bool) {

@@ -84,3 +84,41 @@ func TestListCmd(t *testing.T) {
 		t.Errorf("expected 2 open tickets in JSON, got: %d", len(res))
 	}
 }
+
+func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Hint fixture", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create ticket failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list human failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Hint: Use `docket start --format json`") {
+		t.Fatalf("expected discovery hint in human list output, got:\n%s", out.String())
+	}
+
+	out.Reset()
+	rootCmd.SetArgs([]string{"list", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list json failed: %v", err)
+	}
+	if strings.Contains(out.String(), "Hint:") {
+		t.Fatalf("expected no discovery hint in list json output, got:\n%s", out.String())
+	}
+}

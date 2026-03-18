@@ -28,6 +28,12 @@ If secure mode is inactive, privileged commands fail with `secure mode is inacti
 
 ## Hook Events
 
+Runtime contract namespace and invocation model:
+
+- Hook namespace: `docket.hook`
+- Hook invocation: `system-run`
+- Hook execution: `internal-only` (discoverable, but not a general user-invoked command surface)
+
 Docket now exposes internal lifecycle hook points with two modes:
 
 - `advisory`: emits warnings/messages but does not block.
@@ -45,3 +51,21 @@ Current core enforcement hooks:
 - Dedicated worktree enforcement for managed runs (`run.start`, `ticket.review`).
 - Commit-linkage enforcement for managed review transitions (`ticket.review`).
 - Privileged authorization enforcement (`ticket.privileged`).
+
+## Skills
+
+Runtime contract namespace and invocation model:
+
+- Skill namespace: `docket.skill`
+- Skill invocation: `agent-invoked`
+
+Skills are agent-facing discovery and invocation surfaces; hooks remain system-run lifecycle controls.
+
+Each skill definition in the runtime contract now carries first-class metadata:
+
+- `name`: stable machine ID used across adapters and artifacts
+- `title`: concise human-facing capability label
+- `summary`: what the capability does
+- `intent`: expected usage mode (for example `planning`, `authoring`, `review`)
+- `command`: canonical CLI invocation template (may include placeholders like `{ticket_id}`)
+- `triggers`: discovery hints for when an agent should consider using the capability

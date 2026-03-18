@@ -65,10 +65,15 @@ func TestHelpJSONCommand(t *testing.T) {
 		names[m["name"].(string)] = true
 	}
 
-	required := []string{"create", "list", "show", "update", "comment", "board", "blame", "scan", "refs", "context", "session", "ac", "check", "help-json", "install", "upgrade"}
+	required := []string{"create", "list", "show", "update", "comment", "board", "blame", "scan", "refs", "context", "session", "ac", "skill", "hook", "check", "help-json", "install", "upgrade"}
 	for _, r := range required {
 		if !names[r] {
 			t.Fatalf("missing command in manifest: %s", r)
+		}
+	}
+	for name := range names {
+		if strings.HasPrefix(name, "__hook-") {
+			t.Fatalf("internal hook command leaked into public manifest: %s", name)
 		}
 	}
 

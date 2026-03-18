@@ -9,6 +9,8 @@ type startAgentQuickstart struct {
 }
 
 func buildStartAgentQuickstart() startAgentQuickstart {
+	// Intentionally repeated every start run: reminder fatigue is preferable to
+	// missed workflow guardrails when agents resume mid-stream or skip onboarding docs.
 	return startAgentQuickstart{
 		DirectEditAvoidance: "Never edit .docket/tickets/*.md directly; use `docket` commands so ticket signatures and metadata remain valid.",
 		CoreWorkflow: []string{

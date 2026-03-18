@@ -32,6 +32,9 @@ func renderSkillPackBlock(repoRoot, adapterID string) (string, error) {
 	if !mapping.InSync {
 		return "", fmt.Errorf("skill mapping drift detected (missing=%v extra=%v)", mapping.Missing, mapping.Extra)
 	}
+	if rendered.MetadataChecksum != pack.MetadataChecksum {
+		return "", fmt.Errorf("skill metadata drift detected (expected=%s actual=%s)", pack.MetadataChecksum, rendered.MetadataChecksum)
+	}
 	return skillPackStartMarker + "\n" + rendered.Content + skillPackEndMarker + "\n", nil
 }
 

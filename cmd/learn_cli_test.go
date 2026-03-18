@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/leomorpho/docket/internal/learning"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestLearnListEmptyStateHumanAndJSON(t *testing.T) {
@@ -169,5 +172,84 @@ func TestLearnCaptureDeduplicatesAndValidatesInput(t *testing.T) {
 	}
 	if !strings.Contains(invalidOut, "--rule is required") {
 		t.Fatalf("expected clear --rule validation error, got:\n%s", invalidOut)
+	}
+}
+
+func TestLearnReplayUsesStartRankingForTicket(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := local.New(h.repo).CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-266",
+		Seq:         266,
+		Title:       "Improve parser reliability replay output",
+		Description: "Parser output should remain deterministic in tests.",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Labels:      []string{"parser", "reliability"},
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "coverage remains deterministic"},
+		},
+	}); err != nil {
+		t.Fatalf("seed ticket failed: %v", err)
+	}
+
+	store := learning.NewStore(h.repo, fixedLearnClock(time.Date(2026, 3, 18, 1, 0, 0, 0, time.UTC)))
+	if _, err := store.IngestText("session:TKT-266", `
+LEARN[reliability]: parser retries sqlite busy failures.
+LEARN[parser]: parser preserves nested headings.
+LEARN[testing]: deterministic integration fixtures for parser output.
+LEARN[ui]: use stronger contrast in dashboard.
+`); err != nil {
+		t.Fatalf("seed learn store failed: %v", err)
+	}
+
+	out, err := h.run("learn", "replay", "TKT-266", "--limit", "2", "--format", "json")
+	if err != nil {
+		t.Fatalf("learn replay failed: %v\n%s", err, out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("unmarshal learn replay json failed: %v\n%s", err, out)
+	}
+	if payload["ticket_id"] != "TKT-266" {
+		t.Fatalf("expected ticket_id TKT-266, got %#v", payload["ticket_id"])
+	}
+	if payload["total"].(float64) != 2 {
+		t.Fatalf("expected total=2, got %#v", payload["total"])
+	}
+	entries := payload["entries"].([]any)
+	first := entries[0].(map[string]any)
+	second := entries[1].(map[string]any)
+	if first["category"] != "parser" || second["category"] != "reliability" {
+		t.Fatalf("expected parser then reliability ranking, got %#v", entries)
+	}
+}
+
+func TestLearnReplayNoMatchesAndUnknownTicket(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	h.seedTicket("TKT-267", 267, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+
+	store := learning.NewStore(h.repo, fixedLearnClock(time.Date(2026, 3, 18, 1, 5, 0, 0, time.UTC)))
+	if _, err := store.IngestText("session:TKT-267", `LEARN[ui]: increase color contrast for dashboard controls.`); err != nil {
+		t.Fatalf("seed learn store failed: %v", err)
+	}
+
+	humanOut, err := h.run("learn", "replay", "TKT-267")
+	if err != nil {
+		t.Fatalf("learn replay human failed: %v\n%s", err, humanOut)
+	}
+	if !strings.Contains(humanOut, "No relevant learn rules for TKT-267.") {
+		t.Fatalf("expected no-match replay message, got:\n%s", humanOut)
+	}
+
+	missingOut, err := h.run("learn", "replay", "TKT-999")
+	if err == nil {
+		t.Fatalf("expected unknown ticket replay to fail, output=%s", missingOut)
+	}
+	if !strings.Contains(missingOut, "ticket TKT-999 not found") {
+		t.Fatalf("expected unknown ticket error, got:\n%s", missingOut)
 	}
 }

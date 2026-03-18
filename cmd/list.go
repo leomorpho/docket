@@ -72,6 +72,7 @@ var listCmd = &cobra.Command{
 		default:
 			printTable(cmd, rows)
 		}
+		printDiscoveryHint(cmd.OutOrStdout(), format)
 
 		return nil
 	},
