@@ -1495,7 +1495,7 @@
     },
     "TKT-277": {
       "title": "Add shell-safe groomed ticket creation flow for multi-line descriptions and ACs",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-228"
     },
