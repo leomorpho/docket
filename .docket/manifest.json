@@ -1338,7 +1338,7 @@
       "parent": "TKT-239"
     },
     "TKT-251": {
-      "title": "Investigate and fix privileged transition enforcement for `update --state done`",
+      "title": "Investigate and fix `update --state done` behavior across warning-only and enforced modes",
       "state": "backlog",
       "priority": 1,
       "parent": "TKT-174"
@@ -1823,7 +1823,7 @@
       "parent": "TKT-311"
     },
     "TKT-332": {
-      "title": "Add doctor and status diagnostics for workflow config validity, approval status, and active-policy mismatch",
+      "title": "Add doctor and status diagnostics for workflow config validity, approval status, active-policy mismatch, and enforcement mode",
       "state": "backlog",
       "priority": 1,
       "parent": "TKT-311"
@@ -1851,6 +1851,186 @@
       "state": "in-review",
       "priority": 1,
       "parent": "TKT-312"
+    },
+    "TKT-337": {
+      "title": "[Epic] Experimental phase 2 local secure-storage improvements",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-172"
+    },
+    "TKT-338": {
+      "title": "Define wrapped-key keystore format and protector abstraction",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-339": {
+      "title": "Refactor file keystore to use a generated data key with password-backed protector fallback",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-340": {
+      "title": "Persist keystore protector metadata and provider selection under DOCKET_HOME",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-341": {
+      "title": "Implement macOS Keychain protector for wrapped keystore data keys",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-342": {
+      "title": "Add first-run secure unlock setup UX with Keychain-first macOS flow and password fallback",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-343": {
+      "title": "Route existing secure unlock UX through the configured protector without unnecessary password prompts",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-344": {
+      "title": "Report protector type, warning-only versus enabled enforcement, and secure-storage availability in status surfaces",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-345": {
+      "title": "Add explicit local secure reset flow with identity-continuity warnings",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-346": {
+      "title": "Preserve identity export and recovery compatibility across password-backed and keychain-backed keystores",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-347": {
+      "title": "Add migration from legacy password-derived keystores to wrapped-key protector format",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-348": {
+      "title": "Add cross-platform and macOS-gated test coverage for protector selection, unlock UX, and migration",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-349": {
+      "title": "Document wrapped-key protectors, platform behavior, reset semantics, multi-human identity, and opt-in enforcement rollout",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-337"
+    },
+    "TKT-350": {
+      "title": "Add simple opt-in security enforcement switch with warning-only-by-default behavior",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-351": {
+      "title": "Default experimental security enforcement to warning-only behavior until explicitly enabled",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-352": {
+      "title": "Make privileged transitions and workflow-policy commands respect the opt-in enforcement switch consistently",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-353": {
+      "title": "Surface whether secure enforcement is warning-only or enabled in start, status, doctor, and secure setup UX",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-354": {
+      "title": "Document experimental opt-in security enforcement and warning-only developer workflow",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-355": {
+      "title": "Add structured warning signals to JSON and MCP mutation surfaces when enforcement is not enabled",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-356": {
+      "title": "Update web and TUI surfaces to display whether secure enforcement is warning-only or enabled",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-357": {
+      "title": "Set brand-new repos to ask about experimental secure mode and fall back to warning-only when declined",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-358": {
+      "title": "Add backward-compatible upgrade behavior for existing repos moving to warning-only-by-default security enforcement",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-359": {
+      "title": "Record and surface warning-mode privileged events in visible human and LLM-readable history surfaces",
+      "state": "backlog",
+      "priority": 3,
+      "parent": "TKT-174"
+    },
+    "TKT-360": {
+      "title": "Document when teams should stay warning-only versus enable secure enforcement",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-361": {
+      "title": "Define the repo-shared enforcement setting and where it is stored",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-362": {
+      "title": "Make warning-only secure messaging concise, deduplicated, and actionable",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-363": {
+      "title": "Standardize public security and enforcement vocabulary across CLI, config, docs, tickets, and code comments",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-364": {
+      "title": "Define stable exit-code and structured-warning semantics for warning-only secure behavior",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-365": {
+      "title": "Add simple `docket secure enable` and `docket secure disable` commands for existing repos",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-174"
+    },
+    "TKT-366": {
+      "title": "Allow web and TUI ticket completion actions to move tickets to done under warning-only or enforced behavior",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
     }
   }
 }
