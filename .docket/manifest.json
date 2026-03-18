@@ -1689,6 +1689,120 @@
       "state": "backlog",
       "priority": 2,
       "parent": "TKT-290"
+    },
+    "TKT-310": {
+      "title": "[Epic] Make workflow semantics fully config-defined and role-driven",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-311": {
+      "title": "[Epic] Secure approval and activation of editable workflow policy",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-312": {
+      "title": "[Epic] Unify workflow-driven readiness across CLI, MCP, and UI surfaces",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-174"
+    },
+    "TKT-313": {
+      "title": "Define workflow config v1 schema for semantic roles, per-state behavior, and presentation metadata",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-314": {
+      "title": "Ship a default workflow config that matches current Docket behavior",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-315": {
+      "title": "Implement a shared workflow evaluator that resolves transitions, roles, startability, and dependency blocking from config",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-316": {
+      "title": "Add parity and custom-shape workflow fixtures to lock in default and non-default evaluator behavior",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-310"
+    },
+    "TKT-317": {
+      "title": "Refactor ticket transition validation to use the shared workflow evaluator",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-318": {
+      "title": "Refactor blocked and unblocked readiness to evaluate blocker state semantics from config",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-319": {
+      "title": "Refactor docket start to use config-defined startable states and evaluator-based readiness",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-320": {
+      "title": "Refactor list, wrap-up, smart-commit, and board readiness surfaces to use the shared workflow evaluator",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-321": {
+      "title": "Refactor MCP and machine-facing workflow surfaces to use the shared workflow evaluator",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-322": {
+      "title": "Refactor epic and parent ticket handling to use config-backed workflow semantics instead of ad hoc special cases",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-312"
+    },
+    "TKT-323": {
+      "title": "Update indexed ticket readiness to derive blocked status from workflow policy semantics",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-312"
+    },
+    "TKT-324": {
+      "title": "Remove remaining hardcoded workflow graph and state-name assumptions after config-backed evaluation is authoritative",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-325": {
+      "title": "Persist approved workflow-config identity in the secure area as the active policy reference",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-311"
+    },
+    "TKT-326": {
+      "title": "Define and implement the relationship between repo workflow config, secure approval metadata, and workflow lock artifacts",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-311"
+    },
+    "TKT-327": {
+      "title": "Add fallback behavior for repositories missing explicit workflow config",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-311"
+    },
+    "TKT-328": {
+      "title": "Document human-editable workflow config, semantic state roles, dependency semantics, and secure approval",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-311"
     }
   }
 }
