@@ -1803,6 +1803,54 @@
       "state": "backlog",
       "priority": 2,
       "parent": "TKT-311"
+    },
+    "TKT-329": {
+      "title": "Refactor ticket-apply and backlog-apply validation to accept config-defined workflow states",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-330": {
+      "title": "Write and refresh the default workflow config artifact from init, bootstrap, and install entrypoints",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-311"
+    },
+    "TKT-331": {
+      "title": "Add an explicit operator command flow to approve and activate workflow policy changes",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-311"
+    },
+    "TKT-332": {
+      "title": "Add doctor and status diagnostics for workflow config validity, approval status, and active-policy mismatch",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-311"
+    },
+    "TKT-333": {
+      "title": "Invalidate caches and indexed readiness when workflow config changes",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
+    },
+    "TKT-334": {
+      "title": "Add a compatibility matrix for old repos, default workflow config, and custom workflow config",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-311"
+    },
+    "TKT-335": {
+      "title": "Update start, help, and user guidance surfaces to describe workflow roles instead of hardcoded state names",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-312"
+    },
+    "TKT-336": {
+      "title": "Fix pre-commit ticket AC checks to read the pending commit message instead of the previous commit",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-312"
     }
   }
 }
