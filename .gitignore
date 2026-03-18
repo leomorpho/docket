@@ -1,5 +1,6 @@
 docket
 .docket/index.db
+.docket/local/
 .docket/semantic/
 .docket/tickets/*/sessions/
 web/node_modules
