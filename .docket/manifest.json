@@ -1441,7 +1441,7 @@
     },
     "TKT-268": {
       "title": "Polish session handoff generation and resume continuity",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-177"
     },
