@@ -37,7 +37,7 @@ func (s *Store) manifestPath() string {
 
 func defaultManifest() Manifest {
 	return Manifest{
-		Warning: "DO NOT EDIT .docket/tickets/*.md OR .docket/manifest.json DIRECTLY. Use `docket` commands only.",
+		Warning: "Prefer `docket` commands for ticket reads and edits. Direct edits to .docket/tickets/*.md are allowed, but you must run `docket validate` before committing.",
 		Tickets: map[string]ManifestTicket{},
 	}
 }

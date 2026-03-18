@@ -109,7 +109,7 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("list human failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "Hint: Use `docket start --format json`") {
+	if !strings.Contains(out.String(), "Hint: Use `docket search \"query\"` for ticket discovery") {
 		t.Fatalf("expected discovery hint in human list output, got:\n%s", out.String())
 	}
 

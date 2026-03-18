@@ -68,9 +68,13 @@ docket serve --mcp
 
 Run `docket help-json` to get a machine-readable manifest of all commands and their schemas.
 
-Always use `docket` commands to modify ticket state — never edit `.docket/` files directly.
+Prefer `docket show` and `docket update` for ticket reads and edits because the CLI exposes computed context that raw markdown does not include.
+
+Direct edits to `.docket/tickets/*.md` are allowed. If you edit a ticket file directly, run `docket validate TKT-XXX` or `docket validate` before committing so the change is schema-valid and the write hash is repaired if needed.
 
 When starting work, run `docket list --state open --format context` to find relevant tickets.
+
+When you need to search tickets by text, use `docket search "query"` instead of ad-hoc `grep` or Python scripts.
 
 When finishing work, run `docket session compress TKT-XXX` to generate a handoff summary.
 
@@ -99,6 +103,10 @@ docket semantic rebuild --full
 docket related TKT-001 --semantic off
 docket related TKT-001 --semantic auto
 docket related TKT-001 --semantic on
+
+# search tickets by free-text query
+docket search "auth middleware"
+docket search "token validation" --semantic auto
 ```
 
 ### Config

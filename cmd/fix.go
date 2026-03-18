@@ -56,7 +56,7 @@ func runFixOne(cmd *cobra.Command, s *local.Store, id string) error {
 
 	// 3. Detect changes and build tutor message
 	changes := detectChanges(lastGood, current)
-	
+
 	// 4. Re-sign and save via store (this fixes the hash)
 	if err := s.UpdateTicket(context.Background(), current); err != nil {
 		return fmt.Errorf("failed to save fixed ticket: %w", err)
@@ -64,14 +64,14 @@ func runFixOne(cmd *cobra.Command, s *local.Store, id string) error {
 
 	// 5. Output Tutor Message
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Repairing %s. Do not edit markdown files directly. Use the tools.\n", id)
+	fmt.Fprintf(out, "Repairing %s and refreshing write_hash.\n", id)
 	if len(changes) > 0 {
-		fmt.Fprintf(out, "You should have used:\n")
+		fmt.Fprintf(out, "Equivalent CLI commands for these direct edits:\n")
 		for _, msg := range changes {
 			fmt.Fprintf(out, "  %s\n", msg)
 		}
 	} else {
-		fmt.Fprintf(out, "Signature was missing or corrupt, but no field changes detected.\n")
+		fmt.Fprintf(out, "Signature was missing or stale, but no user-visible field changes were detected.\n")
 	}
 
 	return nil
@@ -97,7 +97,7 @@ func runFixAll(cmd *cobra.Command, s *local.Store) error {
 					break
 				}
 			}
-			
+
 			if isInvalid {
 				if err := runFixOne(cmd, s, id); err != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "Failed to fix %s: %v\n", id, err)
@@ -129,13 +129,15 @@ func detectChanges(old, new *ticket.Ticket) []string {
 	}
 	if old.Parent != new.Parent {
 		p := new.Parent
-		if p == "" { p = "none" }
+		if p == "" {
+			p = "none"
+		}
 		msgs = append(msgs, fmt.Sprintf("docket update %s --parent %s", new.ID, p))
 	}
 	if old.Description != new.Description {
 		msgs = append(msgs, fmt.Sprintf("docket update %s --desc '...'", new.ID))
 	}
-	
+
 	// Complex fields like AC/Plan/Comments are harder to represent as a single command if many changed,
 	// but we can give a general hint.
 	if len(old.AC) != len(new.AC) {

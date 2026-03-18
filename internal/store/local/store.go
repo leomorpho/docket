@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +66,9 @@ func (s *Store) ticketPath(id string) string {
 }
 
 func (s *Store) normalizeTicketLookupID(id string) string {
+	if strings.HasSuffix(id, ".md") {
+		id = strings.TrimSuffix(filepath.Base(id), ".md")
+	}
 	if normalized, ok := ticket.NormalizeID(id); ok {
 		return normalized
 	}
@@ -237,6 +241,13 @@ func (s *Store) matches(t *ticket.Ticket, f store.Filter) bool {
 	}
 
 	return true
+}
+
+func (s *Store) DetectCycleValidationError() *store.ValidationError {
+	if cycleErr := s.detectCycles(); cycleErr != nil {
+		return &store.ValidationError{Field: "dependencies", Message: cycleErr.Error()}
+	}
+	return nil
 }
 
 func (s *Store) AddComment(ctx context.Context, id string, c ticket.Comment) error {

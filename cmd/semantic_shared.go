@@ -21,6 +21,13 @@ var (
 		}
 		return semantic.VectorScorer{Provider: provider, Store: store}.ScoreRelated(ctx, source, cfg, limit)
 	}
+	semanticQueryVectorScoreFn = func(ctx context.Context, query string, cfg semantic.Config, provider semantic.Provider, repoRoot string, limit int) ([]semantic.VectorScore, error) {
+		store, err := semanticOpenVectorStore(repoRoot)
+		if err != nil {
+			return nil, err
+		}
+		return semantic.VectorScorer{Provider: provider, Store: store}.ScoreQuery(ctx, query, cfg, limit)
+	}
 )
 
 func loadSemanticConfig(repoRoot string) (semantic.Config, error) {

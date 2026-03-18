@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,12 +54,20 @@ func TestValidateCmd_PrescriptiveForDirectEdit(t *testing.T) {
 	showWarns = false
 	strict = false
 	rootCmd.SetArgs([]string{"validate", "TKT-001", "--warn"})
-	if err := rootCmd.Execute(); err == nil {
-		t.Fatal("expected validation failure due to signature mismatch")
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected validation to auto-repair schema-valid direct edit, got: %v", err)
 	}
 	out := b.String()
-	if !strings.Contains(out, "accepted schema-valid direct edit") || !strings.Contains(out, "docket update TKT-001 --priority 2") {
+	if !strings.Contains(out, "accepted schema-valid direct edit") || !strings.Contains(out, "refreshed write_hash") || !strings.Contains(out, "docket update TKT-001 --priority 2") {
 		t.Fatalf("expected prescriptive command in validate output, got:\n%s", out)
+	}
+
+	errs, _, err := s.ValidateFile("TKT-001")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	if len(errs) > 0 {
+		t.Fatalf("expected ticket to be valid after validate auto-repair, got %v", errs)
 	}
 }
 
@@ -113,6 +122,44 @@ func TestValidateCmd_RevertsInvalidDirectEdit(t *testing.T) {
 	}
 	if ticketAfter.State != ticket.State("todo") {
 		t.Fatalf("expected state to be reverted to todo, got %s", ticketAfter.State)
+	}
+}
+
+func TestValidateCmd_AcceptsHookStyleFilePathArgument(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "T",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "Description with enough words to satisfy validation checks in this hook path test case.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}, {Description: "B"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	showWarns = false
+	strict = false
+	rootCmd.SetArgs([]string{"validate", filepath.Join(".docket", "tickets", "TKT-001.md")})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected validate to accept hook-style file path, got: %v", err)
+	}
+	if !strings.Contains(b.String(), "✓ TKT-001 valid") {
+		t.Fatalf("expected success output for hook-style path, got:\n%s", b.String())
 	}
 }
 
@@ -175,5 +222,48 @@ func TestValidateAll(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "All tickets valid.") {
 		t.Errorf("expected clean output, got: %s", b.String())
+	}
+}
+
+func TestValidateCmd_MultiplePathArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	desc := "Has twenty words or more in the description to pass the quality check easily and without any issues whatsoever."
+	for i := 1; i <= 2; i++ {
+		id := filepath.Join(".docket", "tickets", fmt.Sprintf("TKT-%03d.md", i))
+		if err := s.CreateTicket(ctx, &ticket.Ticket{
+			ID:          fmt.Sprintf("TKT-%03d", i),
+			Seq:         i,
+			Title:       fmt.Sprintf("T%d", i),
+			State:       "todo",
+			CreatedBy:   "me",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			Description: desc,
+			AC:          []ticket.AcceptanceCriterion{{Description: "A"}, {Description: "B"}},
+		}); err != nil {
+			t.Fatalf("CreateTicket failed: %v", err)
+		}
+		_ = id
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	showWarns = false
+	strict = false
+	rootCmd.SetArgs([]string{"validate", filepath.Join(".docket", "tickets", "TKT-001.md"), filepath.Join(".docket", "tickets", "TKT-002.md")})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("validate with multiple path args failed: %v", err)
+	}
+	if !strings.Contains(b.String(), "All tickets valid.") {
+		t.Fatalf("expected aggregate success output, got:\n%s", b.String())
 	}
 }

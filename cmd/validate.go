@@ -3,6 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -15,9 +19,9 @@ var (
 )
 
 var validateCmd = &cobra.Command{
-	Use:   "validate [TKT-NNN]",
+	Use:   "validate [TKT-NNN|path ...]",
 	Short: "Validate ticket schema and dependencies",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s := local.New(repo)
 		ctx := context.Background()
@@ -31,6 +35,9 @@ var validateCmd = &cobra.Command{
 		if len(args) == 1 {
 			return runValidateOne(cmd, s, args[0], reconcileByID)
 		}
+		if len(args) > 1 {
+			return runValidateMany(cmd, s, args, reconcileByID)
+		}
 		return runValidateAll(cmd, s, reconcileResults)
 	},
 }
@@ -41,28 +48,10 @@ func resetValidateGlobals() {
 }
 
 func runValidateOne(cmd *cobra.Command, s *local.Store, id string, reconcileByID map[string]local.ReconcileResult) error {
-	errs, warns, err := s.ValidateFile(id)
+	displayID := normalizeTicketArg(id)
+	errs, warns, err := validateTicketForCommand(s, displayID, reconcileByID)
 	if err != nil {
-		return fmt.Errorf("reading ticket: %w", err)
-	}
-	if rec, ok := reconcileByID[id]; ok && len(rec.Changes) > 0 {
-		ch := rec.Changes[0]
-		if rec.Accepted {
-			warns = append(warns, store.ValidationError{
-				Field:   "direct-edit." + ch.Field,
-				Message: fmt.Sprintf("accepted schema-valid direct edit (%q -> %q). Next time use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
-			})
-		} else if rec.Reverted {
-			errs = append(errs, store.ValidationError{
-				Field:   "direct-edit." + ch.Field,
-				Message: fmt.Sprintf("rejected invalid direct edit (%q -> %q) and reverted file. Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
-			})
-		} else {
-			errs = append(errs, store.ValidationError{
-				Field:   "direct-edit." + ch.Field,
-				Message: fmt.Sprintf("detected invalid direct edit (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
-			})
-		}
+		return err
 	}
 
 	if format == "json" {
@@ -73,20 +62,20 @@ func runValidateOne(cmd *cobra.Command, s *local.Store, id string, reconcileByID
 			"strict":   strict,
 		})
 		if len(errs) > 0 {
-			return fmt.Errorf("validation failed for %s", id)
+			return fmt.Errorf("validation failed for %s", displayID)
 		}
 		if strict && len(warns) > 0 {
-			return fmt.Errorf("strict validation failed for %s: %d warning(s)", id, len(warns))
+			return fmt.Errorf("strict validation failed for %s: %d warning(s)", displayID, len(warns))
 		}
 		return nil
 	}
 
 	if len(errs) > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", id)
+		fmt.Fprintf(cmd.OutOrStdout(), "✗ %s invalid:\n", displayID)
 		for _, e := range errs {
 			msg := e.Message
 			if e.Field == "signature" {
-				msg = fmt.Sprintf("🚨 Direct Mutation Detected. Run `docket fix %s` to repair and see the correct usage.", id)
+				msg = fmt.Sprintf("write_hash is stale. Fix the schema errors above, then rerun `docket validate %s`.", displayID)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, msg)
 		}
@@ -95,49 +84,78 @@ func runValidateOne(cmd *cobra.Command, s *local.Store, id string, reconcileByID
 				fmt.Fprintf(cmd.OutOrStdout(), "  ! warning: %s: %s\n", w.Field, w.Message)
 			}
 		}
-		return fmt.Errorf("validation failed for %s", id)
+		return fmt.Errorf("validation failed for %s", displayID)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ %s valid\n", id)
+	fmt.Fprintf(cmd.OutOrStdout(), "✓ %s valid\n", displayID)
 	if showWarns || strict {
 		for _, w := range warns {
 			fmt.Fprintf(cmd.OutOrStdout(), "  ! warning: %s: %s\n", w.Field, w.Message)
 		}
 	}
 	if strict && len(warns) > 0 {
-		return fmt.Errorf("strict validation failed for %s: %d warning(s)", id, len(warns))
+		return fmt.Errorf("strict validation failed for %s: %d warning(s)", displayID, len(warns))
 	}
 	return nil
 }
 
 func runValidateAll(cmd *cobra.Command, s *local.Store, reconcileResults []local.ReconcileResult) error {
-	allErrs, allWarns, err := s.ValidateAll(context.Background())
+	reconcileByID := map[string]local.ReconcileResult{}
+	for _, rec := range reconcileResults {
+		reconcileByID[rec.ID] = rec
+	}
+	ids, err := listTicketIDs(repo)
 	if err != nil {
 		return fmt.Errorf("validating all tickets: %w", err)
 	}
-
-	for _, rec := range reconcileResults {
-		if len(rec.Changes) == 0 {
-			continue
+	allErrs := make(map[string][]store.ValidationError)
+	allWarns := make(map[string][]store.ValidationError)
+	for _, id := range ids {
+		errs, warns, err := validateTicketForCommand(s, id, reconcileByID)
+		if err != nil {
+			return fmt.Errorf("validating %s: %w", id, err)
 		}
-		ch := rec.Changes[0]
-		if rec.Accepted {
-			allWarns[rec.ID] = append(allWarns[rec.ID], store.ValidationError{
-				Field:   "direct-edit." + ch.Field,
-				Message: fmt.Sprintf("accepted schema-valid direct edit (%q -> %q). Next time use: %s", ch.Expected, ch.Actual, prescriptiveCommand(rec.ID, ch.Field, ch.Actual)),
-			})
-			continue
+		if len(errs) > 0 {
+			allErrs[id] = errs
 		}
-		msg := fmt.Sprintf("detected invalid direct edit (%q -> %q). Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(rec.ID, ch.Field, ch.Actual))
-		if rec.Reverted {
-			msg = fmt.Sprintf("rejected invalid direct edit (%q -> %q) and reverted file. Use: %s", ch.Expected, ch.Actual, prescriptiveCommand(rec.ID, ch.Field, ch.Actual))
+		if len(warns) > 0 {
+			allWarns[id] = warns
 		}
-		allErrs[rec.ID] = append(allErrs[rec.ID], store.ValidationError{
-			Field:   "direct-edit." + ch.Field,
-			Message: msg,
-		})
 	}
+	if cycleErr := s.DetectCycleValidationError(); cycleErr != nil {
+		allErrs["global"] = append(allErrs["global"], *cycleErr)
+	}
+	return renderValidateSummary(cmd, allErrs, allWarns)
+}
 
+func runValidateMany(cmd *cobra.Command, s *local.Store, inputs []string, reconcileByID map[string]local.ReconcileResult) error {
+	allErrs := make(map[string][]store.ValidationError)
+	allWarns := make(map[string][]store.ValidationError)
+	seen := map[string]struct{}{}
+	for _, input := range inputs {
+		id := normalizeTicketArg(input)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		errs, warns, err := validateTicketForCommand(s, id, reconcileByID)
+		if err != nil {
+			return fmt.Errorf("validating %s: %w", id, err)
+		}
+		if len(errs) > 0 {
+			allErrs[id] = errs
+		}
+		if len(warns) > 0 {
+			allWarns[id] = warns
+		}
+	}
+	return renderValidateSummary(cmd, allErrs, allWarns)
+}
+
+func renderValidateSummary(cmd *cobra.Command, allErrs map[string][]store.ValidationError, allWarns map[string][]store.ValidationError) error {
 	warnCount := 0
 	for _, warns := range allWarns {
 		warnCount += len(warns)
@@ -165,7 +183,7 @@ func runValidateAll(cmd *cobra.Command, s *local.Store, reconcileResults []local
 			for _, e := range errs {
 				msg := e.Message
 				if e.Field == "signature" {
-					msg = fmt.Sprintf("🚨 Direct Mutation Detected. Run `docket fix %s` to repair and see the correct usage.", id)
+					msg = fmt.Sprintf("write_hash is stale. Fix the schema errors above, then rerun `docket validate %s`.", id)
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s\n", e.Field, msg)
 			}
@@ -193,6 +211,120 @@ func runValidateAll(cmd *cobra.Command, s *local.Store, reconcileResults []local
 		return fmt.Errorf("strict validation failed: %d warning(s)", warnCount)
 	}
 	return nil
+}
+
+func validateTicketForCommand(s *local.Store, id string, reconcileByID map[string]local.ReconcileResult) ([]store.ValidationError, []store.ValidationError, error) {
+	errs, warns, err := s.ValidateFile(id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading ticket: %w", err)
+	}
+	autoRepaired := false
+	if hasSignatureError(errs) && countNonSignatureErrors(errs) == 0 {
+		if repairedErr := autoRepairTicketSignature(s, id); repairedErr != nil {
+			warns = append(warns, store.ValidationError{
+				Field:   "signature",
+				Message: fmt.Sprintf("ticket is schema-valid but write_hash refresh failed: %v", repairedErr),
+			})
+		} else {
+			autoRepaired = true
+			errs, warns, err = s.ValidateFile(id)
+			if err != nil {
+				return nil, nil, fmt.Errorf("reading ticket after auto-repair: %w", err)
+			}
+		}
+	}
+	if rec, ok := reconcileByID[id]; ok && len(rec.Changes) > 0 {
+		for _, ch := range rec.Changes {
+			if rec.Accepted {
+				warns = append(warns, store.ValidationError{
+					Field:   "direct-edit." + ch.Field,
+					Message: fmt.Sprintf("accepted schema-valid direct edit (%q -> %q) and refreshed write_hash. Next time use: %s", ch.Expected, ch.Actual, prescriptiveCommand(id, ch.Field, ch.Actual)),
+				})
+				continue
+			}
+			msg := fmt.Sprintf("detected invalid direct edit (%q -> %q). Fix the markdown field and rerun `docket validate %s`. Equivalent CLI: %s", ch.Expected, ch.Actual, id, prescriptiveCommand(id, ch.Field, ch.Actual))
+			if rec.Reverted {
+				msg = fmt.Sprintf("rejected invalid direct edit (%q -> %q) and reverted file to the last legal value. If you want this change, reapply it in legal markdown form and rerun `docket validate %s`. Equivalent CLI: %s", ch.Expected, ch.Actual, id, prescriptiveCommand(id, ch.Field, ch.Actual))
+			}
+			errs = append(errs, store.ValidationError{
+				Field:   "direct-edit." + ch.Field,
+				Message: msg,
+			})
+		}
+	}
+	if autoRepaired && len(errs) == 0 && !hasDirectEditWarning(warns) {
+		warns = append(warns, store.ValidationError{
+			Field:   "direct-edit.signature",
+			Message: fmt.Sprintf("accepted schema-valid direct markdown edit and refreshed write_hash. Next time rerun `docket validate %s` immediately after editing.", id),
+		})
+	}
+	return errs, warns, nil
+}
+
+func hasSignatureError(errs []store.ValidationError) bool {
+	for _, err := range errs {
+		if err.Field == "signature" {
+			return true
+		}
+	}
+	return false
+}
+
+func countNonSignatureErrors(errs []store.ValidationError) int {
+	count := 0
+	for _, err := range errs {
+		if err.Field != "signature" {
+			count++
+		}
+	}
+	return count
+}
+
+func hasDirectEditWarning(warns []store.ValidationError) bool {
+	for _, warn := range warns {
+		if strings.HasPrefix(warn.Field, "direct-edit.") {
+			return true
+		}
+	}
+	return false
+}
+
+func autoRepairTicketSignature(s *local.Store, id string) error {
+	t, err := s.GetTicket(context.Background(), id)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		return fmt.Errorf("ticket %s not found", id)
+	}
+	return s.UpdateTicket(context.Background(), t)
+}
+
+func listTicketIDs(repoRoot string) ([]string, error) {
+	ticketsDir := filepath.Join(repoRoot, ".docket", "tickets")
+	entries, err := os.ReadDir(ticketsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") || !strings.HasPrefix(entry.Name(), "TKT-") {
+			continue
+		}
+		ids = append(ids, strings.TrimSuffix(entry.Name(), ".md"))
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+func normalizeTicketArg(raw string) string {
+	if strings.HasSuffix(raw, ".md") {
+		raw = strings.TrimSuffix(filepath.Base(raw), ".md")
+	}
+	return strings.TrimSpace(raw)
 }
 
 func prescriptiveCommand(id, field, value string) string {

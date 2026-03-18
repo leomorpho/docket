@@ -81,6 +81,7 @@ type CombinedScore struct {
 
 type LexicalScorer interface {
 	ScoreRelated(source *ticket.Ticket, candidates []*ticket.Ticket, weights FieldWeights) []LexicalScore
+	ScoreQuery(query string, candidates []*ticket.Ticket, weights FieldWeights) []LexicalScore
 }
 
 type SimpleLexicalScorer struct{}
@@ -129,6 +130,55 @@ func (SimpleLexicalScorer) ScoreRelated(source *ticket.Ticket, candidates []*tic
 			continue
 		}
 
+		scores = append(scores, LexicalScore{
+			TicketID: candidate.ID,
+			Score:    clamp01(total / maxScore),
+			Fields:   fields,
+		})
+	}
+
+	sort.Slice(scores, func(i, j int) bool {
+		if scores[i].Score == scores[j].Score {
+			return scores[i].TicketID < scores[j].TicketID
+		}
+		return scores[i].Score > scores[j].Score
+	})
+	return scores
+}
+
+func (SimpleLexicalScorer) ScoreQuery(query string, candidates []*ticket.Ticket, weights FieldWeights) []LexicalScore {
+	queryTokens := tokenize(query)
+	if len(queryTokens) == 0 {
+		return nil
+	}
+
+	maxScore := weights.Title + weights.Description + weights.AC + weights.Handoff
+	if maxScore == 0 {
+		return nil
+	}
+
+	scores := make([]LexicalScore, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.ID == "" {
+			continue
+		}
+		fields := map[ChunkType]float64{}
+		total := 0.0
+		for chunkType, text := range fieldTexts(candidate) {
+			candidateTokens := tokenize(text)
+			if len(candidateTokens) == 0 {
+				continue
+			}
+			fieldScore := overlapScore(queryTokens, candidateTokens) * weights.ForChunkType(chunkType)
+			if fieldScore == 0 {
+				continue
+			}
+			fields[chunkType] = fieldScore
+			total += fieldScore
+		}
+		if total == 0 {
+			continue
+		}
 		scores = append(scores, LexicalScore{
 			TicketID: candidate.ID,
 			Score:    clamp01(total / maxScore),
@@ -254,6 +304,90 @@ func (s VectorScorer) ScoreRelated(ctx context.Context, source *ticket.Ticket, c
 	return scores, nil
 }
 
+func (s VectorScorer) ScoreQuery(ctx context.Context, query string, cfg Config, limit int) ([]VectorScore, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, nil
+	}
+	if s.Provider == nil {
+		return nil, nil
+	}
+	if s.Store == nil {
+		return nil, nil
+	}
+
+	resp, err := s.Provider.Embed(ctx, EmbedRequest{
+		Model: cfg.Model,
+		Inputs: []Input{{
+			ChunkID: "query",
+			Field:   "query",
+			Text:    query,
+		}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Results) == 0 {
+		return nil, nil
+	}
+
+	weights := cfg.FieldWeights()
+	maxScore := weights.Title + weights.Description + weights.AC + weights.Handoff
+	if maxScore == 0 {
+		return nil, nil
+	}
+
+	queryLimit := limit * 8
+	if queryLimit < 16 {
+		queryLimit = 16
+	}
+	results, err := s.Store.Query(ctx, float64To32(resp.Results[0].Vector), queryLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	aggregated := map[string]*VectorScore{}
+	for _, result := range results {
+		if result.TicketID == "" {
+			continue
+		}
+		entry := aggregated[result.TicketID]
+		if entry == nil {
+			entry = &VectorScore{
+				TicketID: result.TicketID,
+				Fields:   map[ChunkType]float64{},
+			}
+			aggregated[result.TicketID] = entry
+		}
+		chunkType := result.Type
+		weighted := clamp01(float64(result.Similarity)) * weights.ForChunkType(chunkType)
+		if weighted <= entry.Fields[chunkType] {
+			continue
+		}
+		entry.Fields[chunkType] = weighted
+	}
+
+	scores := make([]VectorScore, 0, len(aggregated))
+	for _, entry := range aggregated {
+		total := 0.0
+		for _, fieldScore := range entry.Fields {
+			total += fieldScore
+		}
+		entry.Score = clamp01(total / maxScore)
+		scores = append(scores, *entry)
+	}
+
+	sort.Slice(scores, func(i, j int) bool {
+		if scores[i].Score == scores[j].Score {
+			return scores[i].TicketID < scores[j].TicketID
+		}
+		return scores[i].Score > scores[j].Score
+	})
+	if limit > 0 && len(scores) > limit {
+		scores = scores[:limit]
+	}
+	return scores, nil
+}
+
 func CombineScores(cfg Config, lexical []LexicalScore, vector []VectorScore) []CombinedScore {
 	lexicalWeight := cfg.LexicalWeight
 	vectorWeight := cfg.VectorWeight
@@ -292,9 +426,9 @@ const (
 	GraphEdgeBlocks          GraphEdgeKind = "blocks"
 	GraphEdgeLinkedCommit    GraphEdgeKind = "linked_commit"
 	GraphEdgeSessionAdjacent GraphEdgeKind = "session_adjacent"
-	GraphEdgeParent           GraphEdgeKind = "parent"
-	GraphEdgeChild            GraphEdgeKind = "child"
-	GraphEdgeSibling          GraphEdgeKind = "sibling"
+	GraphEdgeParent          GraphEdgeKind = "parent"
+	GraphEdgeChild           GraphEdgeKind = "child"
+	GraphEdgeSibling         GraphEdgeKind = "sibling"
 )
 
 type GraphEdge struct {

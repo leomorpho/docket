@@ -59,19 +59,19 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 
 	// 1. Required fields
 	if t.ID == "" {
-		errs = append(errs, store.ValidationError{Field: "id", Message: "required"})
+		errs = append(errs, store.ValidationError{Field: "id", Message: "required frontmatter field `id: TKT-XXX`"})
 	} else if !strings.HasPrefix(t.ID, "TKT-") {
-		errs = append(errs, store.ValidationError{Field: "id", Message: "must match TKT-\\d+"})
+		errs = append(errs, store.ValidationError{Field: "id", Message: "must match `TKT-XXX`"})
 	}
 
 	if t.Seq <= 0 {
-		errs = append(errs, store.ValidationError{Field: "seq", Message: "must be > 0"})
+		errs = append(errs, store.ValidationError{Field: "seq", Message: "must be > 0 (frontmatter `seq`)"})
 	}
 
 	if t.State == "" {
-		errs = append(errs, store.ValidationError{Field: "state", Message: "required"})
+		errs = append(errs, store.ValidationError{Field: "state", Message: fmt.Sprintf("required frontmatter field `state` (allowed: %s)", strings.Join(cfg.StateNames(), ", "))})
 	} else if !cfg.IsValidState(string(t.State)) {
-		errs = append(errs, store.ValidationError{Field: "state", Message: fmt.Sprintf("%q is not a valid state", t.State)})
+		errs = append(errs, store.ValidationError{Field: "state", Message: fmt.Sprintf("%q is not a valid state (allowed: %s)", t.State, strings.Join(cfg.StateNames(), ", "))})
 	}
 
 	if t.Priority <= 0 {
@@ -79,13 +79,13 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 	}
 
 	if t.CreatedAt.IsZero() {
-		errs = append(errs, store.ValidationError{Field: "created_at", Message: "required and must be RFC3339"})
+		errs = append(errs, store.ValidationError{Field: "created_at", Message: "required frontmatter field `created_at` and must be RFC3339, for example `2026-03-18T07:45:00Z`"})
 	}
 	if t.UpdatedAt.IsZero() {
-		errs = append(errs, store.ValidationError{Field: "updated_at", Message: "required and must be RFC3339"})
+		errs = append(errs, store.ValidationError{Field: "updated_at", Message: "required frontmatter field `updated_at` and must be RFC3339, for example `2026-03-18T07:45:00Z`"})
 	}
 	if t.CreatedBy == "" {
-		errs = append(errs, store.ValidationError{Field: "created_by", Message: "required"})
+		errs = append(errs, store.ValidationError{Field: "created_by", Message: "required frontmatter field `created_by`, for example `human:name` or `agent:model-id`"})
 	}
 
 	// 1b. Signature (TKT-147)
@@ -93,7 +93,7 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 	if sigErr != nil {
 		errs = append(errs, store.ValidationError{Field: "signature", Message: fmt.Sprintf("validation failed: %v", sigErr)})
 	} else if !valid {
-		errs = append(errs, store.ValidationError{Field: "signature", Message: "Direct file mutation detected. You must use Docket's MCP tools to update tickets."})
+		errs = append(errs, store.ValidationError{Field: "signature", Message: fmt.Sprintf("write_hash does not match file contents. Direct markdown edits are supported, but the ticket must still be schema-valid. Fix any schema errors below, then rerun `docket validate %s` to refresh the signature.", id)})
 	}
 
 	// 2. Consistency
@@ -120,10 +120,10 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 
 	// 4. Structure
 	if t.Description == "" {
-		errs = append(errs, store.ValidationError{Field: "body", Message: "## Description section is required"})
+		errs = append(errs, store.ValidationError{Field: "body", Message: "missing required `## Description` section"})
 	}
 	if len(t.AC) == 0 {
-		errs = append(errs, store.ValidationError{Field: "body", Message: "## Acceptance Criteria section is required"})
+		errs = append(errs, store.ValidationError{Field: "body", Message: "missing required `## Acceptance Criteria` section with at least one checklist item"})
 	} else {
 		allowedKinds := map[string]bool{
 			"automated": true,

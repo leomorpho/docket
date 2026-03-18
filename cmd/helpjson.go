@@ -18,7 +18,7 @@ var helpJSONCmd = &cobra.Command{
 			"version":     Version,
 			"description": rootCmd.Short,
 			"agent_instructions": map[string]any{
-				"file_access": "Do not read, edit, or create .docket/tickets/*.md or .docket/manifest.json directly. Always use docket CLI commands. The CLI applies computed fields (AC status, linked files, state history) that raw files do not include.",
+				"file_access": "Prefer docket CLI commands for ticket reads because they expose computed fields (AC status, linked files, state history) that raw files do not include. Direct edits to .docket/tickets/*.md are allowed when needed, but you must run `docket validate TKT-NNN` or `docket validate` afterward before committing.",
 				"ticket_quality": map[string]any{
 					"size":        "Keep tickets atomic — one deliverable completable in a single focused session. If a task touches more than 3 files or has multiple logical phases, split it into child tickets under a parent epic using --parent TKT-NNN.",
 					"description": "The description must explain context, constraints, and the 'why' — not just restate the title. A cheap LLM should be able to pick up the ticket and execute it without asking clarifying questions.",
@@ -28,6 +28,7 @@ var helpJSONCmd = &cobra.Command{
 				"workflow": map[string]any{
 					"start":                 "docket list --state open --format context",
 					"pick_up":               "docket show TKT-NNN --format context",
+					"search":                "docket search \"query\"",
 					"work":                  "docket update TKT-NNN --state in-progress",
 					"finish":                "docket update TKT-NNN --state in-review && docket session compress TKT-NNN",
 					"quick_path_preference": "Prefer transactional authoring via scaffold/apply commands over multi-step manual edits.",
@@ -112,6 +113,7 @@ func commandExamples(name string) []string {
 		"create":           {"docket create --title 'Add auth middleware' --priority 1 --labels feature", "echo 'Long description' | docket create --title 'Fix bug' --desc -"},
 		"list":             {"docket list --state open", "docket list --format json"},
 		"show":             {"docket show TKT-001", "docket show TKT-001 --format context"},
+		"search":           {"docket search \"auth middleware\"", "docket search \"token validation\" --semantic auto"},
 		"update":           {"docket update TKT-001 --state in-progress", "docket update TKT-001 --priority 1"},
 		"comment":          {"docket comment TKT-001 --body 'Decision details'"},
 		"blame":            {"docket blame main.go:42"},

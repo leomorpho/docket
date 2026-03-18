@@ -8,9 +8,10 @@ This repo uses `docket` for ticket tracking. Read these instructions carefully.
 |---|---|
 | List open tickets | `docket list --state open --format context` |
 | Read a specific ticket | `docket show TKT-NNN --format context` |
+| Search tickets by text | `docket search "query"` |
 | Find related tickets | `docket related TKT-NNN` |
 
-**Do not read `.docket/tickets/*.md` files directly.** The CLI applies computed fields — AC completion status, linked files, git-blame context, state history — that raw markdown files do not include. Reading files directly gives an incomplete picture.
+**Prefer the CLI over raw markdown for reads.** The CLI applies computed fields — AC completion status, linked files, git-blame context, state history — that raw markdown files do not include. Reading files directly gives an incomplete picture.
 
 ### At the start of every session
 1. Run `docket list --state open --format context` to see open tickets.
@@ -23,10 +24,14 @@ This repo uses `docket` for ticket tracking. Read these instructions carefully.
 ### During work
 - Add a comment when you make a significant decision:
   `docket comment TKT-001 --body "Chose X over Y because..."`
+- When you need to find tickets by topic:
+  `docket search "query"` — keyword search across ticket title, description, AC, and handoff
 - When you understand why a file looks the way it does:
   `docket context <file>` — shows tickets linked to that file's history
 - When you fix a line that seems odd:
   `docket blame <file>:<line>` — shows which ticket that line belongs to
+- If you directly edit `.docket/tickets/TKT-001.md` in an editor:
+  `docket validate TKT-001` — verify the ticket is still legal before committing
 
 ### Before committing
 - Check that acceptance criteria are met:
@@ -46,7 +51,7 @@ This repo uses `docket` for ticket tracking. Read these instructions carefully.
   (This will prompt you to write the summary — follow the format shown)
 
 ### Rules
-- NEVER read or edit `.docket/tickets/*.md` files directly — use `docket show` and `docket update` instead.
-- ALWAYS use `docket` commands to update ticket state — direct edits are caught by pre-commit hooks.
+- Prefer `docket show` and `docket update` for ticket work because they preserve computed context.
+- Direct edits to `.docket/tickets/*.md` are allowed, but you MUST run `docket validate TKT-NNN` afterward before committing.
 - Set your actor identity: `export DOCKET_ACTOR="agent:claude-sonnet-4-6"`
 - For full command reference: `docket help-json`

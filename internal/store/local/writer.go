@@ -89,6 +89,8 @@ func render(t *ticket.Ticket) (string, error) {
 
 	// Title
 	sb.WriteString(fmt.Sprintf("# %s: %s\n\n", t.ID, t.Title))
+	sb.WriteString(ticketEditingGuidanceComment(t.ID))
+	sb.WriteString("\n\n")
 
 	// Description
 	if t.Description != "" {
@@ -176,4 +178,11 @@ func render(t *ticket.Ticket) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+func ticketEditingGuidanceComment(ticketID string) string {
+	if strings.TrimSpace(ticketID) == "" {
+		return "<!-- docket: Direct edits are allowed. After editing this ticket, run `docket validate` before committing. -->"
+	}
+	return fmt.Sprintf("<!-- docket: Direct edits are allowed. After editing this ticket, run `docket validate %s` before committing. -->", ticketID)
 }
