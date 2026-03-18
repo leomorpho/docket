@@ -38,8 +38,8 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hook missing: %v", err)
 	}
-	if !strings.Contains(string(hookData), "Ticket: TKT-NNN") {
-		t.Fatalf("hook content missing ticket warning logic")
+	if !strings.Contains(string(hookData), "__hook-lock-check") {
+		t.Fatalf("pre-commit hook should run lock checks")
 	}
 	info, err := os.Stat(hookPath)
 	if err != nil {
@@ -47,6 +47,21 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	}
 	if info.Mode()&0o111 == 0 {
 		t.Fatalf("hook should be executable, mode=%v", info.Mode())
+	}
+	commitHookPath := commitMsgHookPath(tmpDir)
+	commitHookData, err := os.ReadFile(commitHookPath)
+	if err != nil {
+		t.Fatalf("commit-msg hook missing: %v", err)
+	}
+	if !strings.Contains(string(commitHookData), "__hook-ac-check") || !strings.Contains(string(commitHookData), "Ticket: TKT-NNN") {
+		t.Fatalf("commit-msg hook should enforce ticket trailer checks")
+	}
+	commitInfo, err := os.Stat(commitHookPath)
+	if err != nil {
+		t.Fatalf("commit-msg hook stat failed: %v", err)
+	}
+	if commitInfo.Mode()&0o111 == 0 {
+		t.Fatalf("commit-msg hook should be executable, mode=%v", commitInfo.Mode())
 	}
 
 	manifestData, err := os.ReadFile(installManifestPath(tmpDir))
@@ -102,11 +117,66 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(ticketPath, "TKT-999.md"), []byte("state: done\n"), 0o644); err != nil {
 		t.Fatalf("write done ticket failed: %v", err)
 	}
-	hookCmd := exec.Command(preCommitHookPath(tmpDir))
+	hookCmd := exec.Command(commitMsgHookPath(tmpDir), msgPath)
 	hookCmd.Dir = tmpDir
 	if err := hookCmd.Run(); err == nil {
 		t.Fatalf("expected hook to block done-state referenced ticket")
 	}
+}
+
+func TestInstallCommitMsgHookUsesCurrentCommitMessageFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := exec.Command("git", "init", "-q", tmpDir).Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "config", "user.email", "test@example.com").Run(); err != nil {
+		t.Fatalf("git config email failed: %v", err)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "config", "user.name", "tester").Run(); err != nil {
+		t.Fatalf("git config name failed: %v", err)
+	}
+	if _, err := writeHook(tmpDir); err != nil {
+		t.Fatalf("writeHook failed: %v", err)
+	}
+
+	logPath := filepath.Join(tmpDir, "hook.log")
+	stubPath := filepath.Join(tmpDir, "docket-stub.sh")
+	stub := "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$*\" >> " + shellQuote(logPath) + "\n"
+	if err := os.WriteFile(stubPath, []byte(stub), 0o755); err != nil {
+		t.Fatalf("write docket stub failed: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".git", "COMMIT_EDITMSG"), []byte("old subject\n\nTicket: TKT-260\n"), 0o644); err != nil {
+		t.Fatalf("write stale commit message failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "tracked.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write tracked file failed: %v", err)
+	}
+	addCmd := exec.Command("git", "-C", tmpDir, "add", "tracked.txt")
+	if out, err := addCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add failed: %v\n%s", err, out)
+	}
+	commitCmd := exec.Command("git", "-C", tmpDir, "commit", "-m", "new subject", "-m", "Ticket: TKT-253")
+	commitCmd.Env = append(os.Environ(), "DOCKET_BIN="+stubPath)
+	if out, err := commitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, out)
+	}
+
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read hook log failed: %v", err)
+	}
+	logText := string(logData)
+	if !strings.Contains(logText, "__hook-ac-check TKT-253") {
+		t.Fatalf("expected commit-msg hook to validate current ticket, got log:\n%s", logText)
+	}
+	if strings.Contains(logText, "__hook-ac-check TKT-260") {
+		t.Fatalf("did not expect stale commit message ticket in hook log:\n%s", logText)
+	}
+}
+
+func shellQuote(path string) string {
+	return "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
 }
 
 func TestUpgradeCheckAndApply(t *testing.T) {

@@ -68,6 +68,7 @@ var installCmd = &cobra.Command{
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Installed docket artifacts.\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  hook: %s\n", preCommitHookPath(repo))
+		fmt.Fprintf(cmd.OutOrStdout(), "  hook: %s\n", commitMsgHookPath(repo))
 		fmt.Fprintf(cmd.OutOrStdout(), "  manifest: %s\n", installManifestPath(repo))
 		fmt.Fprintf(cmd.OutOrStdout(), "  secure storage (DOCKET_HOME): %s\n", docketHome)
 		fmt.Fprintf(cmd.OutOrStdout(), "    Set DOCKET_HOME to a different writable directory if you prefer (example: DOCKET_HOME=%s)\n", filepath.Join(os.TempDir(), "docket-home"))

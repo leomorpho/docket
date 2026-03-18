@@ -27,6 +27,10 @@ func preCommitHookPath(repoRoot string) string {
 	return filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
 }
 
+func commitMsgHookPath(repoRoot string) string {
+	return filepath.Join(repoRoot, ".git", "hooks", "commit-msg")
+}
+
 func installManifestPath(repoRoot string) string {
 	return artifacts.RepoPath(repoRoot, artifacts.RepoInstallManifest)
 }
@@ -36,16 +40,30 @@ func claudePath(repoRoot string) string {
 }
 
 func preCommitHookScript() string {
+	return `#!/bin/sh
+set -eu
+
+DOCKET_BIN="${DOCKET_BIN:-docket}"
+
+if command -v "$DOCKET_BIN" >/dev/null 2>&1; then
+  "$DOCKET_BIN" __hook-lock-check || true
+fi
+
+exit 0
+`
+}
+
+func commitMsgHookScript() string {
 	ticketsRelDir := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoTicketsDir))
 	return `#!/bin/sh
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-MSG_FILE="$REPO_ROOT/.git/COMMIT_EDITMSG"
+MSG_FILE="${1:-$REPO_ROOT/.git/COMMIT_EDITMSG}"
 DOCKET_BIN="${DOCKET_BIN:-docket}"
 
 if [ ! -f "$MSG_FILE" ]; then
-  echo "docket: warning: .git/COMMIT_EDITMSG not found; skipping Ticket trailer checks" >&2
+  echo "docket: warning: commit message file not found; skipping Ticket trailer checks" >&2
   exit 0
 fi
 
@@ -72,10 +90,6 @@ if [ "${DOCKET_SKIP_AC:-0}" != "1" ]; then
       break
     fi
   done
-fi
-
-if command -v "$DOCKET_BIN" >/dev/null 2>&1; then
-  "$DOCKET_BIN" __hook-lock-check || true
 fi
 
 exit 0
@@ -130,26 +144,38 @@ func ensureClaudeManagedBlock(repoRoot string) (bool, error) {
 }
 
 func writeHook(repoRoot string) (bool, error) {
-	path := preCommitHookPath(repoRoot)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	prePath := preCommitHookPath(repoRoot)
+	commitPath := commitMsgHookPath(repoRoot)
+	if err := os.MkdirAll(filepath.Dir(prePath), 0o755); err != nil {
 		return false, err
 	}
-	script := preCommitHookScript()
-	if data, err := os.ReadFile(path); err == nil && string(data) == script {
-		if chmodErr := os.Chmod(path, 0o755); chmodErr != nil {
-			return false, chmodErr
+	wroteAny := false
+	hooks := []struct {
+		path   string
+		script string
+	}{
+		{path: prePath, script: preCommitHookScript()},
+		{path: commitPath, script: commitMsgHookScript()},
+	}
+	for _, hook := range hooks {
+		if data, err := os.ReadFile(hook.path); err == nil && string(data) == hook.script {
+			if chmodErr := os.Chmod(hook.path, 0o755); chmodErr != nil {
+				return false, chmodErr
+			}
+			continue
 		}
-		return false, nil
+		if err := os.WriteFile(hook.path, []byte(hook.script), 0o755); err != nil {
+			return false, err
+		}
+		wroteAny = true
 	}
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		return false, err
-	}
-	return true, nil
+	return wroteAny, nil
 }
 
 func writeInstallManifest(repoRoot string) error {
 	artifacts := []string{
 		preCommitHookPath(repoRoot),
+		commitMsgHookPath(repoRoot),
 		claudePath(repoRoot),
 	}
 	sort.Strings(artifacts)
@@ -170,11 +196,23 @@ func writeInstallManifest(repoRoot string) error {
 }
 
 func artifactStatus(repoRoot string) (hookStale bool, claudeStale bool, err error) {
-	hookData, err := os.ReadFile(preCommitHookPath(repoRoot))
-	if err != nil {
-		hookStale = true
-	} else {
-		hookStale = string(hookData) != preCommitHookScript()
+	hooks := []struct {
+		path   string
+		script string
+	}{
+		{path: preCommitHookPath(repoRoot), script: preCommitHookScript()},
+		{path: commitMsgHookPath(repoRoot), script: commitMsgHookScript()},
+	}
+	for _, hook := range hooks {
+		hookData, readErr := os.ReadFile(hook.path)
+		if readErr != nil {
+			hookStale = true
+			break
+		}
+		if string(hookData) != hook.script {
+			hookStale = true
+			break
+		}
 	}
 
 	claudeData, err := os.ReadFile(claudePath(repoRoot))

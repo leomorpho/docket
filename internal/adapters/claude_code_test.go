@@ -77,6 +77,9 @@ func TestClaudeAdapterBootstrapStatusReady(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".git", "hooks", "pre-commit"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatalf("write pre-commit failed: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(repo, ".git", "hooks", "commit-msg"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write commit-msg failed: %v", err)
+	}
 
 	adapter := newClaudeCodeAdapter()
 	if err := adapter.Bootstrap(context.Background(), BootstrapInput{RepoRoot: repo}); err != nil {

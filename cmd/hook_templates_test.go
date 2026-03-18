@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestLefthookTemplatesUsePendingCommitMessage(t *testing.T) {
+func TestLefthookTemplatesRunTicketChecksInCommitMsg(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -30,11 +30,18 @@ func TestLefthookTemplatesUsePendingCommitMessage(t *testing.T) {
 			if strings.Contains(content, `git log -1 --format="%B"`) {
 				t.Fatalf("%s should not inspect the previous commit message", path)
 			}
-			if !strings.Contains(content, "COMMIT_EDITMSG") {
-				t.Fatalf("%s should read the pending commit message file", path)
+			if !strings.Contains(content, "commit-msg:") {
+				t.Fatalf("%s should define a commit-msg hook for Ticket trailer checks", path)
+			}
+			if !strings.Contains(content, `MSG_FILE="{1}"`) {
+				t.Fatalf("%s should read the commit message path from the commit-msg hook argument", path)
 			}
 			if !strings.Contains(content, `grep -Eo 'Ticket:[[:space:]]*TKT-[0-9]+' "$MSG_FILE"`) {
 				t.Fatalf("%s should extract Ticket trailers from MSG_FILE", path)
+			}
+			preCommitSection := strings.Split(content, "commit-msg:")[0]
+			if strings.Contains(preCommitSection, "COMMIT_EDITMSG") {
+				t.Fatalf("%s pre-commit hook should not read COMMIT_EDITMSG directly", path)
 			}
 		})
 	}

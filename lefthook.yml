@@ -5,12 +5,14 @@ pre-commit:
       run: docket validate {staged_files}
       fail_text: "Ticket validation failed. Fix the reported markdown/schema errors, rerun `docket validate`, and recommit. Schema-valid direct edits are auto-repaired."
 
+commit-msg:
+  commands:
     docket-ac-check:
       run: |
         REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        MSG_FILE="$REPO_ROOT/.git/COMMIT_EDITMSG"
+        MSG_FILE="{1}"
         if [ ! -f "$MSG_FILE" ]; then
-          echo "docket: warning: .git/COMMIT_EDITMSG not found; skipping Ticket trailer checks" >&2
+          echo "docket: warning: commit message file not found; skipping Ticket trailer checks" >&2
           exit 0
         fi
         TICKETS="$(grep -Eo 'Ticket:[[:space:]]*TKT-[0-9]+' "$MSG_FILE" | sed -E 's/.*(TKT-[0-9]+)$/\1/' | sort -u || true)"

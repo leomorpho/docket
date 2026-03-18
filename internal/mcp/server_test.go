@@ -337,6 +337,10 @@ func TestServeMCP_HookMetadataAndStatus(t *testing.T) {
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write hook failed: %v", err)
 	}
+	commitHookPath := filepath.Join(repo, ".git", "hooks", "commit-msg")
+	if err := os.WriteFile(commitHookPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write commit-msg hook failed: %v", err)
+	}
 
 	inReady := strings.NewReader(`{"id":5,"action":"hook.status"}` + "\n")
 	var outReady bytes.Buffer

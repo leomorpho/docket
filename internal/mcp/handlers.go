@@ -547,12 +547,17 @@ func loadHookStatus(repoRoot string) (mcpHookStatusView, error) {
 }
 
 func isHookInstalled(repoRoot string) bool {
-	path := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
+	paths := []string{
+		filepath.Join(repoRoot, ".git", "hooks", "pre-commit"),
+		filepath.Join(repoRoot, ".git", "hooks", "commit-msg"),
 	}
-	return !info.IsDir()
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 type capabilityDigestReadinessView struct {

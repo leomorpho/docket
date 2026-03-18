@@ -142,11 +142,16 @@ func buildCodexConfigCheck(repoRoot string) DoctorCheck {
 }
 
 func buildCodexHooksCheck(repoRoot string) DoctorCheck {
-	path := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
-	if fileExists(path) {
-		return DoctorCheck{Name: "hooks", OK: true, Detail: "Git pre-commit hook detected."}
+	paths := []string{
+		filepath.Join(repoRoot, ".git", "hooks", "pre-commit"),
+		filepath.Join(repoRoot, ".git", "hooks", "commit-msg"),
 	}
-	return DoctorCheck{Name: "hooks", OK: false, Detail: "Git pre-commit hook missing. Run `docket bootstrap --adapter codex`."}
+	for _, path := range paths {
+		if !fileExists(path) {
+			return DoctorCheck{Name: "hooks", OK: false, Detail: "Git hooks missing. Run `docket bootstrap --adapter codex`."}
+		}
+	}
+	return DoctorCheck{Name: "hooks", OK: true, Detail: "Git hooks detected."}
 }
 
 func fileExists(path string) bool {
