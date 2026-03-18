@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -22,6 +24,7 @@ var (
 	createAC     []string
 	noACDefaults bool
 	acTemplate   string
+	authoringSpec string
 )
 
 var createCmd = &cobra.Command{
@@ -38,6 +41,18 @@ var createCmd = &cobra.Command{
 
 		if title == "" {
 			return fmt.Errorf("--title is required")
+		}
+		if cmd.Flags().Changed("desc") && strings.TrimSpace(authoringSpec) != "" {
+			return fmt.Errorf("--desc cannot be combined with --authoring-spec")
+		}
+
+		if strings.TrimSpace(authoringSpec) != "" {
+			spec, err := readCreateAuthoringSpec(authoringSpec)
+			if err != nil {
+				return err
+			}
+			desc = spec.Description
+			createAC = append(createAC, spec.AC...)
 		}
 
 		cfg, err := ticket.LoadConfig(repo)
@@ -74,7 +89,7 @@ var createCmd = &cobra.Command{
 			desc = string(data)
 		}
 		if strings.TrimSpace(desc) == "" {
-			return fmt.Errorf("--desc is required. Provide context with --desc \"...\" or --desc - to read from stdin")
+			return fmt.Errorf("--desc is required. Provide context with --desc \"...\", --desc - to read from stdin, or --authoring-spec <file|-> for shell-safe multiline input")
 		}
 		if len(strings.TrimSpace(desc)) < 50 {
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: description is under 50 characters. Add more context so another agent can execute this without clarification.\n")
@@ -154,6 +169,7 @@ func resetCreateGlobals() {
 	createAC = nil
 	noACDefaults = false
 	acTemplate = ""
+	authoringSpec = ""
 }
 
 func readyContractHints(description string) []string {
@@ -172,16 +188,58 @@ func readyContractHints(description string) []string {
 }
 
 func resetCreateFlagChanges(cmd *cobra.Command) {
-	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template"} {
+	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template", "authoring-spec"} {
 		if f := cmd.Flags().Lookup(name); f != nil {
 			f.Changed = false
 		}
 	}
 }
 
+type createAuthoringSpecPayload struct {
+	Description string   `yaml:"description"`
+	AC          []string `yaml:"ac"`
+}
+
+func readCreateAuthoringSpec(path string) (createAuthoringSpecPayload, error) {
+	var (
+		raw []byte
+		err error
+	)
+	if path == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return createAuthoringSpecPayload{}, fmt.Errorf("reading --authoring-spec from stdin: %w", err)
+		}
+	} else {
+		raw, err = os.ReadFile(path)
+		if err != nil {
+			return createAuthoringSpecPayload{}, fmt.Errorf("reading --authoring-spec file: %w", err)
+		}
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+	var payload createAuthoringSpecPayload
+	if err := dec.Decode(&payload); err != nil {
+		return createAuthoringSpecPayload{}, fmt.Errorf("parse --authoring-spec: %w", err)
+	}
+	payload.Description = strings.TrimSpace(payload.Description)
+	if payload.Description == "" {
+		return createAuthoringSpecPayload{}, fmt.Errorf("--authoring-spec requires a non-empty description")
+	}
+	out := make([]string, 0, len(payload.AC))
+	for _, ac := range payload.AC {
+		if trimmed := strings.TrimSpace(ac); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	payload.AC = out
+	return payload, nil
+}
+
 func init() {
 	createCmd.Flags().StringVar(&title, "title", "", "ticket title (required)")
 	createCmd.Flags().StringVar(&desc, "desc", "", "ticket description (use - for stdin)")
+	createCmd.Flags().StringVar(&authoringSpec, "authoring-spec", "", "YAML/JSON file with description and ac[] (use - for stdin)")
 	createCmd.Flags().IntVar(&priority, "priority", 0, "ticket priority (default from config)")
 	createCmd.Flags().StringVar(&labels, "labels", "", "comma-separated labels")
 	createCmd.Flags().StringVar(&state, "state", "", "initial state (default from config)")

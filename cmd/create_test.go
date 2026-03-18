@@ -272,3 +272,62 @@ func TestCreateCmd_NoACDefaultsFlagAndUnknownStack(t *testing.T) {
 		t.Fatalf("expected unknown stack to skip defaults, got %+v", t2.AC)
 	}
 }
+
+func TestCreateCmd_AuthoringSpecCreatesMultilineDescriptionAndAC(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	spec := "" +
+		"description: |-\n" +
+		"  Likely paths: cmd/create.go, cmd/create_test.go\n" +
+		"  Verify commands: go test ./cmd/...\n" +
+		"  Out of scope: changing apply spec contracts.\n" +
+		"ac:\n" +
+		"  - multiline description is persisted exactly\n" +
+		"  - acceptance criteria are parsed from structured input\n"
+	specPath := filepath.Join(tmpDir, "authoring-spec.yaml")
+	if err := os.WriteFile(specPath, []byte(spec), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "Structured authoring", "--authoring-spec", specPath})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	t1, _ := s.GetTicket(context.Background(), "TKT-001")
+	if !strings.Contains(t1.Description, "Likely paths: cmd/create.go, cmd/create_test.go") {
+		t.Fatalf("expected multiline description from spec, got: %q", t1.Description)
+	}
+	if len(t1.AC) != 2 {
+		t.Fatalf("expected 2 AC entries from spec, got %+v", t1.AC)
+	}
+}
+
+func TestCreateCmd_AuthoringSpecRejectsMalformedInput(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	ticket.SaveConfig(tmpDir, ticket.DefaultConfig())
+
+	specPath := filepath.Join(tmpDir, "bad-authoring-spec.yaml")
+	if err := os.WriteFile(specPath, []byte("description: [bad"), 0o644); err != nil {
+		t.Fatalf("write bad spec: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "Bad spec", "--authoring-spec", specPath})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected malformed authoring spec error")
+	}
+	if !strings.Contains(err.Error(), "parse --authoring-spec") {
+		t.Fatalf("expected parse --authoring-spec error, got: %v", err)
+	}
+}
