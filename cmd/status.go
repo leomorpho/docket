@@ -16,9 +16,16 @@ var statusParallel bool
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	Aliases: []string{"st"},
-	Short:   "Show docket status and parallel work safety",
+	Short:   "Show runtime ticket state and parallel work safety",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			statusParallel = false
+			if f := cmd.Flags().Lookup("parallel"); f != nil {
+				f.Changed = false
+			}
+		}()
 		if !statusParallel {
+			fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
 			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for in-progress ticket matrix.")
 			return nil
 		}
@@ -47,7 +54,7 @@ var statusCmd = &cobra.Command{
 			ids = append(ids, t.ID)
 		}
 		sort.Strings(ids)
-		fmt.Fprintln(cmd.OutOrStdout(), "Parallel matrix (safe/risky):")
+		fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: parallel matrix (safe/risky):")
 		for i := 0; i < len(ids); i++ {
 			for j := i + 1; j < len(ids); j++ {
 				a, b := ids[i], ids[j]

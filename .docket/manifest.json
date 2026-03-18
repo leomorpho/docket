@@ -1411,7 +1411,7 @@
     },
     "TKT-263": {
       "title": "Clarify the UX split between docket status and docket doctor",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 2,
       "parent": "TKT-177"
     },

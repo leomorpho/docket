@@ -29,7 +29,7 @@ type doctorReport struct {
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Run integration health checks for MCP, skills, hooks, and capabilities contract",
+	Short: "Run setup and integration health checks for MCP, skills, hooks, and capabilities contract",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		report := buildDoctorReport(repo)
 		if format == "json" {
@@ -37,7 +37,7 @@ var doctorCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Doctor report (adapter: %s)\n", report.Adapter)
+		fmt.Fprintf(cmd.OutOrStdout(), "Setup and integration health report (adapter: %s)\n", report.Adapter)
 		for _, chk := range report.Checks {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %-8s %s\n", chk.Status, chk.Name, chk.Detail)
 			if chk.Status == "FAIL" && chk.Remediation != "" {
