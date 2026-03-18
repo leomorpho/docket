@@ -1578,7 +1578,7 @@
     },
     "TKT-291": {
       "title": "Define tracked-vs-local artifact policy and canonical .docket/local layout",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-290"
     },
@@ -1632,7 +1632,7 @@
     },
     "TKT-300": {
       "title": "Add canonical Docket artifact registry to prevent path/policy drift",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-290"
     },
