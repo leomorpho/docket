@@ -7,8 +7,17 @@ pre-commit:
 
     docket-ac-check:
       run: |
-        TICKET=$(git log -1 --format="%B" 2>/dev/null | grep -oE 'Ticket: TKT-[0-9]+' | awk '{print $2}' || true)
-        if [ -n "$TICKET" ]; then
-          docket ac check "$TICKET"
+        REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        MSG_FILE="$REPO_ROOT/.git/COMMIT_EDITMSG"
+        if [ ! -f "$MSG_FILE" ]; then
+          echo "docket: warning: .git/COMMIT_EDITMSG not found; skipping Ticket trailer checks" >&2
+          exit 0
         fi
+        TICKETS="$(grep -Eo 'Ticket:[[:space:]]*TKT-[0-9]+' "$MSG_FILE" | sed -E 's/.*(TKT-[0-9]+)$/\1/' | sort -u || true)"
+        if [ -z "$TICKETS" ]; then
+          exit 0
+        fi
+        for TICKET in $TICKETS; do
+          docket ac check "$TICKET" || exit 1
+        done
       fail_text: "Acceptance criteria for linked ticket are not all complete."
