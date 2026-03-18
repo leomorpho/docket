@@ -1570,6 +1570,125 @@
       "state": "backlog",
       "priority": 2,
       "parent": "TKT-209"
+    },
+    "TKT-290": {
+      "title": "[Epic] Segregate Docket local artifacts and preserve backward compatibility",
+      "state": "backlog",
+      "priority": 1
+    },
+    "TKT-291": {
+      "title": "Define tracked-vs-local artifact policy and canonical .docket/local layout",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-292": {
+      "title": "Implement backward-compatible artifact path resolution with legacy read fallback",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-293": {
+      "title": "Add upgrade migration and idempotent .gitignore management for local artifacts",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-294": {
+      "title": "Enforce tracked-required and local-forbidden artifact rules in pre-commit",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-295": {
+      "title": "Document rollout and add regression matrix for legacy, mixed, and migrated repositories",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-296": {
+      "title": "Phase 2: Remove legacy artifact path fallback after migration window",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-297": {
+      "title": "Harden local artifact migration for crash, retry, and concurrency safety",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-298": {
+      "title": "Add doctor/check diagnostics for legacy-new artifact layout drift",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-290"
+    },
+    "TKT-299": {
+      "title": "Add cross-version compatibility matrix for artifact layout rollout",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-290"
+    },
+    "TKT-300": {
+      "title": "Add canonical Docket artifact registry to prevent path/policy drift",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-301": {
+      "title": "Auto-heal Docket ignore policy from init/bootstrap/install entrypoints",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-290"
+    },
+    "TKT-302": {
+      "title": "Add migration rollback and recovery workflow for partial .docket/local failures",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-303": {
+      "title": "Add CI artifact policy drift checks for local-vs-tracked invariants",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-290"
+    },
+    "TKT-304": {
+      "title": "Split migration engine from ignore reconciliation in rollout execution",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-305": {
+      "title": "Implement dedicated .gitignore reconciliation unit for Docket local artifacts",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-306": {
+      "title": "Split pre-commit tracked-required artifact enforcement into dedicated policy unit",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-307": {
+      "title": "Split pre-commit local-only artifact rejection into dedicated policy unit",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-290"
+    },
+    "TKT-308": {
+      "title": "Split compatibility matrix harness implementation from docs/policy guidance",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-290"
+    },
+    "TKT-309": {
+      "title": "Document support-window and failure-mode policy for artifact layout compatibility",
+      "state": "backlog",
+      "priority": 2,
+      "parent": "TKT-290"
     }
   }
 }
