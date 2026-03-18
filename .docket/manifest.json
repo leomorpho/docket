@@ -1423,7 +1423,7 @@
     },
     "TKT-265": {
       "title": "Add CLI commands to inspect and search stored learnings",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-177"
     },
