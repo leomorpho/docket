@@ -1417,7 +1417,7 @@
     },
     "TKT-264": {
       "title": "Show hook readiness and active hook events in status surfaces",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },
@@ -1459,7 +1459,7 @@
     },
     "TKT-271": {
       "title": "Add a smart-commit command tied to ticket context and review readiness",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },

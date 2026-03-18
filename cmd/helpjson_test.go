@@ -65,7 +65,7 @@ func TestHelpJSONCommand(t *testing.T) {
 		names[m["name"].(string)] = true
 	}
 
-	required := []string{"create", "list", "show", "update", "comment", "board", "blame", "scan", "refs", "context", "session", "ac", "skill", "hook", "check", "help-json", "install", "upgrade"}
+	required := []string{"create", "list", "show", "update", "comment", "board", "blame", "scan", "refs", "context", "session", "ac", "skill", "hook", "smart-commit", "check", "help-json", "install", "upgrade"}
 	for _, r := range required {
 		if !names[r] {
 			t.Fatalf("missing command in manifest: %s", r)
