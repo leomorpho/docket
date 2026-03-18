@@ -22,6 +22,12 @@ var learnCmd = &cobra.Command{
 	Short: "Inspect and search stored learning rules",
 }
 
+var (
+	learnCaptureCategory string
+	learnCaptureRule     string
+	learnCaptureSource   string
+)
+
 var learnListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List stored learning rules",
@@ -107,6 +113,72 @@ var learnShowCmd = &cobra.Command{
 	},
 }
 
+var learnCaptureCmd = &cobra.Command{
+	Use:   "capture",
+	Short: "Capture a learning rule explicitly",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			learnCaptureCategory = ""
+			learnCaptureRule = ""
+			learnCaptureSource = ""
+		}()
+		category := strings.TrimSpace(learnCaptureCategory)
+		rule := strings.TrimSpace(learnCaptureRule)
+		source := strings.TrimSpace(learnCaptureSource)
+		if category == "" {
+			return fmt.Errorf("--category is required")
+		}
+		if rule == "" {
+			return fmt.Errorf("--rule is required")
+		}
+		if source == "" {
+			source = "manual:" + detectActor()
+		}
+
+		line := fmt.Sprintf("LEARN[%s]: %s", category, rule)
+		parsed := learning.Parse(line)
+		if len(parsed) == 0 {
+			return fmt.Errorf("invalid learning input: expected category and rule text")
+		}
+		normalizedCategory := parsed[0].Category
+		normalizedRule := parsed[0].Rule
+
+		store := learning.NewStore(repo, nil)
+		result, err := store.IngestText(source, line)
+		if err != nil {
+			return err
+		}
+		entry, ok := findLearnEntry(result.Entries, normalizedCategory, normalizedRule)
+		if !ok {
+			return fmt.Errorf("captured learn rule missing from store snapshot")
+		}
+		view := learnEntryView{
+			Category:   entry.Category,
+			Rule:       entry.Rule,
+			Source:     entry.Source,
+			CapturedAt: entry.CapturedAt,
+		}
+
+		if format == "json" {
+			printJSON(cmd, map[string]any{
+				"added": result.Added,
+				"total": result.Total,
+				"entry": view,
+			})
+			return nil
+		}
+		if result.Added == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Learning rule already exists: [%s] %s\n", view.Category, view.Rule)
+			fmt.Fprintf(cmd.OutOrStdout(), "source: %s\n", displayLearnSource(view.Source))
+			return nil
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Captured learning rule: [%s] %s\n", view.Category, view.Rule)
+		fmt.Fprintf(cmd.OutOrStdout(), "source: %s\n", displayLearnSource(view.Source))
+		return nil
+	},
+}
+
 func loadLearnEntries() ([]learnEntryView, error) {
 	snapshot, err := learning.NewStore(repo, nil).Load()
 	if err != nil {
@@ -123,6 +195,18 @@ func loadLearnEntries() ([]learnEntryView, error) {
 		})
 	}
 	return entries, nil
+}
+
+func findLearnEntry(entries []learning.Entry, category, rule string) (learning.Entry, bool) {
+	targetCategory := strings.ToLower(strings.TrimSpace(category))
+	targetRule := strings.ToLower(strings.TrimSpace(rule))
+	for _, entry := range entries {
+		if strings.ToLower(strings.TrimSpace(entry.Category)) == targetCategory &&
+			strings.ToLower(strings.TrimSpace(entry.Rule)) == targetRule {
+			return entry, true
+		}
+	}
+	return learning.Entry{}, false
 }
 
 func filterLearnEntries(entries []learnEntryView, query string) []learnEntryView {
@@ -179,5 +263,9 @@ func init() {
 	learnCmd.AddCommand(learnListCmd)
 	learnCmd.AddCommand(learnSearchCmd)
 	learnCmd.AddCommand(learnShowCmd)
+	learnCaptureCmd.Flags().StringVar(&learnCaptureCategory, "category", "", "learning category (for example: reliability, testing)")
+	learnCaptureCmd.Flags().StringVar(&learnCaptureRule, "rule", "", "learning rule text")
+	learnCaptureCmd.Flags().StringVar(&learnCaptureSource, "source", "", "source metadata (default: manual:<actor>)")
+	learnCmd.AddCommand(learnCaptureCmd)
 	rootCmd.AddCommand(learnCmd)
 }

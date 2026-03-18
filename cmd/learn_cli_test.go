@@ -79,3 +79,95 @@ LEARN[reliability]: retry sqlite busy writes with bounded backoff.
 		t.Fatalf("expected category/rule/source fields in learn search json entry, got %#v", first)
 	}
 }
+
+func TestLearnCaptureStoresCategorizedRuleWithSourceMetadata(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	captureOut, err := h.run(
+		"learn", "capture",
+		"--category", "reliability",
+		"--rule", "retry flaky network calls once before failing.",
+		"--source", "manual:TKT-267",
+		"--format", "json",
+	)
+	if err != nil {
+		t.Fatalf("learn capture failed: %v\n%s", err, captureOut)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(captureOut), &payload); err != nil {
+		t.Fatalf("unmarshal learn capture json failed: %v\n%s", err, captureOut)
+	}
+	if payload["added"].(float64) != 1 {
+		t.Fatalf("expected added=1 for first capture, got %#v", payload)
+	}
+	entry := payload["entry"].(map[string]any)
+	if entry["category"] != "reliability" || entry["source"] != "manual:TKT-267" {
+		t.Fatalf("expected captured category+source metadata, got %#v", entry)
+	}
+
+	searchOut, err := h.run("learn", "search", "flaky network", "--format", "json")
+	if err != nil {
+		t.Fatalf("learn search failed after capture: %v\n%s", err, searchOut)
+	}
+	var search map[string]any
+	if err := json.Unmarshal([]byte(searchOut), &search); err != nil {
+		t.Fatalf("unmarshal learn search json failed: %v\n%s", err, searchOut)
+	}
+	entries := search["entries"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("expected one captured learn rule in search output, got %#v", search)
+	}
+}
+
+func TestLearnCaptureDeduplicatesAndValidatesInput(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	firstOut, err := h.run(
+		"learn", "capture",
+		"--category", "testing",
+		"--rule", "use deterministic fixtures in integration tests.",
+		"--source", "manual:first",
+		"--format", "json",
+	)
+	if err != nil {
+		t.Fatalf("first learn capture failed: %v\n%s", err, firstOut)
+	}
+	secondOut, err := h.run(
+		"learn", "capture",
+		"--category", "testing",
+		"--rule", "use deterministic fixtures in integration tests.",
+		"--source", "manual:second",
+		"--format", "json",
+	)
+	if err != nil {
+		t.Fatalf("second learn capture failed: %v\n%s", err, secondOut)
+	}
+	var second map[string]any
+	if err := json.Unmarshal([]byte(secondOut), &second); err != nil {
+		t.Fatalf("unmarshal second capture json failed: %v\n%s", err, secondOut)
+	}
+	if second["added"].(float64) != 0 {
+		t.Fatalf("expected dedupe to return added=0, got %#v", second)
+	}
+
+	listOut, err := h.run("learn", "list", "--format", "json")
+	if err != nil {
+		t.Fatalf("learn list json failed after dedupe test: %v\n%s", err, listOut)
+	}
+	var list map[string]any
+	if err := json.Unmarshal([]byte(listOut), &list); err != nil {
+		t.Fatalf("unmarshal list json failed: %v\n%s", err, listOut)
+	}
+	entries := list["entries"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("expected dedupe to keep a single learn entry, got %#v", list)
+	}
+
+	invalidOut, err := h.run("learn", "capture", "--category", "testing", "--source", "manual:invalid")
+	if err == nil {
+		t.Fatalf("expected capture without --rule to fail, output=%s", invalidOut)
+	}
+	if !strings.Contains(invalidOut, "--rule is required") {
+		t.Fatalf("expected clear --rule validation error, got:\n%s", invalidOut)
+	}
+}
