@@ -1095,13 +1095,13 @@
     },
     "TKT-210": {
       "title": "Define capabilities contract v1 for workflow, hooks, and skills",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-211": {
       "title": "Implement adapter interface and registry for Codex, Claude Code, and Gemini",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1113,7 +1113,7 @@
     },
     "TKT-213": {
       "title": "Create idempotent docket bootstrap command with cross-link to docket start",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1137,7 +1137,7 @@
     },
     "TKT-217": {
       "title": "Upgrade docket start with capability digest, status strip, and bootstrap remediation",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1149,37 +1149,37 @@
     },
     "TKT-219": {
       "title": "Implement docket doctor health checks for MCP, skills, hooks, and contract state",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-220": {
       "title": "Eliminate interactive AC or hook prompts and enforce deterministic non-blocking flow",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-221": {
       "title": "Implement minimal lifecycle event set with stable payload schema",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-222": {
       "title": "Generate minimal cross-platform skill pack v1 from canonical contract",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-223": {
       "title": "Implement learning capture parser and storage for LEARN rules",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-224": {
       "title": "Add learning replay in docket start with top 3 relevant rules",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-209"
     },
