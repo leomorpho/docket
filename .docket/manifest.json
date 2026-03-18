@@ -1351,7 +1351,7 @@
     },
     "TKT-253": {
       "title": "Define Docket skill and hook capability namespaces",
-      "state": "todo",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-209"
     },
