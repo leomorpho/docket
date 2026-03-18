@@ -1435,7 +1435,7 @@
     },
     "TKT-267": {
       "title": "Add an explicit learn-rule capture command",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-177"
     },
