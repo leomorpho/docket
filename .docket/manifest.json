@@ -1185,19 +1185,19 @@
     },
     "TKT-225": {
       "title": "Expand unit test coverage for contract, bootstrap, start, doctor, and learning modules",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-226": {
       "title": "Create fake-repo integration harness simulating LLM goal-driven runs",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-227": {
       "title": "Add adapter matrix integration tests for Codex, Claude Code, and Gemini",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1238,19 +1238,19 @@
     },
     "TKT-234": {
       "title": "Add machine-readable error envelope for mutating commands",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-235": {
       "title": "Add scaffold commands for ticket and backlog spec templates",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-236": {
       "title": "Update help-json, start, and capabilities with LLM quick-path guidance",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-228"
     },
@@ -1345,25 +1345,25 @@
     },
     "TKT-252": {
       "title": "Auto-transition review-ready tickets out of in-progress",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-253": {
       "title": "Define Docket skill and hook capability namespaces",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-254": {
       "title": "Add docket skill commands for capability discovery and invocation",
-      "state": "in-review",
+      "state": "done",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-255": {
       "title": "Add docket hook commands for hook introspection and status",
-      "state": "in-review",
+      "state": "done",
       "priority": 2,
       "parent": "TKT-209"
     },
