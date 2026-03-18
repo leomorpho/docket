@@ -77,34 +77,35 @@ const (
 )
 
 type Entry struct {
-	Key           Key
-	Category      Category
-	Root          Root
-	Kind          Kind
-	RelPath       string
-	Policy        Policy
-	Migration     Migration
-	IgnorePattern string
+	Key              Key
+	Category         Category
+	Root             Root
+	Kind             Kind
+	RelPath          string
+	CanonicalRelPath string
+	Policy           Policy
+	Migration        Migration
+	IgnorePattern    string
 }
 
 var registry = map[Key]Entry{
 	RepoAdapter:             {Key: RepoAdapter, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/adapter", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoConfigJSON:          {Key: RepoConfigJSON, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/config.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoConfigYAML:          {Key: RepoConfigYAML, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/config.yaml", Policy: PolicyTracked, Migration: MigrationStable},
-	RepoIndexDB:             {Key: RepoIndexDB, Category: CategoryIndex, Root: RootRepo, Kind: KindFile, RelPath: ".docket/index.db", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/index.db"},
+	RepoIndexDB:             {Key: RepoIndexDB, Category: CategoryIndex, Root: RootRepo, Kind: KindFile, RelPath: ".docket/index.db", CanonicalRelPath: ".docket/local/index.db", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/index.db"},
 	RepoInstallManifest:     {Key: RepoInstallManifest, Category: CategoryHooks, Root: RootRepo, Kind: KindFile, RelPath: ".docket/install.json", Policy: PolicyTracked, Migration: MigrationRegenerate},
-	RepoLifecycleEvents:     {Key: RepoLifecycleEvents, Category: CategoryRuntime, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/lifecycle-events.jsonl", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
-	RepoLearnRules:          {Key: RepoLearnRules, Category: CategoryLearning, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/learn-rules.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
-	RepoLocks:               {Key: RepoLocks, Category: CategoryRelations, Root: RootRepo, Kind: KindFile, RelPath: ".docket/locks.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/locks.json"},
+	RepoLifecycleEvents:     {Key: RepoLifecycleEvents, Category: CategoryRuntime, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/lifecycle-events.jsonl", CanonicalRelPath: ".docket/local/runtime/lifecycle-events.jsonl", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
+	RepoLearnRules:          {Key: RepoLearnRules, Category: CategoryLearning, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/learn-rules.json", CanonicalRelPath: ".docket/local/runtime/learn-rules.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
+	RepoLocks:               {Key: RepoLocks, Category: CategoryRelations, Root: RootRepo, Kind: KindFile, RelPath: ".docket/locks.json", CanonicalRelPath: ".docket/local/locks.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/locks.json"},
 	RepoManifest:            {Key: RepoManifest, Category: CategoryTickets, Root: RootRepo, Kind: KindFile, RelPath: ".docket/manifest.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoProofsDir:           {Key: RepoProofsDir, Category: CategoryProofs, Root: RootRepo, Kind: KindDir, RelPath: ".docket/proofs", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoRelations:           {Key: RepoRelations, Category: CategoryRelations, Root: RootRepo, Kind: KindFile, RelPath: ".docket/relations.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoRepoID:              {Key: RepoRepoID, Category: CategorySecurity, Root: RootRepo, Kind: KindFile, RelPath: ".docket/repo_id", Policy: PolicyTracked, Migration: MigrationStable},
-	RepoRuntimeCapabilities: {Key: RepoRuntimeCapabilities, Category: CategoryRuntime, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/capabilities.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
-	RepoSemanticDir:         {Key: RepoSemanticDir, Category: CategorySemantic, Root: RootRepo, Kind: KindDir, RelPath: ".docket/semantic", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/semantic/"},
+	RepoRuntimeCapabilities: {Key: RepoRuntimeCapabilities, Category: CategoryRuntime, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/capabilities.json", CanonicalRelPath: ".docket/local/runtime/capabilities.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
+	RepoSemanticDir:         {Key: RepoSemanticDir, Category: CategorySemantic, Root: RootRepo, Kind: KindDir, RelPath: ".docket/semantic", CanonicalRelPath: ".docket/local/semantic", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/semantic/"},
 	RepoTemplatesDir:        {Key: RepoTemplatesDir, Category: CategoryConfig, Root: RootRepo, Kind: KindDir, RelPath: ".docket/templates", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoTicketsDir:          {Key: RepoTicketsDir, Category: CategoryTickets, Root: RootRepo, Kind: KindDir, RelPath: ".docket/tickets", Policy: PolicyTracked, Migration: MigrationStable},
-	RepoTicketSessions:      {Key: RepoTicketSessions, Category: CategoryTickets, Root: RootRepo, Kind: KindDir, RelPath: ".docket/tickets", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/tickets/*/sessions/"},
+	RepoTicketSessions:      {Key: RepoTicketSessions, Category: CategoryTickets, Root: RootRepo, Kind: KindDir, RelPath: ".docket/tickets", CanonicalRelPath: ".docket/local/tickets", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/tickets/*/sessions/"},
 	RepoWorkflowPolicy:      {Key: RepoWorkflowPolicy, Category: CategoryWorkflow, Root: RootRepo, Kind: KindFile, RelPath: ".docket/workflow.proposal.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoWorkflowLock:        {Key: RepoWorkflowLock, Category: CategoryWorkflow, Root: RootRepo, Kind: KindFile, RelPath: ".docket/workflow.lock.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoInstructionPack:     {Key: RepoInstructionPack, Category: CategoryWorkflow, Root: RootRepo, Kind: KindFile, RelPath: ".docket/instruction-pack.json", Policy: PolicyTracked, Migration: MigrationStable},
@@ -179,4 +180,21 @@ func RepoLocalIgnorePatterns() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func CanonicalLocalRootRelPath() string {
+	return ".docket/local"
+}
+
+func CanonicalRepoPath(repoRoot string, key Key, more ...string) string {
+	entry := MustLookup(key)
+	if entry.Root != RootRepo {
+		panic("artifact is not repo-rooted: " + string(key))
+	}
+	base := entry.RelPath
+	if entry.CanonicalRelPath != "" {
+		base = entry.CanonicalRelPath
+	}
+	parts := append([]string{repoRoot, base}, more...)
+	return filepath.Join(parts...)
 }

@@ -94,6 +94,49 @@ func TestRegistryHelpersResolvePathsAndIgnorePatterns(t *testing.T) {
 	}
 }
 
+func TestLocalOnlyRepoArtifactsDeclareCanonicalLocalLayout(t *testing.T) {
+	t.Parallel()
+
+	if got, want := CanonicalLocalRootRelPath(), ".docket/local"; got != want {
+		t.Fatalf("CanonicalLocalRootRelPath() = %q, want %q", got, want)
+	}
+
+	cases := []struct {
+		key     Key
+		current string
+		target  string
+	}{
+		{RepoIndexDB, ".docket/index.db", ".docket/local/index.db"},
+		{RepoLifecycleEvents, ".docket/runtime/lifecycle-events.jsonl", ".docket/local/runtime/lifecycle-events.jsonl"},
+		{RepoLearnRules, ".docket/runtime/learn-rules.json", ".docket/local/runtime/learn-rules.json"},
+		{RepoRuntimeCapabilities, ".docket/runtime/capabilities.json", ".docket/local/runtime/capabilities.json"},
+		{RepoSemanticDir, ".docket/semantic", ".docket/local/semantic"},
+		{RepoLocks, ".docket/locks.json", ".docket/local/locks.json"},
+		{RepoTicketSessions, ".docket/tickets", ".docket/local/tickets"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(string(tc.key), func(t *testing.T) {
+			t.Parallel()
+
+			entry := MustLookup(tc.key)
+			if entry.RelPath != tc.current {
+				t.Fatalf("current rel path mismatch for %s: got %s want %s", tc.key, entry.RelPath, tc.current)
+			}
+			if entry.CanonicalRelPath != tc.target {
+				t.Fatalf("canonical rel path mismatch for %s: got %s want %s", tc.key, entry.CanonicalRelPath, tc.target)
+			}
+			if entry.Policy != PolicyLocalOnly {
+				t.Fatalf("%s should be local-only, got %s", tc.key, entry.Policy)
+			}
+			if !strings.HasPrefix(entry.CanonicalRelPath, CanonicalLocalRootRelPath()) {
+				t.Fatalf("%s canonical path should live under %s, got %s", tc.key, CanonicalLocalRootRelPath(), entry.CanonicalRelPath)
+			}
+		})
+	}
+}
+
 func TestCoreLifecycleSourcesUseArtifactRegistry(t *testing.T) {
 	t.Parallel()
 
