@@ -1393,7 +1393,7 @@
     },
     "TKT-260": {
       "title": "Add an Agent Quickstart block to docket start",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-177"
     },
