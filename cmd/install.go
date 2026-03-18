@@ -50,6 +50,9 @@ var installCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := ensureLocalArtifactsGitignored(repo); err != nil {
+			return err
+		}
 		if err := writeInstallManifest(repo); err != nil {
 			return err
 		}

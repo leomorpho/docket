@@ -56,22 +56,7 @@ func saveLocks(repoRoot string, st locksState) error {
 }
 
 func ensureLocksGitignored(repoRoot string) error {
-	path := filepath.Join(repoRoot, ".gitignore")
-	line := artifacts.MustRelPath(artifacts.RepoLocks)
-	data, _ := os.ReadFile(path)
-	content := string(data)
-	if strings.Contains(content, line) {
-		return nil
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if strings.TrimSpace(content) != "" {
-		_, _ = f.WriteString("\n")
-	}
-	_, err = f.WriteString(line + "\n")
+	_, err := reconcileGitignoreFile(filepath.Join(repoRoot, ".gitignore"), []string{artifacts.MustRelPath(artifacts.RepoLocks)})
 	return err
 }
 

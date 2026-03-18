@@ -151,6 +151,9 @@ func runCoreInstallStep(repoRoot string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if err := ensureLocalArtifactsGitignored(repoRoot); err != nil {
+		return false, err
+	}
 	if err := writeInstallManifest(repoRoot); err != nil {
 		return false, err
 	}

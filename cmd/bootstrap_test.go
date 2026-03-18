@@ -141,6 +141,13 @@ func TestBootstrapCommandRunsTwiceNoOpSafe(t *testing.T) {
 		claudePath(tmpRepo),
 		installManifestPath(tmpRepo),
 	}
+	gitignoreData, err := os.ReadFile(filepath.Join(tmpRepo, ".gitignore"))
+	if err != nil {
+		t.Fatalf("gitignore missing after bootstrap: %v", err)
+	}
+	if !strings.Contains(string(gitignoreData), ".docket/local/") {
+		t.Fatalf("expected bootstrap to reconcile canonical local gitignore entry, got:\n%s", string(gitignoreData))
+	}
 	t.Logf("bootstrap summary first run:\n%s", first)
 	t.Logf("bootstrap summary second run:\n%s", second)
 	t.Logf("artifact inventory after first run: %s", strings.Join(inventoryAfterFirst, ", "))

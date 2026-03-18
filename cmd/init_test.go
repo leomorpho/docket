@@ -50,6 +50,9 @@ func TestInitCmd(t *testing.T) {
 	if !strings.Contains(string(data), ".docket/index.db") {
 		t.Errorf(".gitignore does not contain .docket/index.db")
 	}
+	if !strings.Contains(string(data), ".docket/local/") {
+		t.Errorf(".gitignore does not contain .docket/local/")
+	}
 
 	// 2. Second init (idempotency)
 	b.Reset()

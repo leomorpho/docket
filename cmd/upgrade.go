@@ -61,6 +61,9 @@ var upgradeCmd = &cobra.Command{
 		if err := ensureConfigYAML(repo); err != nil {
 			return err
 		}
+		if err := ensureLocalArtifactsGitignored(repo); err != nil {
+			return err
+		}
 		if err := writeInstallManifest(repo); err != nil {
 			return err
 		}

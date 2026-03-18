@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/security"
@@ -52,32 +51,8 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 		}
 
 		// 3. Update gitignore
-		gitignorePath := filepath.Join(repo, ".gitignore")
-		ignoreLines := append([]string{"", "# docket"}, artifacts.RepoLocalIgnorePatterns()...)
-		ignoreContent := strings.Join(ignoreLines, "\n") + "\n"
-
-		data, err := os.ReadFile(gitignorePath)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("reading .gitignore: %w", err)
-		}
-
-		needsWrite := false
-		for _, line := range artifacts.RepoLocalIgnorePatterns() {
-			if !strings.Contains(string(data), line) {
-				needsWrite = true
-				break
-			}
-		}
-		if needsWrite {
-			f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				return fmt.Errorf("opening .gitignore: %w", err)
-			}
-			if _, err := f.WriteString(ignoreContent); err != nil {
-				f.Close()
-				return fmt.Errorf("writing to .gitignore: %w", err)
-			}
-			f.Close()
+		if err := ensureLocalArtifactsGitignored(repo); err != nil {
+			return fmt.Errorf("reconciling .gitignore: %w", err)
 		}
 
 		// 4. Output

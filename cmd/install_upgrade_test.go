@@ -83,6 +83,13 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	if string(afterData) != before {
 		t.Fatalf("install should be idempotent for CLAUDE.md managed block")
 	}
+	gitignoreData, err := os.ReadFile(filepath.Join(tmpDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("gitignore missing: %v", err)
+	}
+	if !strings.Contains(string(gitignoreData), ".docket/local/") {
+		t.Fatalf("expected install to reconcile canonical local gitignore entry, got:\n%s", string(gitignoreData))
+	}
 
 	msgPath := filepath.Join(tmpDir, ".git", "COMMIT_EDITMSG")
 	if err := os.WriteFile(msgPath, []byte("feat: test\n\nTicket: TKT-999\n"), 0o644); err != nil {
@@ -150,6 +157,13 @@ func TestUpgradeCheckAndApply(t *testing.T) {
 	}
 	if !strings.Contains(string(cfgData), "ticket_quality_min_ac:") {
 		t.Fatalf("expected missing config key to be injected")
+	}
+	gitignoreData, err := os.ReadFile(filepath.Join(tmpDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected upgrade to maintain gitignore: %v", err)
+	}
+	if !strings.Contains(string(gitignoreData), ".docket/local/") {
+		t.Fatalf("expected upgrade to reconcile canonical local gitignore entry, got:\n%s", string(gitignoreData))
 	}
 }
 

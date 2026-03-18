@@ -1662,7 +1662,7 @@
     },
     "TKT-305": {
       "title": "Implement dedicated .gitignore reconciliation unit for Docket local artifacts",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-290"
     },
