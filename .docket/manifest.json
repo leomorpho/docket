@@ -1691,7 +1691,7 @@
       "parent": "TKT-290"
     },
     "TKT-310": {
-      "title": "[Epic] Make workflow semantics fully config-defined and role-driven",
+      "title": "[Epic] Make workflow graph config-defined with fixed semantic roles",
       "state": "backlog",
       "priority": 1,
       "parent": "TKT-174"
