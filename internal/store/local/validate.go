@@ -153,13 +153,11 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 		}
 	}
 
-	// 5. Warnings — states that require a handoff are determined by which states
-	// are closed (open: false) and meaningful for review. Use "in-review" and "done"
-	// as the handoff-required states (these are fixed workflow semantics, not config-driven yet).
-	requiresHandoff := t.State == "in-review" || t.State == "done"
+	// 5. Warnings — review and completed workflow roles require structured handoff.
+	requiresHandoff := cfg.StateHasRole(string(t.State), "review") || cfg.StateHasRole(string(t.State), "completed")
 	if t.Handoff == "" {
 		if requiresHandoff {
-			errs = append(errs, store.ValidationError{Field: "handoff", Message: "## Handoff section is required for in-review and done tickets"})
+			errs = append(errs, store.ValidationError{Field: "handoff", Message: "## Handoff section is required for review and completed workflow states"})
 		}
 		warns = append(warns, store.ValidationError{Field: "handoff", Message: "## Handoff section missing (recommended)"})
 	} else if requiresHandoff {
@@ -182,8 +180,8 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 		warns = append(warns, store.ValidationError{Field: "quality.desc", Message: fmt.Sprintf("description is short (%d words) — consider adding more context so agents can execute without clarification", wc)})
 	}
 
-	if t.State == "in-progress" && len(t.Comments) == 0 {
-		warns = append(warns, store.ValidationError{Field: "quality.comments", Message: "ticket is in-progress with no comments — add reasoning with: docket comment TKT-NNN --body '...'"})
+	if cfg.StateHasRole(string(t.State), "active") && len(t.Comments) == 0 {
+		warns = append(warns, store.ValidationError{Field: "quality.comments", Message: "ticket is in an active workflow state with no comments — add reasoning with: docket comment TKT-NNN --body '...'"})
 	}
 
 	return errs, warns, nil

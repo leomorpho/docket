@@ -207,6 +207,173 @@ func TestValidateFile_HandoffSectionsConfigDriven(t *testing.T) {
 	}
 }
 
+func TestValidateFile_UsesWorkflowRolesForHandoffAndComments(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"coding"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"coding": {
+				Label:            "Coding",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"testing"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"testing": {
+				Label:            "Testing",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           3,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   4,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState:    "queued",
+		DefaultPriority: 10,
+		HandoffSections: []string{"Current state", "Decisions made"},
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	active := &ticket.Ticket{
+		ID:          "TKT-020",
+		Seq:         20,
+		Title:       "Active warning",
+		State:       "testing",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "This description is long enough to avoid the short description warning in validation for this ticket.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1"},
+			{Description: "A2"},
+		},
+	}
+	if err := s.CreateTicket(ctx, active); err != nil {
+		t.Fatalf("CreateTicket active failed: %v", err)
+	}
+
+	errs, warns, err := s.ValidateFile("TKT-020")
+	if err != nil {
+		t.Fatalf("ValidateFile active failed: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Fatalf("expected no active-state errors, got %v", errs)
+	}
+	foundCommentWarn := false
+	for _, warn := range warns {
+		if warn.Field == "quality.comments" {
+			foundCommentWarn = true
+			break
+		}
+	}
+	if !foundCommentWarn {
+		t.Fatalf("expected active-role comment warning, got %v", warns)
+	}
+
+	review := &ticket.Ticket{
+		ID:          "TKT-021",
+		Seq:         21,
+		Title:       "Review handoff",
+		State:       "qa",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "This description is long enough to avoid unrelated quality warnings during review-state validation coverage.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1"},
+			{Description: "A2"},
+		},
+		Handoff: "**Current state:** good",
+	}
+	if err := s.CreateTicket(ctx, review); err != nil {
+		t.Fatalf("CreateTicket review failed: %v", err)
+	}
+
+	errs, _, err = s.ValidateFile("TKT-021")
+	if err != nil {
+		t.Fatalf("ValidateFile review failed: %v", err)
+	}
+	missingDecisions := false
+	for _, e := range errs {
+		if e.Field == "handoff" && strings.Contains(strings.ToLower(e.Message), "decisions made") {
+			missingDecisions = true
+			break
+		}
+	}
+	if !missingDecisions {
+		t.Fatalf("expected review-role handoff error, got %v", errs)
+	}
+
+	completed := &ticket.Ticket{
+		ID:          "TKT-022",
+		Seq:         22,
+		Title:       "Completed handoff",
+		State:       "shipped",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "This description is long enough to avoid unrelated quality warnings during completed-state validation coverage.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1"},
+			{Description: "A2"},
+		},
+	}
+	if err := s.CreateTicket(ctx, completed); err != nil {
+		t.Fatalf("CreateTicket completed failed: %v", err)
+	}
+
+	errs, _, err = s.ValidateFile("TKT-022")
+	if err != nil {
+		t.Fatalf("ValidateFile completed failed: %v", err)
+	}
+	foundHandoffRequired := false
+	for _, e := range errs {
+		if e.Field == "handoff" && strings.Contains(strings.ToLower(e.Message), "required") {
+			foundHandoffRequired = true
+			break
+		}
+	}
+	if !foundHandoffRequired {
+		t.Fatalf("expected completed-role handoff requirement, got %v", errs)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := New(tmpDir)
