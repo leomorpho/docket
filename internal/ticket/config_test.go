@@ -469,6 +469,79 @@ func TestLoadConfigNewMapFormat(t *testing.T) {
 	}
 }
 
+func TestLoadConfigLegacyCanonicalMapBackfillsSemanticRoles(t *testing.T) {
+	tmpDir := t.TempDir()
+	raw := `{
+  "counter": 1,
+  "backend": "local",
+  "states": {
+    "backlog": {
+      "label": "Backlog",
+      "open": true,
+      "column": 0,
+      "next": ["todo", "in-progress", "archived"],
+      "startable": true
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": ["in-progress", "backlog", "archived"],
+      "startable": true
+    },
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": ["in-review", "todo", "archived"]
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": ["done", "in-progress", "archived"]
+    },
+    "done": {
+      "label": "Done",
+      "open": false,
+      "column": 4,
+      "next": ["archived", "in-progress"]
+    },
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": ["backlog"]
+    }
+  },
+  "labels": ["bug"],
+  "commit_sessions": false
+}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(ConfigPath(tmpDir), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if !cfg.StateHasRole("in-progress", "active") {
+		t.Fatal("expected in-progress to regain active role semantics")
+	}
+	if !cfg.StateHasRole("done", "completed") {
+		t.Fatal("expected done to regain completed role semantics")
+	}
+	if got := cfg.StartTransitionTargets("backlog"); len(got) != 1 || got[0] != "in-progress" {
+		t.Fatalf("StartTransitionTargets(backlog) = %#v, want [\"in-progress\"]", got)
+	}
+	if !cfg.BlocksDependents("in-progress") {
+		t.Fatal("expected in-progress to block dependents after semantic backfill")
+	}
+}
+
 // TestLoadConfigMigratesUnknownState verifies that unknown state names in the
 // old array format get sensible StateConfig defaults.
 func TestLoadConfigMigratesUnknownState(t *testing.T) {

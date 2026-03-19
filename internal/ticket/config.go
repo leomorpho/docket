@@ -361,7 +361,7 @@ func LoadConfig(repoRoot string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("corrupt config.json states: %w", err)
 		}
-		cfg.States = migrated
+		cfg.States = normalizeLegacyStateSemantics(raw.States, migrated)
 	}
 
 	cfg.applyDefaults()
@@ -382,6 +382,53 @@ func LoadConfig(repoRoot string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func normalizeLegacyStateSemantics(raw json.RawMessage, states map[string]StateConfig) map[string]StateConfig {
+	if len(states) == 0 {
+		return states
+	}
+
+	var rawStates map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawStates); err != nil {
+		return states
+	}
+
+	for name, state := range states {
+		def, ok := defaultStates[name]
+		if !ok {
+			continue
+		}
+		rawState, ok := rawStates[name]
+		if !ok {
+			continue
+		}
+
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(rawState, &fields); err != nil {
+			continue
+		}
+
+		if _, ok := fields["roles"]; !ok && len(state.Roles) == 0 {
+			state.Roles = append([]string(nil), def.Roles...)
+		}
+		if _, ok := fields["terminal"]; !ok {
+			state.Terminal = def.Terminal
+		}
+		if _, ok := fields["startable"]; !ok {
+			state.Startable = def.Startable
+		}
+		if _, ok := fields["reviewable"]; !ok {
+			state.Reviewable = def.Reviewable
+		}
+		if _, ok := fields["blocks_dependents"]; !ok {
+			state.BlocksDependents = def.BlocksDependents
+		}
+
+		states[name] = state
+	}
+
+	return states
 }
 
 func hasWorkflow(raw json.RawMessage) bool {

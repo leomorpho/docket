@@ -268,6 +268,97 @@ func TestSelectNextTicket_UsesStartableStatesFromConfig(t *testing.T) {
 	}
 }
 
+func TestSelectNextTicket_LegacyCanonicalMapConfigRemainsWorkable(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := local.New(tmpDir)
+	ctx := context.Background()
+
+	raw := `{
+  "counter": 1,
+  "backend": "local",
+  "states": {
+    "backlog": {
+      "label": "Backlog",
+      "open": true,
+      "column": 0,
+      "next": ["todo", "in-progress", "archived"],
+      "startable": true
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": ["in-progress", "backlog", "archived"],
+      "startable": true
+    },
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": ["in-review", "todo", "archived"]
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": ["done", "in-progress", "archived"]
+    },
+    "done": {
+      "label": "Done",
+      "open": false,
+      "column": 4,
+      "next": ["archived", "in-progress"]
+    },
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": ["backlog"]
+    }
+  },
+  "labels": ["bug"],
+  "commit_sessions": false
+}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, ".docket", "config.json"), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := ticket.LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Actionable backlog ticket",
+		State:       "backlog",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil || got.ID != "TKT-001" {
+		t.Fatalf("expected legacy map config to keep backlog ticket workable, got %#v", got)
+	}
+}
+
 func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	tmpRepo := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
