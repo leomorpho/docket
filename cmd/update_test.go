@@ -429,6 +429,197 @@ func TestUpdateCmd_AgentDoneTransitionRedirectsToInReview(t *testing.T) {
 	}
 }
 
+func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
+
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-440",
+		Seq:         440,
+		Title:       "Custom workflow lifecycle",
+		State:       "queued",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		Handoff:     "**Current state:**\nqueued\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- y\n\n**AC status:**\n- complete",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1", Done: true, Evidence: "ok"},
+			{Description: "A2", Done: true, Evidence: "ok"},
+		},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-440", "--state", "building"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected queued -> building transition to succeed, got: %v", err)
+	}
+	active, err := s.GetTicket(context.Background(), "TKT-440")
+	if err != nil {
+		t.Fatalf("GetTicket after active transition failed: %v", err)
+	}
+	if active.State != "building" {
+		t.Fatalf("expected active state building, got %s", active.State)
+	}
+	if active.StartedAt.IsZero() {
+		t.Fatalf("expected StartedAt to be set when entering configured active state")
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-440", "--state", "qa"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected building -> qa transition to succeed, got: %v", err)
+	}
+	review, err := s.GetTicket(context.Background(), "TKT-440")
+	if err != nil {
+		t.Fatalf("GetTicket after review transition failed: %v", err)
+	}
+	if review.State != "qa" {
+		t.Fatalf("expected configured review state qa, got %s", review.State)
+	}
+}
+
+func TestUpdateCmd_CustomWorkflowCompletedStateRequiresPrivilegedSurface(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-441",
+		Seq:         441,
+		Title:       "Custom completed state",
+		State:       "qa",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		Handoff:     "**Current state:**\nqa\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1", Done: true, Evidence: "ok"},
+			{Description: "A2", Done: true, Evidence: "ok"},
+		},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-441", "--state", "shipped"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatalf("expected privileged rejection for custom completed state")
+	} else if !strings.Contains(err.Error(), "--ticket is required") {
+		t.Fatalf("expected secure-surface guidance for custom completed state, got: %v", err)
+	}
+}
+
 func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")

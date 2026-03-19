@@ -118,19 +118,26 @@ var updateCmd = &cobra.Command{
 				}
 			}
 			newState := ticket.State(nextState)
-			if newState == "in-review" || newState == "done" {
+			isActiveTarget := cfg.StateHasRole(nextState, "active")
+			isReviewTarget := cfg.StateHasRole(nextState, "review")
+			isCompletedTarget := cfg.StateHasRole(nextState, "completed")
+			isArchivedTarget := cfg.StateHasRole(nextState, "archived")
+			if isReviewTarget || isCompletedTarget {
 				if err := enforceManagedRunCommitLinkage(t.ID, newState); err != nil {
 					return err
 				}
 				transitionChecks = append(transitionChecks, "managed_run_commit_linkage")
 			}
-			if newState == "done" {
+			if isCompletedTarget {
 				if err := enforceStructuredACClosureGate(t); err != nil {
 					return err
 				}
 				transitionChecks = append(transitionChecks, "structured_ac_closure_gate")
 			}
-			if newState == "done" || newState == "archived" {
+			if isCompletedTarget && isLLMActor() {
+				return fmt.Errorf("transition to %s is human-only. If you are an LLM agent, stop at `%s` instead; that is enough to unblock yourself and hand off for human verification", newState, preferredReviewState(cfg))
+			}
+			if isCompletedTarget || isArchivedTarget {
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
 					return err
 				}
@@ -148,7 +155,7 @@ var updateCmd = &cobra.Command{
 			// Use WorkflowManager for run lifecycle transitions that own worktree merge-back.
 			deps := newRuntimeDeps(repo)
 
-			if newState == "in-progress" {
+			if isActiveTarget {
 				actor := detectActor()
 				if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
 					actor = "agent:" + agentID
@@ -159,7 +166,7 @@ var updateCmd = &cobra.Command{
 				}
 				// Reload ticket after StartTask
 				t, _ = s.GetTicket(ctx, t.ID)
-			} else if newState == "in-review" {
+			} else if isReviewTarget {
 				_, err := deps.workflow.FinishTask(ctx, t.ID, cfg)
 				if err != nil {
 					return fmt.Errorf("finishing task: %w", err)
@@ -168,13 +175,13 @@ var updateCmd = &cobra.Command{
 				t, _ = s.GetTicket(ctx, t.ID)
 			} else {
 				t.State = newState
-				if newState == "done" && t.CompletedAt.IsZero() {
+				if isCompletedTarget && t.CompletedAt.IsZero() {
 					t.CompletedAt = time.Now().UTC().Truncate(time.Second)
 				}
 			}
 			updatedFields = append(updatedFields, "state")
 
-			if newState == ticket.State("in-review") || newState == ticket.State("done") {
+			if isReviewTarget || isCompletedTarget {
 				_ = releaseLockForTicket(repo, t.ID)
 			}
 			transitionTo = newState
@@ -440,6 +447,15 @@ func init() {
 	updateCmd.Flags().BoolVar(&updatePrivYes, "yes", false, "skip interactive confirmation for privileged terminal transitions")
 
 	rootCmd.AddCommand(updateCmd)
+}
+
+func preferredReviewState(cfg *ticket.Config) string {
+	if cfg != nil {
+		if review, ok := cfg.PrimaryStateWithRole("review"); ok {
+			return review
+		}
+	}
+	return "in-review"
 }
 
 func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id string) ([]*ticket.Ticket, error) {
