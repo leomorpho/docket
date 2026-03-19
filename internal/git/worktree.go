@@ -6,11 +6,43 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // CreateWorktree creates a new git worktree for a ticket.
 func CreateWorktree(repoRoot, ticketID, branch, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	if _, err := runGit(repoRoot, "worktree", "prune"); err != nil {
+		return fmt.Errorf("git worktree prune failed: %w", err)
+	}
+
+	registeredBranch, registered, err := registeredWorktreeBranch(repoRoot, path)
+	if err != nil {
+		return err
+	}
+	if registered {
+		if registeredBranch == "" || registeredBranch == branch {
+			return nil
+		}
+		return fmt.Errorf("worktree path %s is already registered to branch %s", path, registeredBranch)
+	}
+	if info, err := os.Stat(path); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("worktree path %s exists and is not a directory", path)
+		}
+		managedPath, managedErr := GetAgentWorktreeDir(repoRoot, ticketID)
+		if managedErr != nil {
+			return fmt.Errorf("resolve managed worktree path for %s: %w", ticketID, managedErr)
+		}
+		if !samePath(path, managedPath) {
+			return fmt.Errorf("orphaned worktree path %s is outside managed cache path %s", path, managedPath)
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("remove orphaned worktree path %s: %w", path, err)
+		}
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 
@@ -24,7 +56,7 @@ func CreateWorktree(repoRoot, ticketID, branch, path string) error {
 		return nil
 	}
 
-	_, err := runGit(repoRoot, "rev-parse", "--verify", branch)
+	_, err = runGit(repoRoot, "rev-parse", "--verify", branch)
 	args := []string{"worktree", "add", "-b", branch, path}
 	if err == nil {
 		// Branch exists, just add worktree pointing to it
@@ -67,4 +99,73 @@ func GetAgentWorktreeDir(repoRoot, ticketID string) (string, error) {
 	repoKey := hex.EncodeToString(sum[:4])
 
 	return filepath.Join(cacheDir, "docket", "worktrees", projectID+"-"+repoKey, ticketID), nil
+}
+
+func registeredWorktreeBranch(repoRoot, path string) (string, bool, error) {
+	out, err := runGit(repoRoot, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", false, fmt.Errorf("git worktree list failed: %w", err)
+	}
+
+	desired, err := filepath.Abs(path)
+	if err != nil {
+		return "", false, err
+	}
+
+	var currentPath string
+	var currentBranch string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			if currentPath != "" {
+				if samePath(currentPath, desired) {
+					return currentBranch, true, nil
+				}
+			}
+			currentPath = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+			currentBranch = ""
+		case strings.HasPrefix(line, "branch "):
+			currentBranch = strings.TrimPrefix(strings.TrimSpace(line), "branch refs/heads/")
+		case line == "":
+			if currentPath != "" && samePath(currentPath, desired) {
+				return currentBranch, true, nil
+			}
+			currentPath = ""
+			currentBranch = ""
+		}
+	}
+	if currentPath != "" && samePath(currentPath, desired) {
+		return currentBranch, true, nil
+	}
+
+	return "", false, nil
+}
+
+func samePath(a, b string) bool {
+	aAbs, errA := canonicalPath(a)
+	bAbs, errB := canonicalPath(b)
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	return aAbs == bAbs
+}
+
+func canonicalPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err == nil {
+		return resolved, nil
+	}
+	if os.IsNotExist(err) {
+		parent := filepath.Dir(abs)
+		resolvedParent, parentErr := filepath.EvalSymlinks(parent)
+		if parentErr == nil {
+			return filepath.Join(resolvedParent, filepath.Base(abs)), nil
+		}
+	}
+	return abs, nil
 }
