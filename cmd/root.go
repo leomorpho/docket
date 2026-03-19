@@ -40,6 +40,7 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		printGlobalSkillHint(cmd, cmd.OutOrStdout(), format)
 		flushVersionNotice(cmd)
 		// The CLI process handles one command per invocation; reset globals for in-process tests.
 		automationMode = false

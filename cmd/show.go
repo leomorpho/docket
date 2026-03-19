@@ -72,8 +72,6 @@ var showCmd = &cobra.Command{
 		default:
 			printTicketHuman(cmd, t, agg, proofs, transitions)
 		}
-		printDiscoveryHint(cmd.OutOrStdout(), format)
-
 		return nil
 	},
 }

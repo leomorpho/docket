@@ -89,7 +89,7 @@ func TestListCmd(t *testing.T) {
 	}
 }
 
-func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
+func TestListCmd_GlobalSkillHintShownForHumanButNotJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
@@ -114,11 +114,8 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("list human failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "`docket search \"query\"` for ticket discovery") {
-		t.Fatalf("expected discovery hint in human list output, got:\n%s", out.String())
-	}
-	if !strings.Contains(out.String(), "`docket ls --full`") {
-		t.Fatalf("expected full-view hint in human list output, got:\n%s", out.String())
+	if !strings.Contains(out.String(), "Skill hint: use `docket skill invoke <skill-id>`") {
+		t.Fatalf("expected global skill hint in human list output, got:\n%s", out.String())
 	}
 
 	out.Reset()
@@ -126,8 +123,8 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("list json failed: %v", err)
 	}
-	if strings.Contains(out.String(), "Hint:") {
-		t.Fatalf("expected no discovery hint in list json output, got:\n%s", out.String())
+	if strings.Contains(out.String(), "Skill hint:") {
+		t.Fatalf("expected no skill hint in list json output, got:\n%s", out.String())
 	}
 }
 

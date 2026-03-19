@@ -3,28 +3,30 @@ package cmd
 import (
 	"fmt"
 	"io"
+
+	"github.com/spf13/cobra"
 )
 
-func shouldEmitDiscoveryHint(outputFormat string) bool {
+func shouldEmitGlobalSkillHint(cmd *cobra.Command, outputFormat string) bool {
 	switch outputFormat {
-	case "json", "md":
+	case "json", "md", "context":
 		return false
-	default:
-		return true
 	}
+	if cmd == nil || cmd == cmd.Root() || cmd.Hidden {
+		return false
+	}
+	return true
 }
 
-func discoveryHintLine() string {
-	return "Hint: Use `docket skill list --format json` to discover built-in skills, `docket skill invoke <skill-id>` when one matches the task, `docket ls --full` for the full graph, `docket search \"query\"` for ticket discovery, `docket start --format json` for workflow guidance, and `docket capabilities --format json` for capability discovery."
+func shortSkillHintLine() string {
+	return "Skill hint: use `docket skill invoke <skill-id>` for built-ins; discover ids with `docket skill list --format json`."
 }
 
-func printDiscoveryHint(out io.Writer, outputFormat string) {
-	if !shouldEmitDiscoveryHint(outputFormat) {
+func printGlobalSkillHint(cmd *cobra.Command, out io.Writer, outputFormat string) {
+	if !shouldEmitGlobalSkillHint(cmd, outputFormat) {
 		return
 	}
-	// Keep this hint on common entry points even when repetitive; agents frequently
-	// enter through list/show and miss one-time startup guidance.
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, discoveryHintLine())
+	fmt.Fprintln(out, shortSkillHintLine())
 	fmt.Fprintln(out)
 }

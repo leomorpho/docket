@@ -355,11 +355,8 @@ func TestShowCmd_DiscoveryHintShownForHumanButNotJSONOrMD(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("show human failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "`docket search \"query\"` for ticket discovery") {
-		t.Fatalf("expected discovery hint in show human output, got:\n%s", out.String())
-	}
-	if !strings.Contains(out.String(), "`docket ls --full`") {
-		t.Fatalf("expected discovery hint in show human output, got:\n%s", out.String())
+	if !strings.Contains(out.String(), "Skill hint: use `docket skill invoke <skill-id>`") {
+		t.Fatalf("expected short skill hint in show human output, got:\n%s", out.String())
 	}
 
 	out.Reset()
@@ -367,8 +364,8 @@ func TestShowCmd_DiscoveryHintShownForHumanButNotJSONOrMD(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("show json failed: %v", err)
 	}
-	if strings.Contains(out.String(), "Hint:") {
-		t.Fatalf("expected no discovery hint in show json output, got:\n%s", out.String())
+	if strings.Contains(out.String(), "Skill hint:") {
+		t.Fatalf("expected no skill hint in show json output, got:\n%s", out.String())
 	}
 
 	out.Reset()
@@ -376,7 +373,7 @@ func TestShowCmd_DiscoveryHintShownForHumanButNotJSONOrMD(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("show md failed: %v", err)
 	}
-	if strings.Contains(out.String(), "Hint:") {
-		t.Fatalf("expected no discovery hint in show md output, got:\n%s", out.String())
+	if strings.Contains(out.String(), "Skill hint:") {
+		t.Fatalf("expected no skill hint in show md output, got:\n%s", out.String())
 	}
 }
