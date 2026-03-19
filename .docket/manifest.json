@@ -1727,7 +1727,7 @@
       "parent": "TKT-310"
     },
     "TKT-316": {
-      "title": "Add parity and custom-shape workflow fixtures to lock in default and non-default evaluator behavior",
+      "title": "Add parity and multi-state-per-role workflow fixtures for default and custom graphs",
       "state": "backlog",
       "priority": 2,
       "parent": "TKT-310"
@@ -2067,6 +2067,18 @@
       "state": "todo",
       "priority": 1,
       "parent": "TKT-228"
+    },
+    "TKT-373": {
+      "title": "Clean up workflow docs and generated templates for role-based semantics",
+      "state": "todo",
+      "priority": 2,
+      "parent": "TKT-310"
+    },
+    "TKT-374": {
+      "title": "Clean up workflow comments, tests, and examples that imply fixed state names",
+      "state": "todo",
+      "priority": 3,
+      "parent": "TKT-310"
     }
   }
 }
