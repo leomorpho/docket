@@ -93,11 +93,11 @@ func installCursorRules(cmd *cobra.Command) error {
 - **Workflow:**
     1. **list** to find your assigned or next ticket.
     2. **show** to read the full specification and acceptance criteria.
-    3. **update** the ticket to 'in-progress'. This will automatically claim the ticket and may create a dedicated git worktree for your changes.
-    4. If a worktree was created, perform your work within that directory.
+    3. **update** the ticket to the repo's configured active work state. This will automatically claim the ticket and may create a dedicated git worktree for your changes.
+    4. If a worktree was created, perform your work within that directory and stay on the managed Docket branch/worktree for the ticket.
     5. Once finished, ensure all acceptance criteria are met and tests pass.
-    6. **update** the ticket to 'in-review'. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
-    7. A human reviewer advances the ticket to 'done' after verification.
+    6. **update** the ticket to the repo's configured review state. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
+    7. A human reviewer advances the ticket to the repo's configured completed state after verification.
 - **Large Payloads:** If your content is > 1000 characters, write it to a temporary file and pass the path to the 'content_file' parameter in MCP calls.
 `
 
@@ -199,7 +199,7 @@ Specialized tool-use instructions for managing tickets via Docket.
 
 Docket provides a set of tools via its MCP server. Always prefer these tools over direct file modification.
 
-- **list**: List tickets. Can filter by state (e.g., 'todo', 'in-progress', 'done').
+- **list**: List tickets. Can filter by state names defined in the repo workflow config.
 - **create**: Create a new ticket. Requires 'title'. Optional: 'desc', 'state', 'priority'.
 - **show**: Show details of a specific ticket. Requires 'id'.
 - **update**: Update a ticket's state, title, or priority. Requires 'id'.
@@ -212,11 +212,11 @@ Docket provides a set of tools via its MCP server. Always prefer these tools ove
 - **Workflow:**
     1. **list** to find your assigned or next ticket.
     2. **show** to read the full specification and acceptance criteria.
-    3. **update** the ticket to 'in-progress'. This will automatically claim the ticket (TKT-142/143) and may create a dedicated git worktree for your changes.
-    4. If a worktree was created, perform your work within that directory.
+    3. **update** the ticket to the repo's configured active work state. This will automatically claim the ticket (TKT-142/143) and may create a dedicated git worktree for your changes.
+    4. If a worktree was created, perform your work within that directory and stay on the managed Docket branch/worktree for the ticket.
     5. Once finished, ensure all acceptance criteria are met and tests pass.
-    6. **update** the ticket to 'in-review'. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
-    7. A human reviewer advances the ticket to 'done' after verification.
+    6. **update** the ticket to the repo's configured review state. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
+    7. A human reviewer advances the ticket to the repo's configured completed state after verification.
 
 ## Performance & Context
 

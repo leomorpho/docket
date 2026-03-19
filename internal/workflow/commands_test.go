@@ -40,3 +40,22 @@ func TestUpdateStateCmdApplySetsLifecycleFields(t *testing.T) {
 		t.Fatal("expected CompletedAt to be set")
 	}
 }
+
+func TestUpdateStateCmdApplySetsCompletedAtForCustomCompletedState(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	tkt := &ticket.Ticket{
+		ID:    "TKT-003",
+		State: "qa",
+	}
+	cmd := UpdateStateCmd{
+		To:             "shipped",
+		SetCompletedAt: true,
+	}
+	cmd.Apply(tkt, now)
+	if tkt.State != "shipped" {
+		t.Fatalf("expected state=shipped, got %s", tkt.State)
+	}
+	if tkt.CompletedAt.IsZero() {
+		t.Fatal("expected CompletedAt to be set")
+	}
+}

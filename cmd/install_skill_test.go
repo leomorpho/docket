@@ -43,10 +43,12 @@ func TestInstallSkill(t *testing.T) {
 		"CRITICAL: Do not edit .docket/tickets/*.md directly",
 		"TKT-142/143",
 		"TKT-146",
-		"ticket to 'in-review'",
+		"configured review state",
+		"configured active work state",
 		"merge them back to the main branch",
 		"prune the linked worktree",
-		"human reviewer advances the ticket to 'done'",
+		"configured completed state",
+		"stay on the managed Docket branch/worktree",
 	}
 
 	for _, s := range expectedStrings {
@@ -85,10 +87,12 @@ func TestInstallCursorRulesIncludesReviewMergeWorkflow(t *testing.T) {
 	}
 
 	expectedStrings := []string{
-		"ticket to 'in-review'",
+		"configured review state",
+		"configured active work state",
 		"merge them back to the main branch",
 		"prune the linked worktree",
-		"human reviewer advances the ticket to 'done'",
+		"configured completed state",
+		"stay on the managed Docket branch/worktree",
 	}
 
 	for _, s := range expectedStrings {

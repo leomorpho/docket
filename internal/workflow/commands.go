@@ -37,7 +37,7 @@ func (c UpdateStateCmd) Apply(t *ticket.Ticket, now time.Time) {
 	if c.SetStartedAt && t.StartedAt.IsZero() {
 		t.StartedAt = t.UpdatedAt
 	}
-	if c.SetCompletedAt && t.CompletedAt.IsZero() && c.To == "done" {
+	if c.SetCompletedAt && t.CompletedAt.IsZero() {
 		t.CompletedAt = t.UpdatedAt
 	}
 }

@@ -223,12 +223,14 @@ func handleUpdate(
 		if err := ticket.ValidateTransition(cfg, t.State, ns); err != nil {
 			return nil, err
 		}
-		switch ns {
-		case "in-progress", "in-review":
+		switch {
+		case cfg.StateHasRole(string(ns), "active"):
+			lifecycleState = ns
+		case cfg.StateHasRole(string(ns), "review"):
 			lifecycleState = ns
 		default:
 			t.State = ns
-			if ns == "done" && t.CompletedAt.IsZero() {
+			if cfg.StateHasRole(string(ns), "completed") && t.CompletedAt.IsZero() {
 				t.CompletedAt = time.Now().UTC().Truncate(time.Second)
 			}
 		}
@@ -254,7 +256,7 @@ func handleUpdate(
 
 	resp := map[string]interface{}{"id": t.ID, "state": t.State, "priority": t.Priority}
 
-	if lifecycleState == "in-progress" && oldState != "in-progress" {
+	if cfg.StateHasRole(string(lifecycleState), "active") && !cfg.StateHasRole(string(oldState), "active") {
 		// Auto-claim
 		actor := "agent:mcp"
 		// If caller provided an agent ID via metadata
@@ -272,7 +274,7 @@ func handleUpdate(
 		if wtPath != repoRoot {
 			resp["new_worktree_path"] = wtPath
 		}
-	} else if lifecycleState == "in-review" && oldState != "in-review" {
+	} else if cfg.StateHasRole(string(lifecycleState), "review") && !cfg.StateHasRole(string(oldState), "review") {
 		res, err := wf.FinishTask(ctx, t.ID, cfg)
 		if err != nil {
 			return nil, err

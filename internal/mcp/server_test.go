@@ -18,10 +18,11 @@ import (
 )
 
 type mockWorkflowRunner struct {
-	startCalls  int
-	finishCalls int
-	startTicket *ticket.Ticket
-	startPath   string
+	startCalls   int
+	finishCalls  int
+	startTicket  *ticket.Ticket
+	finishTicket *ticket.Ticket
+	startPath    string
 }
 
 func (m *mockWorkflowRunner) StartTask(ctx context.Context, ticketID, agentID string, cfg *ticket.Config) (*ticket.Ticket, string, error) {
@@ -34,6 +35,9 @@ func (m *mockWorkflowRunner) StartTask(ctx context.Context, ticketID, agentID st
 
 func (m *mockWorkflowRunner) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
 	m.finishCalls++
+	if m.finishTicket != nil {
+		return m.finishTicket, nil
+	}
 	return &ticket.Ticket{ID: ticketID, State: "in-review"}, nil
 }
 
@@ -238,6 +242,159 @@ func TestServeMCPWithDeps_DelegatesFinishTaskOnReview(t *testing.T) {
 	}
 	if resp["result"].(map[string]interface{})["state"] != "in-review" {
 		t.Fatalf("expected response state in-review, got %v", resp["result"])
+	}
+}
+
+func TestServeMCPWithDeps_UsesConfiguredActiveRole(t *testing.T) {
+	repo := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"building"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"building": {Label: "Building", Open: true, Column: 1, Next: []string{"qa", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped", "building"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.Workflow = ticket.WorkflowConfig{Version: 1, States: map[string]ticket.WorkflowStateConfig{
+		"queued":   {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"intake"}, Open: true, Startable: true, BlocksDependents: true, Next: []string{"building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Queued", Column: 0}},
+		"building": {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"active"}, Open: true, BlocksDependents: true, Next: []string{"qa", "queued"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Building", Column: 1}},
+		"qa":       {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"review"}, Open: true, Reviewable: true, BlocksDependents: true, Next: []string{"shipped", "building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "QA", Column: 2}},
+		"shipped":  {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"completed"}, Terminal: true, Next: []string{}}, Presentation: ticket.WorkflowStatePresentation{Label: "Shipped", Column: 3}},
+	}}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(repo, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("queued"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("seed ticket: %v", err)
+	}
+
+	mockWF := &mockWorkflowRunner{
+		startTicket: &ticket.Ticket{ID: "TKT-001", State: "building", Priority: 1},
+		startPath:   "/tmp/wt-TKT-001",
+	}
+	deps := &DispatchDeps{
+		RepoRoot: repo,
+		Store:    s,
+		Workflow: mockWF,
+		Claimer:  &mockClaimLookup{},
+		Config:   cfg,
+	}
+
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"building"}}` + "\n")
+	var out bytes.Buffer
+	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
+		t.Fatalf("ServeMCPWithDeps failed: %v", err)
+	}
+	if mockWF.startCalls != 1 {
+		t.Fatalf("StartTask calls = %d, want 1", mockWF.startCalls)
+	}
+}
+
+func TestServeMCPWithDeps_UsesConfiguredReviewRole(t *testing.T) {
+	repo := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"building"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"building": {Label: "Building", Open: true, Column: 1, Next: []string{"qa", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped", "building"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.Workflow = ticket.WorkflowConfig{Version: 1, States: map[string]ticket.WorkflowStateConfig{
+		"queued":   {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"intake"}, Open: true, Startable: true, BlocksDependents: true, Next: []string{"building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Queued", Column: 0}},
+		"building": {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"active"}, Open: true, BlocksDependents: true, Next: []string{"qa", "queued"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Building", Column: 1}},
+		"qa":       {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"review"}, Open: true, Reviewable: true, BlocksDependents: true, Next: []string{"shipped", "building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "QA", Column: 2}},
+		"shipped":  {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"completed"}, Terminal: true, Next: []string{}}, Presentation: ticket.WorkflowStatePresentation{Label: "Shipped", Column: 3}},
+	}}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(repo, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("building"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("seed ticket: %v", err)
+	}
+
+	mockWF := &mockWorkflowRunner{
+		finishTicket: &ticket.Ticket{ID: "TKT-001", State: "qa", Priority: 1},
+	}
+	deps := &DispatchDeps{
+		RepoRoot: repo,
+		Store:    s,
+		Workflow: mockWF,
+		Claimer:  &mockClaimLookup{},
+		Config:   cfg,
+	}
+
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"qa"}}` + "\n")
+	var out bytes.Buffer
+	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
+		t.Fatalf("ServeMCPWithDeps failed: %v", err)
+	}
+	if mockWF.finishCalls != 1 {
+		t.Fatalf("FinishTask calls = %d, want 1", mockWF.finishCalls)
+	}
+}
+
+func TestServeMCPWithDeps_CompletedRoleSetsCompletedAt(t *testing.T) {
+	repo := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"building"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"building": {Label: "Building", Open: true, Column: 1, Next: []string{"qa", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped", "building"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.Workflow = ticket.WorkflowConfig{Version: 1, States: map[string]ticket.WorkflowStateConfig{
+		"queued":   {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"intake"}, Open: true, Startable: true, BlocksDependents: true, Next: []string{"building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Queued", Column: 0}},
+		"building": {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"active"}, Open: true, BlocksDependents: true, Next: []string{"qa", "queued"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Building", Column: 1}},
+		"qa":       {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"review"}, Open: true, Reviewable: true, BlocksDependents: true, Next: []string{"shipped", "building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "QA", Column: 2}},
+		"shipped":  {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"completed"}, Terminal: true, Next: []string{}}, Presentation: ticket.WorkflowStatePresentation{Label: "Shipped", Column: 3}},
+	}}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(repo, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("qa"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("seed ticket: %v", err)
+	}
+
+	deps := &DispatchDeps{
+		RepoRoot: repo,
+		Store:    s,
+		Workflow: &mockWorkflowRunner{},
+		Claimer:  &mockClaimLookup{},
+		Config:   cfg,
+	}
+
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"shipped"}}` + "\n")
+	var out bytes.Buffer
+	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
+		t.Fatalf("ServeMCPWithDeps failed: %v", err)
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-001")
+	if err != nil {
+		t.Fatalf("get ticket: %v", err)
+	}
+	if got.CompletedAt.IsZero() {
+		t.Fatal("expected completed_at to be set for configured completed state")
 	}
 }
 
