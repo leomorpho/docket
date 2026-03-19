@@ -67,7 +67,11 @@ var contextOptimizeCmd = &cobra.Command{
 }
 
 func buildContextOptimizeOutput(ctx context.Context, repoRoot string, s *local.Store, t *ticket.Ticket) (contextOptimizeOutput, error) {
-	related := collectContextOptimizeRelatedWork(ctx, s, t, contextOptimizeMaxItems)
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		cfg = ticket.DefaultConfig()
+	}
+	related := collectContextOptimizeRelatedWork(ctx, s, cfg, t, contextOptimizeMaxItems)
 	learnRules := buildLearnReplay(repoRoot, t, contextOptimizeMaxItems)
 	recent := collectContextOptimizeRecentActivity(repoRoot, t, contextOptimizeMaxItems)
 	nextSteps := collectContextOptimizeNextSteps(t, contextOptimizeMaxItems)
@@ -85,7 +89,7 @@ func buildContextOptimizeOutput(ctx context.Context, repoRoot string, s *local.S
 	}, nil
 }
 
-func collectContextOptimizeRelatedWork(ctx context.Context, s *local.Store, t *ticket.Ticket, limit int) []string {
+func collectContextOptimizeRelatedWork(ctx context.Context, s *local.Store, cfg *ticket.Config, t *ticket.Ticket, limit int) []string {
 	items := make([]string, 0, limit)
 	if strings.TrimSpace(t.Parent) != "" {
 		if parent, err := s.GetTicket(ctx, t.Parent); err == nil && parent != nil {
@@ -106,7 +110,7 @@ func collectContextOptimizeRelatedWork(ctx context.Context, s *local.Store, t *t
 				if candidate.ID == t.ID || candidate.Parent != t.Parent {
 					continue
 				}
-				if candidate.State == ticket.State("done") || candidate.State == ticket.State("archived") {
+				if cfg.StateHasRole(string(candidate.State), "completed") || cfg.StateHasRole(string(candidate.State), "archived") {
 					continue
 				}
 				items = append(items, fmt.Sprintf("Sibling %s (%s): %s", candidate.ID, candidate.State, truncateWithEllipsis(candidate.Title, contextOptimizeItemChars)))

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestHelpJSONCommand(t *testing.T) {
@@ -114,5 +116,42 @@ func TestHelpJSONCommand(t *testing.T) {
 	conv, ok := manifest["conventions"].(map[string]any)
 	if !ok || conv["commit_trailer"] == nil || conv["inline_annotation"] == nil {
 		t.Fatalf("conventions section missing required keys")
+	}
+}
+
+func TestHelpJSONWorkflowUsesConfiguredRoleStates(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"building"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"building": {Label: "Building", Open: true, Column: 1, Next: []string{"qa", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped", "building"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(tmp, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"help-json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("help-json failed: %v", err)
+	}
+
+	var manifest map[string]any
+	if err := json.Unmarshal(b.Bytes(), &manifest); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	workflow := manifest["agent_instructions"].(map[string]any)["workflow"].(map[string]any)
+	if got := workflow["work"].(string); !strings.Contains(got, "--state building") {
+		t.Fatalf("expected configured active state in workflow guidance, got %q", got)
+	}
+	if got := workflow["finish"].(string); !strings.Contains(got, "--state qa") {
+		t.Fatalf("expected configured review state in workflow guidance, got %q", got)
 	}
 }

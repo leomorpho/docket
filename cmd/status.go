@@ -28,7 +28,7 @@ var statusCmd = &cobra.Command{
 		}()
 		if !statusParallel {
 			fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
-			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for in-progress ticket matrix.")
+			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for active-work ticket matrix.")
 			renderHookStatusSurface(cmd.OutOrStdout())
 			return nil
 		}

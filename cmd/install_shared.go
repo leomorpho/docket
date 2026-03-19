@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/artifacts"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 const (
@@ -80,7 +81,40 @@ fi
 
 for ID in $TICKETS; do
   TICKET_FILE="$REPO_ROOT/` + ticketsRelDir + `/$ID.md"
-  if [ -f "$TICKET_FILE" ] && grep -Eq '^state:[[:space:]]*done$' "$TICKET_FILE"; then
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$REPO_ROOT" "$ID" <<'PY' || exit 1
+import json
+import pathlib
+import re
+import sys
+
+repo_root = pathlib.Path(sys.argv[1])
+ticket_id = sys.argv[2]
+ticket_path = repo_root / ".docket" / "tickets" / f"{ticket_id}.md"
+if not ticket_path.exists():
+    raise SystemExit(0)
+
+match = re.search(r'^state:\s*"?([^"\n]+)"?\s*$', ticket_path.read_text(), re.MULTILINE)
+if not match:
+    raise SystemExit(0)
+state = match.group(1).strip()
+
+closed_states = {"done", "archived"}
+config_path = repo_root / ".docket" / "config.json"
+try:
+    config = json.loads(config_path.read_text())
+    states = config.get("states") or {}
+    derived = {name for name, meta in states.items() if meta.get("open") is False}
+    if derived:
+        closed_states = derived
+except Exception:
+    pass
+
+if state in closed_states:
+    print(f"docket: error: referenced ticket {ticket_id} is already in closed state {state}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  elif [ -f "$TICKET_FILE" ] && grep -Eq '^state:[[:space:]]*done$' "$TICKET_FILE"; then
     echo "docket: error: referenced ticket $ID is already in done state" >&2
     exit 1
   fi
@@ -101,14 +135,18 @@ exit 0
 `
 }
 
-func claudeManagedBlock() string {
+func claudeManagedBlock(repoRoot string) string {
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		cfg = ticket.DefaultConfig()
+	}
 	return strings.Join([]string{
 		docketBlockStart,
 		"## Docket Workflow",
 		"",
 		"- Use `docket list --state open --format context` to pick work.",
 		"- Use `docket show TKT-NNN --format context` before coding.",
-		"- Use `docket update TKT-NNN --state in-progress` when starting.",
+		fmt.Sprintf("- Use `docket update TKT-NNN --state %s` when moving a ticket into active work.", activeWorkflowState(cfg)),
 		"- Use `docket ac add` / `docket ac complete` for acceptance tracking.",
 		"- Add `Ticket: TKT-NNN` trailer to commit messages.",
 		docketBlockEnd,
@@ -125,7 +163,7 @@ func ensureClaudeManagedBlock(repoRoot string) (bool, error) {
 		return false, err
 	}
 
-	block := claudeManagedBlock()
+	block := claudeManagedBlock(repoRoot)
 	startIdx := strings.Index(content, docketBlockStart)
 	endIdx := strings.Index(content, docketBlockEnd)
 	if startIdx >= 0 && endIdx > startIdx {

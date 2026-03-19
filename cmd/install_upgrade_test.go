@@ -2,12 +2,17 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
@@ -110,12 +115,16 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	if err := os.WriteFile(msgPath, []byte("feat: test\n\nTicket: TKT-999\n"), 0o644); err != nil {
 		t.Fatalf("write commit msg failed: %v", err)
 	}
-	ticketPath := filepath.Join(tmpDir, ".docket", "tickets")
-	if err := os.MkdirAll(ticketPath, 0o755); err != nil {
-		t.Fatalf("mkdir tickets failed: %v", err)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(ticketPath, "TKT-999.md"), []byte("state: done\n"), 0o644); err != nil {
-		t.Fatalf("write done ticket failed: %v", err)
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-999", Seq: 999, Title: "Closed", State: ticket.State("done"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A", Done: true}},
+	}); err != nil {
+		t.Fatalf("create done ticket failed: %v", err)
 	}
 	hookCmd := exec.Command(commitMsgHookPath(tmpDir), msgPath)
 	hookCmd.Dir = tmpDir

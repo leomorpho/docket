@@ -611,6 +611,53 @@ func TestServeMCP_CapabilitiesDiscoveryIncludesSkillMetadata(t *testing.T) {
 	}
 }
 
+func TestServeMCP_CapabilitiesQuickstartUsesConfiguredActiveState(t *testing.T) {
+	repo := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"building"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"building": {Label: "Building", Open: true, Column: 1, Next: []string{"qa", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped", "building"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(repo, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir hooks failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "AGENTS.md"), []byte("codex marker"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md failed: %v", err)
+	}
+	if _, _, err := capabilities.WriteRuntimeContract(repo, capabilities.CanonicalContractV1()); err != nil {
+		t.Fatalf("write runtime contract failed: %v", err)
+	}
+
+	in := strings.NewReader(`{"id":1,"action":"capabilities"}` + "\n")
+	var out bytes.Buffer
+	if err := ServeMCP(in, &out, repo); err != nil {
+		t.Fatalf("ServeMCP failed: %v", err)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	quickstart := resp["result"].(map[string]interface{})["agent_quickstart"].(map[string]interface{})
+	core := quickstart["core_workflow"].([]interface{})
+	foundConfiguredActive := false
+	for _, raw := range core {
+		if strings.Contains(raw.(string), "--state building") {
+			foundConfiguredActive = true
+			break
+		}
+	}
+	if !foundConfiguredActive {
+		t.Fatalf("expected capabilities quickstart to include configured active state, got %#v", core)
+	}
+}
+
 func TestServeMCP_SkillDiscoveryAndInvoke(t *testing.T) {
 	repo := t.TempDir()
 	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {

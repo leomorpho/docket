@@ -322,7 +322,7 @@ func handleCapabilities(repoRoot string) (interface{}, error) {
 		},
 		"contract":                runtime,
 		"skill_metadata_checksum": pack.MetadataChecksum,
-		"agent_quickstart":        buildAgentQuickstartView(),
+		"agent_quickstart":        buildAgentQuickstartView(repoRoot),
 		"llm_quick_path":          buildQuickPathView(),
 		"capability_digest":       capabilityDigest,
 	}, nil
@@ -657,14 +657,18 @@ func fileContains(path, needle string) bool {
 	return strings.Contains(string(data), needle)
 }
 
-func buildAgentQuickstartView() map[string]any {
+func buildAgentQuickstartView(repoRoot string) map[string]any {
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		cfg = ticket.DefaultConfig()
+	}
 	return map[string]any{
 		"direct_edit_avoidance": "Never edit .docket/tickets/*.md directly; use `docket` commands so ticket signatures and metadata remain valid.",
 		"skills_reminder":       "Docket has built-in skills. Check `docket skill list --format json`, use `docket skill.invoke` or `docket skill invoke <skill-id>` when a skill matches the task, and confirm usage with `docket skill audit`.",
 		"core_workflow": []string{
 			"docket list --state open --format context",
 			"docket show TKT-NNN --format context",
-			"docket update TKT-NNN --state in-progress",
+			fmt.Sprintf("docket update TKT-NNN --state %s", preferredRoleState(cfg, "active", "in-progress")),
 			"docket ac check TKT-NNN",
 		},
 		"capability_discovery": []string{
@@ -685,6 +689,15 @@ func buildQuickPathView() map[string]any {
 		"proof_verify":    "docket proof list TKT-NNN --format json && docket show TKT-NNN --format json",
 		"automation_hint": "Use --automation (or DOCKET_AUTOMATION=1) for deterministic non-interactive execution.",
 	}
+}
+
+func preferredRoleState(cfg *ticket.Config, role, fallback string) string {
+	if cfg != nil {
+		if state, ok := cfg.PrimaryStateWithRole(role); ok {
+			return state
+		}
+	}
+	return fallback
 }
 
 func getString(m map[string]interface{}, key string) (string, bool) {

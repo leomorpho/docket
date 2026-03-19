@@ -189,7 +189,7 @@ func TestBuildStartCapabilityDigest_ClaudeSkillsReadyWhenManagedBlockExists(t *t
 	if err := os.MkdirAll(filepath.Join(repoRoot, ".git", "hooks"), 0o755); err != nil {
 		t.Fatalf("mkdir hooks failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "CLAUDE.md"), []byte(claudeManagedBlock()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoRoot, "CLAUDE.md"), []byte(claudeManagedBlock(repoRoot)), 0o644); err != nil {
 		t.Fatalf("write CLAUDE.md failed: %v", err)
 	}
 	if _, err := writeHook(repoRoot); err != nil {

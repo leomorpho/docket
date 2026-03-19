@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -13,6 +14,10 @@ var helpJSONCmd = &cobra.Command{
 	Use:   "help-json",
 	Short: "Print machine-readable CLI manifest",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			cfg = ticket.DefaultConfig()
+		}
 		manifest := map[string]any{
 			"binary":      "docket",
 			"version":     Version,
@@ -29,8 +34,8 @@ var helpJSONCmd = &cobra.Command{
 					"start":                 "docket list --state open --format context",
 					"pick_up":               "docket show TKT-NNN --format context",
 					"search":                "docket search \"query\"",
-					"work":                  "docket update TKT-NNN --state in-progress",
-					"finish":                "docket update TKT-NNN --state in-review && docket session compress TKT-NNN",
+					"work":                  fmt.Sprintf("docket update TKT-NNN --state %s", activeWorkflowState(cfg)),
+					"finish":                fmt.Sprintf("docket update TKT-NNN --state %s && docket session compress TKT-NNN", reviewWorkflowState(cfg)),
 					"quick_path_preference": "Prefer transactional authoring via scaffold/apply commands over multi-step manual edits.",
 					"ticket_apply":          "docket ticket scaffold > ticket-spec.json && docket --automation ticket apply --spec ticket-spec.json",
 					"backlog_apply":         "docket backlog scaffold > backlog-spec.json && docket --automation backlog apply --spec backlog-spec.json",
@@ -42,7 +47,7 @@ var helpJSONCmd = &cobra.Command{
 				"--format": map[string]any{"type": "string", "values": []string{"human", "json", "context", "md"}, "default": "human"},
 				"--repo":   map[string]any{"type": "string", "default": "current working directory"},
 			},
-			"commands": buildCommandManifest(rootCmd),
+			"commands": nil,
 			"environment": map[string]string{
 				"DOCKET_ACTOR":      "Set actor identity, e.g. 'agent:claude-sonnet-4-6'. Falls back to git config user.name.",
 				"DOCKET_AUTOMATION": "Set to 1 to force non-interactive deterministic automation behavior.",
@@ -54,12 +59,13 @@ var helpJSONCmd = &cobra.Command{
 				"actor_format":      "'human:name' or 'agent:model-id'",
 			},
 		}
+		manifest["commands"] = buildCommandManifest(rootCmd, cfg)
 		printJSON(cmd, manifest)
 		return nil
 	},
 }
 
-func buildCommandManifest(root *cobra.Command) []map[string]any {
+func buildCommandManifest(root *cobra.Command, cfg *ticket.Config) []map[string]any {
 	entries := []map[string]any{}
 
 	var walk func(parentPath string, c *cobra.Command)
@@ -80,7 +86,7 @@ func buildCommandManifest(root *cobra.Command) []map[string]any {
 			"synopsis":    fmt.Sprintf("docket %s", c.Use),
 			"description": c.Short,
 			"flags":       commandFlags(c),
-			"examples":    commandExamples(full),
+			"examples":    commandExamples(full, cfg),
 			"output":      commandOutputShape(full),
 		}
 		entries = append(entries, entry)
@@ -108,13 +114,13 @@ func commandFlags(c *cobra.Command) map[string]any {
 	return flags
 }
 
-func commandExamples(name string) []string {
+func commandExamples(name string, cfg *ticket.Config) []string {
 	examples := map[string][]string{
 		"create":           {"docket create --title 'Add auth middleware' --priority 1 --labels feature", "echo 'Long description' | docket create --title 'Fix bug' --desc -"},
 		"list":             {"docket list --state open", "docket list --format json"},
 		"show":             {"docket show TKT-001", "docket show TKT-001 --format context"},
 		"search":           {"docket search \"auth middleware\"", "docket search \"token validation\" --semantic auto"},
-		"update":           {"docket update TKT-001 --state in-progress", "docket update TKT-001 --priority 1"},
+		"update":           {fmt.Sprintf("docket update TKT-001 --state %s", activeWorkflowState(cfg)), "docket update TKT-001 --priority 1"},
 		"comment":          {"docket comment TKT-001 --body 'Decision details'"},
 		"blame":            {"docket blame main.go:42"},
 		"scan":             {"docket scan", "docket scan --path internal"},

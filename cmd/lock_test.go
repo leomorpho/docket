@@ -235,3 +235,71 @@ func TestActiveInProgressUsesConfiguredActiveRole(t *testing.T) {
 		t.Fatalf("expected configured active-role state to count as active")
 	}
 }
+
+func TestWorktreeStartBlockedByConfiguredActiveRoleMessage(t *testing.T) {
+	tmp := t.TempDir()
+	oldRepo := repo
+	repo = tmp
+	defer func() { repo = oldRepo }()
+	format = "human"
+
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"coding"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"coding": {
+				Label:            "Coding",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+	if err := ticket.SaveConfig(tmp, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmp)
+	now := time.Now().UTC().Truncate(time.Second)
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-930", Seq: 930, Title: "A", State: "coding", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-931", Seq: 931, Title: "B", State: "queued", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "B"}}})
+	_ = upsertRelation(tmp, relationEntry{From: "TKT-930", To: "TKT-931", Relation: "blocks"})
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"worktree", "start", "TKT-931", filepath.Join(tmp, "wt")})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatalf("expected blocked relation to prevent worktree start")
+	}
+	if !strings.Contains(err.Error(), "active-work ticket TKT-930") {
+		t.Fatalf("expected active-work wording, got: %v", err)
+	}
+}

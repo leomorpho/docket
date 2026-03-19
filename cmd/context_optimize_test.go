@@ -252,3 +252,56 @@ func TestContextOptimizeCmd_BoundsOutputShape(t *testing.T) {
 		t.Fatalf("recent linked_commits length = %d, want <= %d", len(commitsOut), contextOptimizeMaxItems)
 	}
 }
+
+func TestContextOptimizeCmd_ExcludesConfiguredCompletedSiblings(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"coding"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"coding":   {Label: "Coding", Open: true, Column: 1, Next: []string{"qa"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+		"archived": {Label: "Archived", Open: false, Column: 4, Next: []string{}, Roles: []string{"archived"}, Terminal: true},
+	}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(tmp, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmp)
+	now := time.Now().UTC().Truncate(time.Second)
+	seed := []*ticket.Ticket{
+		{ID: "TKT-100", Seq: 100, Title: "Parent", State: "queued", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "human:test", Description: "Parent", AC: []ticket.AcceptanceCriterion{{Description: "parent"}}},
+		{ID: "TKT-270", Seq: 270, Title: "Target", State: "coding", Priority: 1, Parent: "TKT-100", CreatedAt: now, UpdatedAt: now, CreatedBy: "human:test", Description: "Target", AC: []ticket.AcceptanceCriterion{{Description: "ac"}}},
+		{ID: "TKT-271", Seq: 271, Title: "Open sibling", State: "coding", Priority: 1, Parent: "TKT-100", CreatedAt: now, UpdatedAt: now, CreatedBy: "human:test", Description: "Open sibling", AC: []ticket.AcceptanceCriterion{{Description: "ac"}}},
+		{ID: "TKT-272", Seq: 272, Title: "Completed sibling", State: "shipped", Priority: 1, Parent: "TKT-100", CreatedAt: now, UpdatedAt: now, CreatedBy: "human:test", Description: "Completed sibling", AC: []ticket.AcceptanceCriterion{{Description: "ac"}}},
+	}
+	for _, tkt := range seed {
+		if err := s.CreateTicket(context.Background(), tkt); err != nil {
+			t.Fatalf("create ticket %s: %v", tkt.ID, err)
+		}
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"context-optimize", "TKT-270", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("context-optimize failed: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, out.String())
+	}
+	related := payload["related_work"].([]any)
+	for _, item := range related {
+		text := item.(string)
+		if strings.Contains(text, "TKT-272") {
+			t.Fatalf("expected configured completed sibling to be excluded, got related_work=%#v", related)
+		}
+	}
+}

@@ -28,7 +28,7 @@ var worktreeStartCmd = &cobra.Command{
 		relations, _ := loadRelations(repo)
 		for _, rel := range relations.Relations {
 			if rel.Relation == "blocks" && rel.To == ticketID && activeInProgress(repo, rel.From) && !worktreeForce {
-				return fmt.Errorf("%s is blocked by in-progress ticket %s; rerun with --force to continue", ticketID, rel.From)
+				return fmt.Errorf("%s is blocked by active-work ticket %s; rerun with --force to continue", ticketID, rel.From)
 			}
 		}
 

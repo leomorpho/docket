@@ -25,7 +25,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Automatically pick up and start the next best ticket",
 	Long: `Identify the next unblocked high-priority ticket in an open state,
-claims it, creates a worktree for it if needed, and transitions it to 'in-progress'.
+claims it, creates a worktree for it if needed, and transitions it to the repo's configured active work state.
 In --auto mode, it will continue to the next ticket after each completion.
 In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM agents.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -119,6 +119,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		}
 		hookManager := hooks.NewManager()
 		hooks.RegisterCoreHooks(hookManager)
+		targetState := activeWorkflowState(cfg)
 		advisory, hookErr := hookManager.Run(hooks.EventRunStart, hooks.Context{
 			Repo:         repo,
 			TicketID:     t.ID,
@@ -126,7 +127,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			ManagedRun:   strings.HasPrefix(actor, "agent:"),
 			WorktreePath: worktreePath,
 			Branch:       "docket/" + t.ID,
-			TargetState:  "in-progress",
+			TargetState:  targetState,
 		})
 		for _, msg := range advisory {
 			fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
