@@ -19,7 +19,7 @@ var (
 	listMaxPriority     int
 	listOnlyUnblocked   bool
 	listIncludeArchived bool
-	listWhole           bool
+	listFull            bool
 )
 
 type listRow struct {
@@ -47,7 +47,7 @@ var listCmd = &cobra.Command{
 			IncludeArchived: listIncludeArchived,
 		}
 
-		useWorkableView := !listWhole
+		useWorkableView := !listFull
 		if listState != "" && listState != "open" {
 			if !cfg.IsValidState(listState) {
 				return fmt.Errorf("invalid state: %s", listState)
@@ -73,7 +73,7 @@ var listCmd = &cobra.Command{
 				return fmt.Errorf("listing tickets: %w", err)
 			}
 		}
-		rows := buildListRows(ctx, s, tickets, listWhole)
+		rows := buildListRows(ctx, s, tickets, listFull)
 
 		switch format {
 		case "json":
@@ -136,11 +136,11 @@ func printContext(cmd *cobra.Command, rows []listRow) {
 	}
 }
 
-func buildListRows(ctx context.Context, s *local.Store, tickets []*ticket.Ticket, whole bool) []listRow {
+func buildListRows(ctx context.Context, s *local.Store, tickets []*ticket.Ticket, full bool) []listRow {
 	if len(tickets) == 0 {
 		return nil
 	}
-	if !whole {
+	if !full {
 		out := make([]listRow, 0, len(tickets))
 		for _, t := range tickets {
 			out = append(out, listRow{t: t, depth: 0})
@@ -210,7 +210,7 @@ func init() {
 	listCmd.Flags().IntVar(&listMaxPriority, "priority", 0, "max priority to show")
 	listCmd.Flags().BoolVar(&listOnlyUnblocked, "unblocked", false, "exclude blocked tickets")
 	listCmd.Flags().BoolVar(&listIncludeArchived, "include-archived", false, "include archived tickets")
-	listCmd.Flags().BoolVar(&listWhole, "whole", false, "show the full matching ticket graph instead of only workable tickets")
+	listCmd.Flags().BoolVar(&listFull, "full", false, "show the full matching ticket graph instead of only workable tickets")
 
 	rootCmd.AddCommand(listCmd)
 }

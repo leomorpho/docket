@@ -16,7 +16,7 @@ func TestListCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
-	listWhole = false
+	listFull = false
 
 	// 0. Setup store and tickets
 	s := local.New(tmpDir)
@@ -93,7 +93,7 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
-	listWhole = false
+	listFull = false
 
 	s := local.New(tmpDir)
 	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
@@ -114,8 +114,11 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("list human failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "Hint: Use `docket search \"query\"` for ticket discovery") {
+	if !strings.Contains(out.String(), "`docket search \"query\"` for ticket discovery") {
 		t.Fatalf("expected discovery hint in human list output, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "`docket ls --full`") {
+		t.Fatalf("expected full-view hint in human list output, got:\n%s", out.String())
 	}
 
 	out.Reset()
@@ -132,7 +135,7 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "context"
-	listWhole = false
+	listFull = false
 
 	cfg := ticket.DefaultConfig()
 	review := cfg.States["in-review"]
@@ -174,7 +177,7 @@ func TestListCmd_WholeShowsFullHierarchy(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
-	listWhole = false
+	listFull = false
 
 	s := local.New(tmpDir)
 	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
@@ -197,13 +200,13 @@ func TestListCmd_WholeShowsFullHierarchy(t *testing.T) {
 
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
-	rootCmd.SetArgs([]string{"list", "--whole"})
+	rootCmd.SetArgs([]string{"list", "--full"})
 	listState = "open"
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("list whole failed: %v", err)
+		t.Fatalf("list full failed: %v", err)
 	}
 	if !strings.Contains(out.String(), "TKT-001") || !strings.Contains(out.String(), "↳ TKT-002") {
-		t.Fatalf("expected whole view to show full hierarchy, got:\n%s", out.String())
+		t.Fatalf("expected full view to show full hierarchy, got:\n%s", out.String())
 	}
 }
 
@@ -211,7 +214,7 @@ func TestListCmd_DefaultHidesBlockedBranch(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
-	listWhole = false
+	listFull = false
 
 	s := local.New(tmpDir)
 	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {

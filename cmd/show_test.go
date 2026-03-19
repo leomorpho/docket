@@ -355,7 +355,10 @@ func TestShowCmd_DiscoveryHintShownForHumanButNotJSONOrMD(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("show human failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "Hint: Use `docket search \"query\"` for ticket discovery") {
+	if !strings.Contains(out.String(), "`docket search \"query\"` for ticket discovery") {
+		t.Fatalf("expected discovery hint in show human output, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "`docket ls --full`") {
 		t.Fatalf("expected discovery hint in show human output, got:\n%s", out.String())
 	}
 
