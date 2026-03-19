@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/leomorpho/docket/internal/claim"
@@ -53,10 +54,27 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 	if wtErr != nil {
 		return nil, "", fmt.Errorf("ticket %s requires dedicated worktree path: %w", t.ID, wtErr)
 	} else {
-		branch := "docket/" + t.ID
-		if err := m.vcs.CreateWorktree(ctx, t.ID, branch, wtPath); err != nil {
-			return nil, "", fmt.Errorf("ticket %s requires dedicated worktree: %w", t.ID, err)
+		currentCheckout, curErr := m.vcs.CurrentCheckoutPath(ctx)
+		if curErr != nil {
+			return nil, "", fmt.Errorf("resolving current checkout for %s: %w", t.ID, curErr)
+		}
+		currentAbs, _ := filepath.Abs(currentCheckout)
+		desiredAbs, _ := filepath.Abs(wtPath)
+		isPrimary, primaryErr := m.vcs.IsPrimaryCheckout(ctx)
+		if primaryErr != nil {
+			return nil, "", fmt.Errorf("checking current checkout type for %s: %w", t.ID, primaryErr)
+		}
+
+		if !isPrimary && currentAbs == desiredAbs {
+			if err := m.claimer.Claim(ctx, t.ID, currentAbs, agentID); err != nil {
+				return nil, "", fmt.Errorf("claiming ticket in existing worktree: %w", err)
+			}
+			claimedPath = currentAbs
 		} else {
+			branch := "docket/" + t.ID
+			if err := m.vcs.CreateWorktree(ctx, t.ID, branch, wtPath); err != nil {
+				return nil, "", fmt.Errorf("ticket %s requires dedicated worktree: %w", t.ID, err)
+			}
 			if err := m.claimer.Claim(ctx, t.ID, wtPath, agentID); err != nil {
 				return nil, "", fmt.Errorf("claiming ticket in worktree: %w", err)
 			}

@@ -41,6 +41,8 @@ func (m *MockStore) Validate(ctx context.Context, id string) ([]store.Validation
 // MockVCS
 type MockVCS struct {
 	repoRoot          string
+	currentCheckout   string
+	isPrimary         bool
 	worktreePath      string
 	getWorktreeDirErr error
 	createWorktreeErr error
@@ -70,8 +72,17 @@ func (m *MockVCS) GetAgentWorktreeDir(ctx context.Context, ticketID string) (str
 	}
 	return "/tmp/wt-" + ticketID, nil
 }
+func (m *MockVCS) CurrentCheckoutPath(ctx context.Context) (string, error) {
+	if m.currentCheckout != "" {
+		return m.currentCheckout, nil
+	}
+	if m.repoRoot != "" {
+		return m.repoRoot, nil
+	}
+	return "/tmp/repo", nil
+}
 func (m *MockVCS) IsPrimaryCheckout(ctx context.Context) (bool, error) {
-	return false, nil
+	return m.isPrimary, nil
 }
 func (m *MockVCS) GetRepoRoot(ctx context.Context) (string, error) {
 	if m.repoRoot != "" {
@@ -117,7 +128,7 @@ func (m *MockClaim) GetClaim(ctx context.Context, ticketID string) (*claim.Claim
 
 func TestWorkflowStartTask(t *testing.T) {
 	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
-	v := &MockVCS{}
+	v := &MockVCS{currentCheckout: "/tmp/repo", isPrimary: true}
 	c := &MockClaim{claims: make(map[string]string)}
 	mgr := NewManager(s, v, c)
 	cfg := ticket.DefaultConfig()
@@ -183,6 +194,30 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 		_, _, err := mgr.StartTask(context.Background(), "TKT-001", "human:test", cfg)
 		if err == nil {
 			t.Fatal("expected strict worktree error for human flow")
+		}
+	})
+
+	t.Run("reuses current dedicated worktree instead of creating another", func(t *testing.T) {
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		v := &MockVCS{
+			repoRoot:        "/tmp/repo",
+			currentCheckout: "/tmp/wt-TKT-001",
+			worktreePath:    "/tmp/wt-TKT-001",
+			isPrimary:       false,
+			createWorktreeErr: errors.New("should not be called"),
+		}
+		c := &MockClaim{claims: make(map[string]string)}
+		mgr := NewManager(s, v, c)
+
+		got, wtPath, err := mgr.StartTask(context.Background(), "TKT-001", "human:test", cfg)
+		if err != nil {
+			t.Fatalf("expected existing worktree reuse, got: %v", err)
+		}
+		if wtPath != "/tmp/wt-TKT-001" {
+			t.Fatalf("expected reused worktree path, got %s", wtPath)
+		}
+		if got.State != "in-progress" {
+			t.Fatalf("expected state in-progress, got %s", got.State)
 		}
 	})
 }

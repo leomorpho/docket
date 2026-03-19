@@ -34,6 +34,10 @@ func (p *GitProvider) GetAgentWorktreeDir(ctx context.Context, ticketID string) 
 	return git.GetAgentWorktreeDir(repoRoot, ticketID)
 }
 
+func (p *GitProvider) CurrentCheckoutPath(ctx context.Context) (string, error) {
+	return filepath.Abs(p.repoRoot)
+}
+
 func (p *GitProvider) IsPrimaryCheckout(ctx context.Context) (bool, error) {
 	info, err := os.Stat(filepath.Join(p.repoRoot, ".git"))
 	if err != nil {

@@ -7,6 +7,7 @@ type Provider interface {
 	CreateWorktree(ctx context.Context, ticketID, branch, path string) error
 	RemoveWorktree(ctx context.Context, path string) error
 	GetAgentWorktreeDir(ctx context.Context, ticketID string) (string, error)
+	CurrentCheckoutPath(ctx context.Context) (string, error)
 	IsPrimaryCheckout(ctx context.Context) (bool, error)
 	GetRepoRoot(ctx context.Context) (string, error)
 	CommitAll(ctx context.Context, worktreePath, message string) error
