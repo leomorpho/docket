@@ -57,7 +57,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		if t == nil {
 			capabilityDigest := buildStartCapabilityDigest(repo)
 			quickPath := buildLLMQuickPath()
-			agentQuickstart := buildStartAgentQuickstart(repo)
+			agentQuickstart := buildStartAgentQuickstart(repo, "", "")
 			if format == "json" {
 				printJSON(cmd, map[string]interface{}{
 					"ticket":               nil,
@@ -152,7 +152,8 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		capabilityDigest := buildStartCapabilityDigest(repo)
 		learnReplay := buildLearnReplay(repo, t, 3)
 		quickPath := buildLLMQuickPath()
-		agentQuickstart := buildStartAgentQuickstart(repo)
+		managedBranch := "docket/" + t.ID
+		agentQuickstart := buildStartAgentQuickstart(repo, managedBranch, worktreePath)
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
@@ -164,6 +165,8 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 				"runtime_policy_mode":  runtimePolicyMode,
 				"runtime_policy_note":  runtimePolicyMessage,
 				"active_workflow_hash": activeWorkflowHash,
+				"managed_run_branch":   managedBranch,
+				"managed_run_worktree": worktreePath,
 				"yolo_mode":            startYolo,
 				"agent_instruction":    instruction,
 				"capability_digest":    capabilityDigest,
@@ -181,6 +184,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
 		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
 		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
+		fmt.Fprintf(cmd.OutOrStdout(), "Managed run binding: branch=%s | worktree=%s\n", managedBranch, worktreePath)
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartAgentQuickstartHuman(agentQuickstart))
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
 		fmt.Fprintf(

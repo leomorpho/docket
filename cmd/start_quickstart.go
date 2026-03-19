@@ -14,13 +14,14 @@ type startQuickstartSkill struct {
 
 type startAgentQuickstart struct {
 	DirectEditAvoidance string                 `json:"direct_edit_avoidance"`
+	ManagedRunBinding   string                 `json:"managed_run_binding,omitempty"`
 	SkillsReminder      string                 `json:"skills_reminder"`
 	Skills              []startQuickstartSkill `json:"skills"`
 	CoreWorkflow        []string               `json:"core_workflow"`
 	CapabilityDiscovery []string               `json:"capability_discovery"`
 }
 
-func buildStartAgentQuickstart(repoRoot string) startAgentQuickstart {
+func buildStartAgentQuickstart(repoRoot, managedBranch, managedWorktree string) startAgentQuickstart {
 	// Intentionally repeated every start run: reminder fatigue is preferable to
 	// missed workflow guardrails when agents resume mid-stream or skip onboarding docs.
 	out := startAgentQuickstart{
@@ -38,6 +39,9 @@ func buildStartAgentQuickstart(repoRoot string) startAgentQuickstart {
 			"docket doctor --format json",
 			"docket help-json",
 		},
+	}
+	if strings.TrimSpace(managedBranch) != "" && strings.TrimSpace(managedWorktree) != "" {
+		out.ManagedRunBinding = "Stay on branch `" + managedBranch + "` and do the work in `" + managedWorktree + "`. If a ticket commit lands elsewhere, repair the managed branch before moving to in-review."
 	}
 	if payload, err := loadSkillListPayload(repoRoot); err == nil {
 		out.Skills = make([]startQuickstartSkill, 0, len(payload.Skills))
@@ -57,8 +61,11 @@ func renderStartAgentQuickstartHuman(q startAgentQuickstart) string {
 	lines := []string{
 		"Agent quickstart:",
 		"- " + q.DirectEditAvoidance,
-		"- Skills: " + renderQuickstartSkillsLine(q),
 	}
+	if q.ManagedRunBinding != "" {
+		lines = append(lines, "- Binding: "+q.ManagedRunBinding)
+	}
+	lines = append(lines, "- Skills: "+renderQuickstartSkillsLine(q))
 	lines = append(lines,
 		"- Core workflow: "+strings.Join(q.CoreWorkflow, " | "),
 		"- Capability discovery: "+strings.Join(q.CapabilityDiscovery, " | "),

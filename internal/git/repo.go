@@ -45,3 +45,19 @@ func IsWorktree(repoRoot string) (bool, error) {
 func Show(repoRoot, ref, path string) (string, error) {
 	return runGit(repoRoot, "show", ref+":"+path)
 }
+
+func CurrentBranch(repoRoot string) (string, error) {
+	out, err := runGit(repoRoot, "branch", "--show-current")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func HeadSHA(repoRoot string) (string, error) {
+	out, err := runGit(repoRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}

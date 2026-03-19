@@ -53,3 +53,37 @@ func HasTicketTrailerSince(repoRoot, ref, ticketID, sinceRFC3339 string) (bool, 
 	}
 	return false, nil
 }
+
+// TicketCommitSHAsSince returns commit SHAs on ref, oldest first, whose Ticket trailer matches ticketID.
+func TicketCommitSHAsSince(repoRoot, ref, ticketID, sinceRFC3339 string) ([]string, error) {
+	if strings.TrimSpace(ticketID) == "" {
+		return nil, fmt.Errorf("ticket ID is required")
+	}
+	if strings.TrimSpace(ref) == "" {
+		return nil, fmt.Errorf("ref is required")
+	}
+
+	args := []string{"log", "--reverse", "--format=%H", ref}
+	if strings.TrimSpace(sinceRFC3339) != "" {
+		args = append(args, "--since="+sinceRFC3339)
+	}
+	out, err := runGit(repoRoot, args...)
+	if err != nil {
+		return nil, err
+	}
+	var shas []string
+	for _, line := range strings.Split(out, "\n") {
+		sha := strings.TrimSpace(line)
+		if sha == "" {
+			continue
+		}
+		tid, trailerErr := CommitTicket(repoRoot, sha)
+		if trailerErr != nil {
+			return nil, trailerErr
+		}
+		if tid == ticketID {
+			shas = append(shas, sha)
+		}
+	}
+	return shas, nil
+}

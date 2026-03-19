@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -486,6 +487,26 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error 
 		Branch:       run.Branch,
 		RunStartedAt: run.StartedAt,
 	})
+	if hookErr != nil {
+		if strings.Contains(strings.ToLower(hookErr.Error()), "no commit on") {
+			repair, repairErr := docketgit.RepairManagedBranchFromCurrent(repo, run.WorktreePath, run.Branch, ticketID, run.StartedAt)
+			if repairErr != nil {
+				return fmt.Errorf("managed run %s cannot advance to %s: bound branch=%s worktree=%s; auto-repair failed: %w", ticketID, target, run.Branch, run.WorktreePath, repairErr)
+			}
+			if repair.Repaired {
+				fmt.Printf("docket: repaired managed run branch %s via %s from %s\n", run.Branch, repair.Method, repair.SourceRef)
+				advisory, hookErr = manager.Run(hooks.EventReviewGate, hooks.Context{
+					Repo:         repo,
+					TicketID:     ticketID,
+					ManagedRun:   true,
+					TargetState:  string(target),
+					WorktreePath: run.WorktreePath,
+					Branch:       run.Branch,
+					RunStartedAt: run.StartedAt,
+				})
+			}
+		}
+	}
 	if hookErr != nil {
 		return fmt.Errorf("managed run %s cannot advance to %s: %w", ticketID, target, hookErr)
 	}

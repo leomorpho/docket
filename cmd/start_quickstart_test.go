@@ -10,7 +10,7 @@ import (
 
 func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	quickstart := buildStartAgentQuickstart(h.repo)
+	quickstart := buildStartAgentQuickstart(h.repo, "docket/TKT-999", "/tmp/docket/TKT-999")
 
 	if !strings.Contains(strings.ToLower(quickstart.DirectEditAvoidance), "never edit .docket/tickets") {
 		t.Fatalf("direct edit guidance missing ticket file guardrail: %q", quickstart.DirectEditAvoidance)
@@ -33,6 +33,9 @@ func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
 	if !strings.Contains(quickstart.SkillsReminder, "docket skill audit") {
 		t.Fatalf("skills reminder missing audit guidance: %#v", quickstart)
 	}
+	if !strings.Contains(quickstart.ManagedRunBinding, "docket/TKT-999") {
+		t.Fatalf("managed binding missing branch reminder: %#v", quickstart)
+	}
 	if len(quickstart.Skills) == 0 {
 		t.Fatalf("expected built-in skills in quickstart, got %#v", quickstart)
 	}
@@ -43,6 +46,9 @@ func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
 	rendered := renderStartAgentQuickstartHuman(quickstart)
 	if !strings.Contains(rendered, "Agent quickstart:") {
 		t.Fatalf("human render missing quickstart heading: %q", rendered)
+	}
+	if !strings.Contains(rendered, "Binding:") {
+		t.Fatalf("human render missing binding guidance: %q", rendered)
 	}
 	if !strings.Contains(rendered, "built-ins by intent:") {
 		t.Fatalf("human render missing grouped skills summary: %q", rendered)
@@ -79,6 +85,9 @@ func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {
 	if !strings.Contains(humanOut, "docket skill invoke <skill-id>") {
 		t.Fatalf("expected skill invoke reminder in human output, got:\n%s", humanOut)
 	}
+	if !strings.Contains(humanOut, "Managed run binding: branch=docket/TKT-970") {
+		t.Fatalf("expected managed run binding in human output, got:\n%s", humanOut)
+	}
 	if !strings.Contains(humanOut, "quality=learning-replay") {
 		t.Fatalf("expected grouped concrete skill inventory in human output, got:\n%s", humanOut)
 	}
@@ -109,6 +118,9 @@ func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(quickstart.SkillsReminder, "docket skill list --format json") {
 		t.Fatalf("json quickstart missing skills reminder: %#v", quickstart)
+	}
+	if !strings.Contains(quickstart.ManagedRunBinding, "docket/TKT-971") {
+		t.Fatalf("json quickstart missing binding guidance: %#v", quickstart)
 	}
 	if len(quickstart.Skills) == 0 {
 		t.Fatalf("json quickstart missing concrete skills inventory: %#v", quickstart)
