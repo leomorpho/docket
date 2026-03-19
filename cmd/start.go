@@ -55,7 +55,11 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			return err
 		}
 		if t == nil {
-			fmt.Fprintln(cmd.OutOrStdout(), "No unblocked tickets found in open states (backlog, todo).")
+			fmt.Fprintf(
+				cmd.OutOrStdout(),
+				"No workable tickets found. Startable states in current config: %s.\n",
+				startableStatesSummary(cfg),
+			)
 			return nil
 		}
 

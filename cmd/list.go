@@ -79,9 +79,9 @@ var listCmd = &cobra.Command{
 		case "json":
 			printJSON(cmd, tickets)
 		case "context":
-			printContext(cmd, rows)
+			printContext(cmd, rows, useWorkableView, cfg)
 		default:
-			printTable(cmd, rows)
+			printTable(cmd, rows, useWorkableView, cfg)
 		}
 		printDiscoveryHint(cmd.OutOrStdout(), format)
 
@@ -89,9 +89,9 @@ var listCmd = &cobra.Command{
 	},
 }
 
-func printTable(cmd *cobra.Command, rows []listRow) {
+func printTable(cmd *cobra.Command, rows []listRow, workableView bool, cfg *ticket.Config) {
 	if len(rows) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No tickets found.")
+		fmt.Fprintln(cmd.OutOrStdout(), emptyListMessage(workableView, cfg))
 		return
 	}
 
@@ -110,8 +110,9 @@ func printTable(cmd *cobra.Command, rows []listRow) {
 	w.Flush()
 }
 
-func printContext(cmd *cobra.Command, rows []listRow) {
+func printContext(cmd *cobra.Command, rows []listRow, workableView bool, cfg *ticket.Config) {
 	if len(rows) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), emptyListMessage(workableView, cfg))
 		return
 	}
 
@@ -134,6 +135,29 @@ func printContext(cmd *cobra.Command, rows []listRow) {
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "[%s] P%d %-11s | %-28s%s\n", t.ID, t.Priority, t.State, title, blockedStr)
 	}
+}
+
+func emptyListMessage(workableView bool, cfg *ticket.Config) string {
+	if !workableView {
+		return "No tickets found."
+	}
+
+	startable := startableStatesSummary(cfg)
+	if startable == "none configured" {
+		return "No workable tickets found. Startable states in current config: none configured."
+	}
+	return fmt.Sprintf("No workable tickets found. Startable states in current config: %s.", startable)
+}
+
+func startableStatesSummary(cfg *ticket.Config) string {
+	if cfg == nil {
+		return "none configured"
+	}
+	states := cfg.StartableStates()
+	if len(states) == 0 {
+		return "none configured"
+	}
+	return strings.Join(states, ", ")
 }
 
 func buildListRows(ctx context.Context, s *local.Store, tickets []*ticket.Ticket, full bool) []listRow {

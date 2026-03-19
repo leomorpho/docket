@@ -131,6 +131,37 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	}
 }
 
+func TestListCmd_EmptyWorkableViewShowsStartableStates(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	listFull = false
+	listState = "open"
+
+	cfg := ticket.DefaultConfig()
+	for name, state := range cfg.States {
+		state.Startable = false
+		cfg.States[name] = state
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "No workable tickets found.") {
+		t.Fatalf("expected empty workable-view message, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Startable states in current config: none configured.") {
+		t.Fatalf("expected startable-state summary in message, got:\n%s", out.String())
+	}
+}
+
 func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

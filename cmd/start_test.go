@@ -375,3 +375,35 @@ func TestStartAutoPreservesReviewTransitionBehavior(t *testing.T) {
 		t.Fatalf("expected start to preserve in-progress transition behavior, got %s", got.State)
 	}
 }
+
+func TestStartCmd_EmptyWorkableSetShowsStartableStates(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpRepo
+	format = "human"
+
+	cfg := ticket.DefaultConfig()
+	for name, state := range cfg.States {
+		state.Startable = false
+		cfg.States[name] = state
+	}
+	if err := ticket.SaveConfig(tmpRepo, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"start"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	if !strings.Contains(b.String(), "No workable tickets found.") {
+		t.Fatalf("expected empty workable-set message, got:\n%s", b.String())
+	}
+	if !strings.Contains(b.String(), "Startable states in current config: none configured.") {
+		t.Fatalf("expected startable-state summary, got:\n%s", b.String())
+	}
+}
