@@ -34,13 +34,21 @@ var statusCmd = &cobra.Command{
 		}
 
 		s := local.New(repo)
-		tickets, err := s.ListTickets(context.Background(), store.Filter{
-			States:          []ticket.State{ticket.State("in-progress")},
-			IncludeArchived: true,
-		})
+		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
 		}
+		tickets, err := s.ListTickets(context.Background(), store.Filter{IncludeArchived: true})
+		if err != nil {
+			return err
+		}
+		activeTickets := tickets[:0]
+		for _, t := range tickets {
+			if cfg.StateHasRole(string(t.State), "active") {
+				activeTickets = append(activeTickets, t)
+			}
+		}
+		tickets = activeTickets
 		relations, _ := loadRelations(repo)
 		lockState, _ := refreshLockClaims(repo)
 		lockByID := map[string]map[string]bool{}

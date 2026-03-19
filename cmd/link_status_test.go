@@ -83,3 +83,74 @@ func TestStatusParallelMatrixUsesRelationsAndLockOverlap(t *testing.T) {
 		t.Fatalf("expected risky matrix indicator, got: %s", out.String())
 	}
 }
+
+func TestStatusParallelMatrixUsesConfiguredActiveRole(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "human"
+	s := local.New(tmp)
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"coding"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"coding": {
+				Label:            "Coding",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"testing"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"testing": {
+				Label:            "Testing",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           3,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   4,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+	_ = ticket.SaveConfig(tmp, cfg)
+	now := time.Now().UTC().Truncate(time.Second)
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-501", Seq: 501, Title: "A", State: "coding", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-502", Seq: 502, Title: "B", State: "testing", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "B"}}})
+	_ = upsertLock(tmp, fileLock{TicketID: "TKT-501", WorktreePath: tmp, Files: []string{"same.go"}, UpdatedAt: now.Format(time.RFC3339)})
+	_ = upsertLock(tmp, fileLock{TicketID: "TKT-502", WorktreePath: tmp, Files: []string{"same.go"}, UpdatedAt: now.Format(time.RFC3339)})
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"status", "--parallel"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("status --parallel failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-501 <-> TKT-502") {
+		t.Fatalf("expected configured active-role tickets in matrix, got: %s", out.String())
+	}
+}

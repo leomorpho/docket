@@ -27,7 +27,7 @@ type Finding struct {
 type Rule func(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding
 
 func RuleR001(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding {
-	if t.State != "in-progress" {
+	if cfg == nil || !cfg.StateHasRole(string(t.State), "active") {
 		return nil
 	}
 	if now.Sub(t.UpdatedAt) <= 7*24*time.Hour {

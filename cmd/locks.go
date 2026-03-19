@@ -12,6 +12,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type fileLock struct {
@@ -134,7 +135,11 @@ func activeInProgress(repoRoot string, ticketID string) bool {
 	if err != nil || t == nil {
 		return false
 	}
-	return t.State == "in-progress"
+	cfg, cfgErr := ticket.LoadConfig(repoRoot)
+	if cfgErr != nil {
+		cfg = ticket.DefaultConfig()
+	}
+	return cfg.StateHasRole(string(t.State), "active")
 }
 
 func refreshLockClaims(repoRoot string) (locksState, error) {

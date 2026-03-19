@@ -116,3 +116,27 @@ func TestChecker_R006FixHonorsConfigForReviewState(t *testing.T) {
 		t.Fatalf("expected in-review blocker removed when config allows it, got %v", updated.BlockedBy)
 	}
 }
+
+func TestChecker_R001UsesConfiguredActiveRole(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := &ticket.Config{
+		States: map[string]ticket.StateConfig{
+			"queued":  {Label: "Queued", Open: true, Column: 0, Next: []string{"coding"}, Roles: []string{"intake"}, Startable: true},
+			"coding":  {Label: "Coding", Open: true, Column: 1, Next: []string{"testing"}, Roles: []string{"active"}},
+			"testing": {Label: "Testing", Open: true, Column: 2, Next: []string{"qa"}, Roles: []string{"active"}},
+			"qa":      {Label: "QA", Open: true, Column: 3, Next: []string{"shipped"}, Roles: []string{"review"}},
+			"shipped": {Label: "Shipped", Open: false, Column: 4, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+		},
+	}
+	b := newFake(&ticket.Ticket{ID: "TKT-900", State: ticket.State("testing"), UpdatedAt: now.Add(-8 * 24 * time.Hour)})
+	c := NewChecker(b, cfg)
+	c.Now = func() time.Time { return now }
+
+	findings, err := c.Run(context.Background(), []*ticket.Ticket{b.tickets["TKT-900"]}, false)
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	if len(findings) == 0 || findings[0].Rule != "R001" {
+		t.Fatalf("expected R001 finding for configured active-role state, got %+v", findings)
+	}
+}
