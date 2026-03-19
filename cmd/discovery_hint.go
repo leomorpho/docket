@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -13,6 +14,10 @@ func shouldEmitGlobalSkillHint(cmd *cobra.Command, outputFormat string) bool {
 		return false
 	}
 	if cmd == nil || cmd == cmd.Root() || cmd.Hidden {
+		return false
+	}
+	switch strings.TrimSpace(cmd.CommandPath()) {
+	case "docket ticket scaffold", "docket backlog scaffold":
 		return false
 	}
 	return true

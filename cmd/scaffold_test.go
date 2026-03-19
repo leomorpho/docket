@@ -27,6 +27,9 @@ func TestTicketScaffoldOutputMatchesSchemaAndIsStable(t *testing.T) {
 	if spec.Operation != applyspec.OperationCreate {
 		t.Fatalf("expected scaffold operation create, got %q", spec.Operation)
 	}
+	if bytes.Contains(first.Bytes(), []byte("Skill hint:")) {
+		t.Fatalf("ticket scaffold output should not include global skill hint, got:\n%s", first.String())
+	}
 
 	var second bytes.Buffer
 	rootCmd.SetOut(&second)
@@ -66,6 +69,9 @@ func TestBacklogScaffoldOutputMatchesSchemaAndIsStable(t *testing.T) {
 	}
 	if payload["version"] != applyspec.SchemaVersionV1 {
 		t.Fatalf("expected scaffold version %q, got %v", applyspec.SchemaVersionV1, payload["version"])
+	}
+	if bytes.Contains(first.Bytes(), []byte("Skill hint:")) {
+		t.Fatalf("backlog scaffold output should not include global skill hint, got:\n%s", first.String())
 	}
 
 	var second bytes.Buffer
