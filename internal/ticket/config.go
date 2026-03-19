@@ -193,6 +193,71 @@ func (c *Config) StartableStates() []string {
 	return startable
 }
 
+// StatesWithRole returns state keys tagged with the given semantic role, sorted by column.
+func (c *Config) StatesWithRole(role string) []string {
+	role = strings.TrimSpace(role)
+	if c == nil || role == "" {
+		return nil
+	}
+	var states []string
+	for name, state := range c.States {
+		for _, candidate := range state.Roles {
+			if candidate == role {
+				states = append(states, name)
+				break
+			}
+		}
+	}
+	sort.Slice(states, func(i, j int) bool {
+		return c.States[states[i]].Column < c.States[states[j]].Column
+	})
+	return states
+}
+
+// PrimaryStateWithRole returns the first state for a semantic role by column order.
+func (c *Config) PrimaryStateWithRole(role string) (string, bool) {
+	states := c.StatesWithRole(role)
+	if len(states) == 0 {
+		return "", false
+	}
+	return states[0], true
+}
+
+// StateHasRole reports whether the named state carries the given semantic role.
+func (c *Config) StateHasRole(stateName, role string) bool {
+	if c == nil {
+		return false
+	}
+	state, ok := c.States[stateName]
+	if !ok {
+		return false
+	}
+	for _, candidate := range state.Roles {
+		if candidate == role {
+			return true
+		}
+	}
+	return false
+}
+
+// StartTransitionTargets returns the configured active-work targets a startable state can enter.
+func (c *Config) StartTransitionTargets(from string) []string {
+	if c == nil {
+		return nil
+	}
+	state, ok := c.States[from]
+	if !ok || !state.Startable {
+		return nil
+	}
+	targets := make([]string, 0, len(state.Next))
+	for _, next := range state.Next {
+		if c.StateHasRole(next, "active") {
+			targets = append(targets, next)
+		}
+	}
+	return targets
+}
+
 // IsValidState reports whether s is a configured state name.
 func (c *Config) IsValidState(s string) bool {
 	_, ok := c.States[s]
@@ -588,6 +653,7 @@ func (c *Config) validateWorkflow() error {
 		"archived":  true,
 	}
 	columns := map[int]string{}
+	activeStates := map[string]struct{}{}
 	for name, state := range c.Workflow.States {
 		if strings.TrimSpace(name) == "" {
 			return fmt.Errorf("corrupt config.json workflow.states: state name must not be empty")
@@ -606,6 +672,9 @@ func (c *Config) validateWorkflow() error {
 			if !allowedRoles[role] {
 				return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.roles[%d]: invalid role %q", name, i, role)
 			}
+			if role == "active" {
+				activeStates[name] = struct{}{}
+			}
 		}
 		if state.Semantics.Terminal && state.Semantics.Open {
 			return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.terminal: terminal states must set open=false", name)
@@ -620,6 +689,21 @@ func (c *Config) validateWorkflow() error {
 			if _, ok := c.Workflow.States[next]; !ok {
 				return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.next[%d]: %q is not a defined workflow state", name, i, next)
 			}
+		}
+	}
+	for name, state := range c.Workflow.States {
+		if !state.Semantics.Startable {
+			continue
+		}
+		hasActiveTarget := false
+		for _, next := range state.Semantics.Next {
+			if _, ok := activeStates[next]; ok {
+				hasActiveTarget = true
+				break
+			}
+		}
+		if !hasActiveTarget {
+			return fmt.Errorf("corrupt config.json workflow.states.%s.semantics.next: startable states must transition to at least one active workflow state", name)
 		}
 	}
 	c.States = statesFromWorkflow(c.Workflow)

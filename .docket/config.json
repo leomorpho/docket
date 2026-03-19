@@ -1,5 +1,5 @@
 {
-  "counter": 366,
+  "counter": 372,
   "backend": "local",
   "states": {
     "archived": {
@@ -66,7 +66,8 @@
         "in-progress",
         "backlog",
         "archived"
-      ]
+      ],
+      "startable": true
     }
   },
   "labels": [

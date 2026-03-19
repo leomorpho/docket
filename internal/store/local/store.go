@@ -126,10 +126,11 @@ func (s *Store) UpdateTicket(ctx context.Context, t *ticket.Ticket) error {
 	}
 	if existing.State != t.State {
 		now := time.Now().UTC().Truncate(time.Second)
-		if t.State == ticket.State("in-progress") && t.StartedAt.IsZero() {
+		cfg := s.loadConfigOrDefault()
+		if cfg.StateHasRole(string(t.State), "active") && t.StartedAt.IsZero() {
 			t.StartedAt = now
 		}
-		if t.State == ticket.State("done") {
+		if cfg.StateHasRole(string(t.State), "completed") {
 			if t.StartedAt.IsZero() {
 				t.StartedAt = now
 			}

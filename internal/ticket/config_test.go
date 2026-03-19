@@ -283,6 +283,26 @@ func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {
 }`,
 			substr: "workflow.states.queued.semantics.startable",
 		},
+		{
+			name: "startable must lead to active state",
+			raw: `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {"roles": ["intake"], "open": true, "startable": true, "next": ["qa"]},
+        "presentation": {"label": "Queued", "column": 0}
+      },
+      "qa": {
+        "semantics": {"roles": ["review"], "open": true, "reviewable": true, "next": []},
+        "presentation": {"label": "QA", "column": 1}
+      }
+    }
+  }
+}`,
+			substr: "workflow.states.queued.semantics.next",
+		},
 	}
 
 	for _, tc := range tests {
@@ -300,6 +320,89 @@ func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.substr, err)
 			}
 		})
+	}
+}
+
+func TestConfigStartTransitionTargetsAndRolesUseWorkflowSemantics(t *testing.T) {
+	tmpDir := t.TempDir()
+	raw := `{
+  "default_state": "queued",
+  "workflow": {
+    "version": 1,
+    "states": {
+      "queued": {
+        "semantics": {
+          "roles": ["intake"],
+          "open": true,
+          "startable": true,
+          "next": ["building", "qa"]
+        },
+        "presentation": {
+          "label": "Queued",
+          "column": 0
+        }
+      },
+      "building": {
+        "semantics": {
+          "roles": ["active"],
+          "open": true,
+          "next": ["qa"]
+        },
+        "presentation": {
+          "label": "Building",
+          "column": 1
+        }
+      },
+      "qa": {
+        "semantics": {
+          "roles": ["review"],
+          "open": true,
+          "reviewable": true,
+          "next": ["shipped"]
+        },
+        "presentation": {
+          "label": "QA",
+          "column": 2
+        }
+      },
+      "shipped": {
+        "semantics": {
+          "roles": ["completed"],
+          "open": false,
+          "terminal": true,
+          "next": []
+        },
+        "presentation": {
+          "label": "Shipped",
+          "column": 3
+        }
+      }
+    }
+  }
+}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(ConfigPath(tmpDir), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if got := cfg.StatesWithRole("active"); len(got) != 1 || got[0] != "building" {
+		t.Fatalf("StatesWithRole(active) = %#v", got)
+	}
+	if got := cfg.StartTransitionTargets("queued"); len(got) != 1 || got[0] != "building" {
+		t.Fatalf("StartTransitionTargets(queued) = %#v", got)
+	}
+	if got, ok := cfg.PrimaryStateWithRole("review"); !ok || got != "qa" {
+		t.Fatalf("PrimaryStateWithRole(review) = %q, %v", got, ok)
+	}
+	if !cfg.StateHasRole("shipped", "completed") {
+		t.Fatal("expected shipped to carry completed role")
 	}
 }
 

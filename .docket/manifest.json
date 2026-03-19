@@ -2031,6 +2031,42 @@
       "state": "backlog",
       "priority": 1,
       "parent": "TKT-174"
+    },
+    "TKT-367": {
+      "title": "Refactor workflow service start and finish transitions to resolve active and review targets from config roles",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-368": {
+      "title": "Refactor update command lifecycle side effects to use config-defined active review and completed roles",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-369": {
+      "title": "Refactor validation quality rules to derive handoff and activity expectations from workflow roles",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-310"
+    },
+    "TKT-370": {
+      "title": "Refactor check status and lock surfaces to derive active-work semantics from workflow roles",
+      "state": "todo",
+      "priority": 2,
+      "parent": "TKT-310"
+    },
+    "TKT-371": {
+      "title": "Refactor wrap-up and auto-review guidance to use config-defined workflow roles and target commands",
+      "state": "todo",
+      "priority": 2,
+      "parent": "TKT-310"
+    },
+    "TKT-372": {
+      "title": "Keep scaffold JSON output pure when global human skill hints are enabled",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-228"
     }
   }
 }

@@ -122,6 +122,102 @@ func TestStoreUpdate(t *testing.T) {
 	}
 }
 
+func TestStoreUpdate_UsesConfiguredLifecycleRolesForTimestamps(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState:    "queued",
+		DefaultPriority: 10,
+		HandoffSections: ticket.DefaultConfig().HandoffSections,
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	t1 := &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Lifecycle roles",
+		State:       "queued",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:tester",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}
+	if err := s.CreateTicket(ctx, t1); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	t1.State = "building"
+	if err := s.UpdateTicket(ctx, t1); err != nil {
+		t.Fatalf("UpdateTicket to active state failed: %v", err)
+	}
+	active, err := s.GetTicket(ctx, t1.ID)
+	if err != nil {
+		t.Fatalf("GetTicket after active transition failed: %v", err)
+	}
+	if active.StartedAt.IsZero() {
+		t.Fatal("expected StartedAt to be stamped for configured active state")
+	}
+	if !active.CompletedAt.IsZero() {
+		t.Fatalf("did not expect CompletedAt before completion, got %s", active.CompletedAt)
+	}
+
+	active.State = "shipped"
+	if err := s.UpdateTicket(ctx, active); err != nil {
+		t.Fatalf("UpdateTicket to completed state failed: %v", err)
+	}
+	done, err := s.GetTicket(ctx, t1.ID)
+	if err != nil {
+		t.Fatalf("GetTicket after completion failed: %v", err)
+	}
+	if done.CompletedAt.IsZero() {
+		t.Fatal("expected CompletedAt to be stamped for configured completed state")
+	}
+}
+
 func TestStoreFilter(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := New(tmpDir)

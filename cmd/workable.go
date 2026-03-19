@@ -65,7 +65,7 @@ func isWorkableTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 	if isEpicTicket(t) {
 		return false
 	}
-	return ticket.ValidateTransition(cfg, t.State, ticket.State("in-progress")) == nil
+	return len(cfg.StartTransitionTargets(string(t.State))) > 0
 }
 
 func isEpicTicket(t *ticket.Ticket) bool {

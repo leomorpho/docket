@@ -197,17 +197,47 @@ func TestSelectNextTicket_UsesStartableStatesFromConfig(t *testing.T) {
 	s := local.New(tmpDir)
 	ctx := context.Background()
 
-	cfg := ticket.DefaultConfig()
-	delete(cfg.States, "backlog")
-	delete(cfg.States, "todo")
-	cfg.States["queued"] = ticket.StateConfig{
-		Label:            "Queued",
-		Open:             true,
-		Column:           0,
-		Next:             []string{"in-progress"},
-		Roles:            []string{"intake"},
-		Startable:        true,
-		BlocksDependents: true,
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState:    "queued",
+		DefaultPriority: 10,
+		HandoffSections: ticket.DefaultConfig().HandoffSections,
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)

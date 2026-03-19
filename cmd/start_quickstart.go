@@ -3,6 +3,8 @@ package cmd
 import (
 	"sort"
 	"strings"
+
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 type startQuickstartSkill struct {
@@ -22,6 +24,12 @@ type startAgentQuickstart struct {
 }
 
 func buildStartAgentQuickstart(repoRoot, managedBranch, managedWorktree string) startAgentQuickstart {
+	workState := "in-progress"
+	if cfg, err := ticket.LoadConfig(repoRoot); err == nil {
+		if active, ok := cfg.PrimaryStateWithRole("active"); ok {
+			workState = active
+		}
+	}
 	// Intentionally repeated every start run: reminder fatigue is preferable to
 	// missed workflow guardrails when agents resume mid-stream or skip onboarding docs.
 	out := startAgentQuickstart{
@@ -30,7 +38,7 @@ func buildStartAgentQuickstart(repoRoot, managedBranch, managedWorktree string) 
 		CoreWorkflow: []string{
 			"docket list --state open --format context",
 			"docket show TKT-NNN --format context",
-			"docket update TKT-NNN --state in-progress",
+			"docket update TKT-NNN --state " + workState,
 			"docket ac check TKT-NNN",
 		},
 		CapabilityDiscovery: []string{

@@ -61,6 +61,60 @@ func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
 	}
 }
 
+func TestBuildStartAgentQuickstartUsesConfiguredActiveStateName(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState:    "queued",
+		DefaultPriority: 10,
+		HandoffSections: ticket.DefaultConfig().HandoffSections,
+	}
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	quickstart := buildStartAgentQuickstart(h.repo, "docket/TKT-999", "/tmp/docket/TKT-999")
+	if !strings.Contains(strings.Join(quickstart.CoreWorkflow, "\n"), "docket update TKT-NNN --state building") {
+		t.Fatalf("expected quickstart to use configured active state, got %#v", quickstart.CoreWorkflow)
+	}
+}
+
 func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {
 	h := newFakeRepoHarness(t)
 	h.seedTicket("TKT-970", 970, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
