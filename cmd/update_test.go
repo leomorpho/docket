@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/claim"
 	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -756,6 +757,86 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 	}
 	if !ok {
 		t.Fatalf("expected repaired branch docket/TKT-287 to include ticket trailer")
+	}
+}
+
+func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	t.Setenv("DOCKET_AGENT_ID", "test-agent")
+	docketHome = ""
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
+
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-270",
+		Seq:         270,
+		Title:       "Bound worktree review transition",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Handoff:     "handoff",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: setup ticket")
+
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-270")
+	if err := docketgit.CreateWorktree(tmpDir, "TKT-270", "docket/TKT-270", worktreePath); err != nil {
+		t.Fatalf("CreateWorktree failed: %v", err)
+	}
+
+	ns := security.NewRepoNamespaceStore(tmpHome)
+	if err := ns.RecordRunStart(tmpDir, "TKT-270", "agent:test-agent", worktreePath, "docket/TKT-270", "hash-270"); err != nil {
+		t.Fatalf("RecordRunStart failed: %v", err)
+	}
+	if err := claim.Claim(tmpDir, "TKT-270", worktreePath, "agent:test-agent"); err != nil {
+		t.Fatalf("Claim failed: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(worktreePath, "work.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("write file in worktree failed: %v", err)
+	}
+	runGitSession(t, worktreePath, "add", ".")
+	runGitSession(t, worktreePath, "commit", "-m", "feat: worktree review transition\n\nTicket: TKT-270")
+
+	oldRepo := repo
+	repo = worktreePath
+	t.Cleanup(func() { repo = oldRepo })
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-270", "--state", "in-review"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected in-review transition from bound worktree, got: %v", err)
+	}
+
+	mainStore := local.New(tmpDir)
+	got, err := mainStore.GetTicket(context.Background(), "TKT-270")
+	if err != nil {
+		t.Fatalf("load ticket from main checkout failed: %v", err)
+	}
+	if got == nil || got.State != "in-review" {
+		t.Fatalf("expected main checkout ticket state in-review after merge-back, got %#v", got)
 	}
 }
 

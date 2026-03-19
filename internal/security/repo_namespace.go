@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/leomorpho/docket/internal/artifacts"
+	docketgit "github.com/leomorpho/docket/internal/git"
 )
 
 const repoIDFile = "repo_id"
@@ -512,6 +513,9 @@ func HashFile(path string) (string, error) {
 func GetOrCreateRepoID(repoRoot string) (string, error) {
 	if repoRoot == "" {
 		return "", fmt.Errorf("repo root is required")
+	}
+	if commonDir, err := docketgit.GetGitCommonDir(repoRoot); err == nil && strings.TrimSpace(commonDir) != "" {
+		repoRoot = filepath.Dir(commonDir)
 	}
 	path := artifacts.RepoPath(repoRoot, artifacts.RepoRepoID)
 	if data, err := os.ReadFile(path); err == nil {

@@ -171,7 +171,13 @@ var updateCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("finishing task: %w", err)
 				}
-				// Reload ticket after FinishTask
+				// Reload ticket after FinishTask from the shared repo root because
+				// managed review transitions may merge back and prune the bound worktree.
+				repoRoot, rootErr := deps.vcs.GetRepoRoot(ctx)
+				if rootErr != nil {
+					return fmt.Errorf("resolving repo root after finish: %w", rootErr)
+				}
+				s = local.New(repoRoot)
 				t, _ = s.GetTicket(ctx, t.ID)
 			} else {
 				t.State = newState

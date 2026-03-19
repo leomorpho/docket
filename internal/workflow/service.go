@@ -8,6 +8,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/vcs"
 )
@@ -108,9 +109,21 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 		return nil, fmt.Errorf("ticket %s not found", ticketID)
 	}
 
+	finishCmd, err := buildFinishStateCmd(t, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// 1. Handle VCS merge-back if needed
 	cl, _ := m.claimer.GetClaim(ctx, t.ID)
 	repoRoot, _ := m.vcs.GetRepoRoot(ctx)
+	currentCheckout, _ := m.vcs.CurrentCheckoutPath(ctx)
+	currentAbs, _ := filepath.Abs(currentCheckout)
+	claimedAbs := ""
+	if cl != nil {
+		claimedAbs, _ = filepath.Abs(cl.Worktree)
+	}
+	mergedFromBoundWorktree := cl != nil && cl.Worktree != "" && cl.Worktree != repoRoot && currentAbs != "" && currentAbs == claimedAbs
 	if cl != nil && cl.Worktree != "" && cl.Worktree != repoRoot {
 		branch := "docket/" + t.ID
 		// Commit changes in worktree
@@ -131,13 +144,21 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 	}
 
 	// 2. Transition state through command validation.
-	finishCmd, err := buildFinishStateCmd(t, cfg)
-	if err != nil {
-		return nil, err
+	targetStore := m.store
+	if mergedFromBoundWorktree {
+		sharedStore := local.New(repoRoot)
+		mergedTicket, err := sharedStore.GetTicket(ctx, ticketID)
+		if err != nil {
+			return nil, fmt.Errorf("loading merged ticket from repo root: %w", err)
+		}
+		if mergedTicket == nil {
+			return nil, fmt.Errorf("ticket %s missing from repo root after merge-back", ticketID)
+		}
+		t = mergedTicket
+		targetStore = sharedStore
 	}
 	finishCmd.Apply(t, time.Now())
-
-	if err := m.store.UpdateTicket(ctx, t); err != nil {
+	if err := targetStore.UpdateTicket(ctx, t); err != nil {
 		return nil, fmt.Errorf("updating ticket: %w", err)
 	}
 
