@@ -19,6 +19,7 @@ var (
 	listMaxPriority     int
 	listOnlyUnblocked   bool
 	listIncludeArchived bool
+	listWhole           bool
 )
 
 type listRow struct {
@@ -46,11 +47,13 @@ var listCmd = &cobra.Command{
 			IncludeArchived: listIncludeArchived,
 		}
 
+		useWorkableView := !listWhole
 		if listState != "" && listState != "open" {
 			if !cfg.IsValidState(listState) {
 				return fmt.Errorf("invalid state: %s", listState)
 			}
 			f.States = []ticket.State{ticket.State(listState)}
+			useWorkableView = false
 		} else {
 			// Default and "open" both use the config-defined open states.
 			for _, s := range cfg.OpenStates() {
@@ -58,11 +61,19 @@ var listCmd = &cobra.Command{
 			}
 		}
 
-		tickets, err := s.ListTickets(ctx, f)
-		if err != nil {
-			return fmt.Errorf("listing tickets: %w", err)
+		var tickets []*ticket.Ticket
+		if useWorkableView {
+			tickets, err = workableTickets(ctx, s, cfg, f)
+			if err != nil {
+				return fmt.Errorf("listing workable tickets: %w", err)
+			}
+		} else {
+			tickets, err = s.ListTickets(ctx, f)
+			if err != nil {
+				return fmt.Errorf("listing tickets: %w", err)
+			}
 		}
-		rows := buildListRows(ctx, s, tickets)
+		rows := buildListRows(ctx, s, tickets, listWhole)
 
 		switch format {
 		case "json":
@@ -125,9 +136,16 @@ func printContext(cmd *cobra.Command, rows []listRow) {
 	}
 }
 
-func buildListRows(ctx context.Context, s *local.Store, tickets []*ticket.Ticket) []listRow {
+func buildListRows(ctx context.Context, s *local.Store, tickets []*ticket.Ticket, whole bool) []listRow {
 	if len(tickets) == 0 {
 		return nil
+	}
+	if !whole {
+		out := make([]listRow, 0, len(tickets))
+		for _, t := range tickets {
+			out = append(out, listRow{t: t, depth: 0})
+		}
+		return out
 	}
 	idx, err := s.BuildRelationshipIndex(ctx)
 	if err != nil {
@@ -192,6 +210,7 @@ func init() {
 	listCmd.Flags().IntVar(&listMaxPriority, "priority", 0, "max priority to show")
 	listCmd.Flags().BoolVar(&listOnlyUnblocked, "unblocked", false, "exclude blocked tickets")
 	listCmd.Flags().BoolVar(&listIncludeArchived, "include-archived", false, "include archived tickets")
+	listCmd.Flags().BoolVar(&listWhole, "whole", false, "show the full matching ticket graph instead of only workable tickets")
 
 	rootCmd.AddCommand(listCmd)
 }

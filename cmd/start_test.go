@@ -192,6 +192,52 @@ func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 	}
 }
 
+func TestSelectNextTicket_UsesStartableStatesFromConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := local.New(tmpDir)
+	ctx := context.Background()
+
+	cfg := ticket.DefaultConfig()
+	delete(cfg.States, "backlog")
+	delete(cfg.States, "todo")
+	cfg.States["queued"] = ticket.StateConfig{
+		Label:            "Queued",
+		Open:             true,
+		Column:           0,
+		Next:             []string{"in-progress"},
+		Roles:            []string{"intake"},
+		Startable:        true,
+		BlocksDependents: true,
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Queued work",
+		State:       "queued",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil || got.ID != "TKT-001" {
+		t.Fatalf("expected queued ticket to be selected, got %#v", got)
+	}
+}
+
 func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	tmpRepo := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")

@@ -16,6 +16,7 @@ func TestListCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
+	listWhole = false
 
 	// 0. Setup store and tickets
 	s := local.New(tmpDir)
@@ -23,12 +24,12 @@ func TestListCmd(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Open Ticket", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Title: "Child Ticket", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2, CreatedAt: now.Add(2 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Workable Ticket", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Title: "Epic Ticket", State: ticket.State("todo"), Priority: 2, Labels: []string{"epic"}, CreatedAt: now.Add(2 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Done Ticket", State: ticket.State("done"), Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "Archived Ticket", State: ticket.State("archived"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
-	// 1. Default list (shows only open, which means everything except done/archived by default config, but TASK-008 says "open = all except done/archived")
+	// 1. Default list shows workable tickets only.
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
 	rootCmd.SetArgs([]string{"list"})
@@ -39,14 +40,14 @@ func TestListCmd(t *testing.T) {
 	if !strings.Contains(b.String(), "TKT-001") {
 		t.Errorf("expected TKT-001 in default list, got:\n%s", b.String())
 	}
-	if !strings.Contains(b.String(), "↳ TKT-004") {
-		t.Errorf("expected indented child in list output, got:\n%s", b.String())
+	if strings.Contains(b.String(), "TKT-004") {
+		t.Errorf("expected epic ticket to be hidden in default list, got:\n%s", b.String())
 	}
 	if strings.Contains(b.String(), "TKT-002") || strings.Contains(b.String(), "TKT-003") {
-		t.Errorf("expected only open tickets, but got:\n%s", b.String())
+		t.Errorf("expected only workable tickets, but got:\n%s", b.String())
 	}
 
-	// 2. List done
+	// 2. Explicit state filters bypass workable compaction.
 	b.Reset()
 	rootCmd.SetArgs([]string{"list", "--state", "done"})
 	listState = "done"
@@ -80,8 +81,11 @@ func TestListCmd(t *testing.T) {
 	if err := json.Unmarshal(b.Bytes(), &res); err != nil {
 		t.Fatalf("failed to parse JSON: %v", err)
 	}
-	if len(res) != 2 {
-		t.Errorf("expected 2 open tickets in JSON, got: %d", len(res))
+	if len(res) != 1 {
+		t.Errorf("expected 1 workable ticket in JSON, got: %d", len(res))
+	}
+	if len(res) == 1 && res[0]["id"] != "TKT-001" {
+		t.Errorf("expected TKT-001 in JSON, got %#v", res[0]["id"])
 	}
 }
 
@@ -89,6 +93,7 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
+	listWhole = false
 
 	s := local.New(tmpDir)
 	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
@@ -127,6 +132,7 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "context"
+	listWhole = false
 
 	cfg := ticket.DefaultConfig()
 	review := cfg.States["in-review"]
@@ -161,5 +167,88 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "BLOCKED by TKT-001") {
 		t.Fatalf("expected in-review blocker to be treated as resolved by config, got:\n%s", out.String())
+	}
+}
+
+func TestListCmd_WholeShowsFullHierarchy(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	listWhole = false
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Epic", State: ticket.State("todo"), Priority: 1, Labels: []string{"epic"},
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create epic failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-002", Seq: 2, Title: "Child", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2,
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create child failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list", "--whole"})
+	listState = "open"
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list whole failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-001") || !strings.Contains(out.String(), "↳ TKT-002") {
+		t.Fatalf("expected whole view to show full hierarchy, got:\n%s", out.String())
+	}
+}
+
+func TestListCmd_DefaultHidesBlockedBranch(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	listWhole = false
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Blocked epic", State: ticket.State("todo"), Priority: 1, Labels: []string{"epic"}, BlockedBy: []string{"TKT-099"},
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create epic failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-002", Seq: 2, Title: "Blocked child", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2, BlockedBy: []string{"TKT-001"},
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create child failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-003", Seq: 3, Title: "Ready", State: ticket.State("todo"), Priority: 3,
+		CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create ready ticket failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list"})
+	listState = "open"
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-003") {
+		t.Fatalf("expected workable ticket in output, got:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "TKT-001") || strings.Contains(out.String(), "TKT-002") {
+		t.Fatalf("expected blocked branch hidden from default list, got:\n%s", out.String())
 	}
 }

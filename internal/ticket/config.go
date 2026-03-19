@@ -179,6 +179,20 @@ func (c *Config) OpenStates() []string {
 	return open
 }
 
+// StartableStates returns state keys where Startable == true, sorted by Column.
+func (c *Config) StartableStates() []string {
+	var startable []string
+	for k, v := range c.States {
+		if v.Startable {
+			startable = append(startable, k)
+		}
+	}
+	sort.Slice(startable, func(i, j int) bool {
+		return c.States[startable[i]].Column < c.States[startable[j]].Column
+	})
+	return startable
+}
+
 // IsValidState reports whether s is a configured state name.
 func (c *Config) IsValidState(s string) bool {
 	_, ok := c.States[s]

@@ -427,6 +427,17 @@ func TestConfigHelpers(t *testing.T) {
 		}
 	}
 
+	startable := cfg.StartableStates()
+	wantStartable := []string{"backlog", "todo"}
+	if len(startable) != len(wantStartable) {
+		t.Fatalf("StartableStates length = %d, want %d (%v)", len(startable), len(wantStartable), startable)
+	}
+	for i, want := range wantStartable {
+		if startable[i] != want {
+			t.Fatalf("StartableStates[%d] = %q, want %q", i, startable[i], want)
+		}
+	}
+
 	// ValidTransitions
 	next := cfg.ValidTransitions("backlog")
 	if len(next) == 0 {
