@@ -70,6 +70,9 @@ func (m *MockVCS) GetAgentWorktreeDir(ctx context.Context, ticketID string) (str
 	}
 	return "/tmp/wt-" + ticketID, nil
 }
+func (m *MockVCS) IsPrimaryCheckout(ctx context.Context) (bool, error) {
+	return false, nil
+}
 func (m *MockVCS) GetRepoRoot(ctx context.Context) (string, error) {
 	if m.repoRoot != "" {
 		return m.repoRoot, nil
@@ -141,7 +144,7 @@ func TestWorkflowStartTask(t *testing.T) {
 	}
 }
 
-func TestWorkflowStartTask_AgentRequiresDedicatedWorktree(t *testing.T) {
+func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	cfg := ticket.DefaultConfig()
 
 	t.Run("fails when worktree path lookup fails", func(t *testing.T) {
@@ -168,7 +171,7 @@ func TestWorkflowStartTask_AgentRequiresDedicatedWorktree(t *testing.T) {
 		}
 	})
 
-	t.Run("human flow still falls back to repo root", func(t *testing.T) {
+	t.Run("human flow no longer falls back to repo root", func(t *testing.T) {
 		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
 		v := &MockVCS{
 			repoRoot:          "/tmp/repo",
@@ -177,12 +180,9 @@ func TestWorkflowStartTask_AgentRequiresDedicatedWorktree(t *testing.T) {
 		c := &MockClaim{claims: make(map[string]string)}
 		mgr := NewManager(s, v, c)
 
-		_, wtPath, err := mgr.StartTask(context.Background(), "TKT-001", "human:test", cfg)
-		if err != nil {
-			t.Fatalf("unexpected error for human fallback: %v", err)
-		}
-		if wtPath != "/tmp/repo" {
-			t.Fatalf("expected repo-root fallback for human flow, got %s", wtPath)
+		_, _, err := mgr.StartTask(context.Background(), "TKT-001", "human:test", cfg)
+		if err == nil {
+			t.Fatal("expected strict worktree error for human flow")
 		}
 	})
 }

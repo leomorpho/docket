@@ -152,6 +152,9 @@ func TestStartRunPinnedToActivatedWorkflowHash(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(tmpRepo, ".docket"), 0o755); err != nil {
 		t.Fatalf("mkdir docket failed: %v", err)
 	}
+	runGitSession(t, tmpRepo, "init")
+	runGitSession(t, tmpRepo, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpRepo, "config", "user.name", "Test User")
 	cfg := ticket.DefaultConfig()
 	backlog := cfg.States["backlog"]
 	backlog.Next = append(backlog.Next, "in-progress")
@@ -191,6 +194,11 @@ func TestStartRunPinnedToActivatedWorkflowHash(t *testing.T) {
 
 	s := local.New(tmpRepo)
 	now := time.Now().UTC()
+	if err := os.WriteFile(filepath.Join(tmpRepo, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed failed: %v", err)
+	}
+	runGitSession(t, tmpRepo, "add", "seed.txt")
+	runGitSession(t, tmpRepo, "commit", "-m", "seed")
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
 		ID:          "TKT-901",
 		Seq:         901,

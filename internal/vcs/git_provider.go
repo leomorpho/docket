@@ -2,6 +2,8 @@ package vcs
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 
 	"github.com/leomorpho/docket/internal/git"
 )
@@ -25,7 +27,19 @@ func (p *GitProvider) RemoveWorktree(ctx context.Context, path string) error {
 }
 
 func (p *GitProvider) GetAgentWorktreeDir(ctx context.Context, ticketID string) (string, error) {
-	return git.GetAgentWorktreeDir(ticketID)
+	repoRoot, err := filepath.Abs(p.repoRoot)
+	if err != nil {
+		return "", err
+	}
+	return git.GetAgentWorktreeDir(repoRoot, ticketID)
+}
+
+func (p *GitProvider) IsPrimaryCheckout(ctx context.Context) (bool, error) {
+	info, err := os.Stat(filepath.Join(p.repoRoot, ".git"))
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), nil
 }
 
 func (p *GitProvider) GetRepoRoot(ctx context.Context) (string, error) {

@@ -39,6 +39,9 @@ func TestLefthookTemplatesRunTicketChecksInCommitMsg(t *testing.T) {
 			if !strings.Contains(content, `grep -Eo 'Ticket:[[:space:]]*TKT-[0-9]+' "$MSG_FILE"`) {
 				t.Fatalf("%s should extract Ticket trailers from MSG_FILE", path)
 			}
+			if !strings.Contains(content, `if [ -d "$REPO_ROOT/.git" ]; then`) {
+				t.Fatalf("%s should reject Ticket-linked commits from the primary checkout", path)
+			}
 			preCommitSection := strings.Split(content, "commit-msg:")[0]
 			if strings.Contains(preCommitSection, "COMMIT_EDITMSG") {
 				t.Fatalf("%s pre-commit hook should not read COMMIT_EDITMSG directly", path)

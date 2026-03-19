@@ -114,7 +114,7 @@ func TestStartOutputBeforeAndAfterBootstrap(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for i := 1; i <= 2; i++ {
 		id := fmt.Sprintf("TKT-%03d", i)
-		if wt, err := docketgit.GetAgentWorktreeDir(id); err == nil {
+		if wt, err := docketgit.GetAgentWorktreeDir(tmpRepo, id); err == nil {
 			_ = os.RemoveAll(wt)
 		}
 		if err := s.CreateTicket(context.Background(), &ticket.Ticket{

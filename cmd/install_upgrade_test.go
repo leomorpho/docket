@@ -135,6 +135,15 @@ func TestInstallCommitMsgHookUsesCurrentCommitMessageFile(t *testing.T) {
 	if err := exec.Command("git", "-C", tmpDir, "config", "user.name", "tester").Run(); err != nil {
 		t.Fatalf("git config name failed: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed failed: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", tmpDir, "add", "seed.txt").CombinedOutput(); err != nil {
+		t.Fatalf("git add seed failed: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", tmpDir, "commit", "-m", "seed").CombinedOutput(); err != nil {
+		t.Fatalf("git seed commit failed: %v\n%s", err, out)
+	}
 	if _, err := writeHook(tmpDir); err != nil {
 		t.Fatalf("writeHook failed: %v", err)
 	}
@@ -152,11 +161,18 @@ func TestInstallCommitMsgHookUsesCurrentCommitMessageFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "tracked.txt"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatalf("write tracked file failed: %v", err)
 	}
-	addCmd := exec.Command("git", "-C", tmpDir, "add", "tracked.txt")
+	worktreeDir := filepath.Join(t.TempDir(), "wt")
+	if out, err := exec.Command("git", "-C", tmpDir, "worktree", "add", "-b", "docket/test-install-hook", worktreeDir).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add failed: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(worktreeDir, "tracked.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write tracked file in worktree failed: %v", err)
+	}
+	addCmd := exec.Command("git", "-C", worktreeDir, "add", "tracked.txt")
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		t.Fatalf("git add failed: %v\n%s", err, out)
 	}
-	commitCmd := exec.Command("git", "-C", tmpDir, "commit", "-m", "new subject", "-m", "Ticket: TKT-253")
+	commitCmd := exec.Command("git", "-C", worktreeDir, "commit", "-m", "new subject", "-m", "Ticket: TKT-253")
 	commitCmd.Env = append(os.Environ(), "DOCKET_BIN="+stubPath)
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		t.Fatalf("git commit failed: %v\n%s", err, out)

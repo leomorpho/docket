@@ -43,6 +43,9 @@ func TestUpdateAutoReleasesLockOnDoneState(t *testing.T) {
 	run("init")
 	run("config", "user.email", "test@example.com")
 	run("config", "user.name", "test")
+	_ = os.WriteFile(filepath.Join(tmp, "seed.txt"), []byte("seed\n"), 0o644)
+	run("add", "seed.txt")
+	run("commit", "-m", "init")
 
 	s := local.New(tmp)
 	if err := ticket.SaveConfig(tmp, ticket.DefaultConfig()); err != nil {

@@ -73,6 +73,11 @@ if [ -z "$TICKETS" ]; then
   exit 0
 fi
 
+if [ -d "$REPO_ROOT/.git" ]; then
+  echo "docket: error: Ticket-linked commits must be created from a dedicated worktree, not the primary checkout" >&2
+  exit 1
+fi
+
 for ID in $TICKETS; do
   TICKET_FILE="$REPO_ROOT/` + ticketsRelDir + `/$ID.md"
   if [ -f "$TICKET_FILE" ] && grep -Eq '^state:[[:space:]]*done$' "$TICKET_FILE"; then

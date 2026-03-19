@@ -41,7 +41,7 @@ func TestWorktree(t *testing.T) {
 	}
 
 	// 2. Resolve worktree dir
-	wtDir, err := GetAgentWorktreeDir(ticketID)
+	wtDir, err := GetAgentWorktreeDir(tmpDir, ticketID)
 	if err != nil {
 		t.Fatalf("GetAgentWorktreeDir failed: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -16,13 +17,31 @@ func TestProofPipelineEndToEndIntegration(t *testing.T) {
 	h := newFakeRepoHarness(t)
 	ticketID := "TKT-944"
 	h.seedTicket(ticketID, 944, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "proof e2e"}})
+	runGitSession(t, h.repo, "add", ".")
+	runGitSession(t, h.repo, "commit", "-m", "seed proof ticket")
 
 	if out, err := h.run("bootstrap", "--adapter", "codex"); err != nil {
 		t.Fatalf("bootstrap failed: %v\n%s", err, out)
 	}
+	if out, err := h.run("update", ticketID, "--state", "in-progress"); err != nil {
+		t.Fatalf("start ticket failed: %v\n%s", err, out)
+	}
+
+	cl, err := claim.GetClaim(h.repo, ticketID)
+	if err != nil {
+		t.Fatalf("read claim failed: %v", err)
+	}
+	if cl == nil {
+		t.Fatalf("expected claim for %s after start", ticketID)
+	}
+	worktreeRepo := cl.Worktree
 
 	proofRel := filepath.Join("fixtures", "proof.png")
-	writeProofPNGFixture(t, filepath.Join(h.repo, proofRel))
+	writeProofPNGFixture(t, filepath.Join(worktreeRepo, proofRel))
+
+	mainRepo := h.repo
+	h.repo = worktreeRepo
+	defer func() { h.repo = mainRepo }()
 
 	trace := []string{}
 	runJSON := func(args ...string) (string, map[string]any) {
@@ -55,7 +74,7 @@ func TestProofPipelineEndToEndIntegration(t *testing.T) {
 		t.Fatalf("expected non-empty proof id in add payload: %+v", addPayload)
 	}
 
-	metadataPath := filepath.Join(h.repo, ".docket", "proofs", ticketID, "metadata.json")
+	metadataPath := filepath.Join(worktreeRepo, ".docket", "proofs", ticketID, "metadata.json")
 	metadataRaw, err := os.ReadFile(metadataPath)
 	if err != nil {
 		t.Fatalf("read proof metadata fixture failed: %v", err)
@@ -67,15 +86,21 @@ func TestProofPipelineEndToEndIntegration(t *testing.T) {
 		t.Fatalf("expected one proof in show output, got %+v", showPayload["proofs"])
 	}
 
-	featurePath := filepath.Join(h.repo, "src", "proof_feature.go")
+	featurePath := filepath.Join(worktreeRepo, "src", "proof_feature.go")
 	if err := os.MkdirAll(filepath.Dir(featurePath), 0o755); err != nil {
 		t.Fatalf("mkdir feature path: %v", err)
 	}
 	if err := os.WriteFile(featurePath, []byte("package prooffeature\n\nfunc Marker() {}\n"), 0o644); err != nil {
 		t.Fatalf("write feature file: %v", err)
 	}
-	runGitSession(t, h.repo, "add", "src/proof_feature.go")
-	runGitSession(t, h.repo, "commit", "-m", "feat: proof context linkage", "-m", fmt.Sprintf("Ticket: %s", ticketID))
+	runGitSession(t, worktreeRepo, "add", "src/proof_feature.go")
+	runGitSession(t, worktreeRepo, "commit", "-m", "feat: proof context linkage", "-m", fmt.Sprintf("Ticket: %s", ticketID))
+
+	h.repo = mainRepo
+	if out, err := h.run("update", ticketID, "--state", "in-review"); err != nil {
+		t.Fatalf("finish ticket failed: %v\n%s", err, out)
+	}
+	h.repo = mainRepo
 
 	scanOut, err := h.run("scan")
 	if err != nil {

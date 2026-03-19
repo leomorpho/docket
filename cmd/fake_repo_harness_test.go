@@ -85,7 +85,7 @@ func newFakeRepoHarnessForAdapter(t *testing.T, adapterID string) *fakeRepoHarne
 
 func (h *fakeRepoHarness) seedTicket(id string, seq int, state ticket.State, ac []ticket.AcceptanceCriterion) {
 	h.t.Helper()
-	if wt, err := docketgit.GetAgentWorktreeDir(id); err == nil {
+	if wt, err := docketgit.GetAgentWorktreeDir(h.repo, id); err == nil {
 		_ = os.RemoveAll(wt)
 	}
 
