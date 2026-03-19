@@ -128,3 +128,66 @@ func TestBacklogApplyIntegrationRelationGraph(t *testing.T) {
 		t.Fatalf("expected 2 descendants under epic, got %d", len(desc))
 	}
 }
+
+func TestBacklogApplyUsesConfiguredWorkflowStatesWithIntermediaryState(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":  {Label: "Queued", Open: true, Column: 0, Next: []string{"coding"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"coding":  {Label: "Coding", Open: true, Column: 1, Next: []string{"testing", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"testing": {Label: "Testing", Open: true, Column: 2, Next: []string{"qa", "coding"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":      {Label: "QA", Open: true, Column: 3, Next: []string{"shipped", "testing"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped": {Label: "Shipped", Open: false, Column: 4, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.Workflow = ticket.WorkflowConfig{Version: 1, States: map[string]ticket.WorkflowStateConfig{
+		"queued":  {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"intake"}, Open: true, Startable: true, BlocksDependents: true, Next: []string{"coding"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Queued", Column: 0}},
+		"coding":  {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"active"}, Open: true, BlocksDependents: true, Next: []string{"testing", "queued"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Coding", Column: 1}},
+		"testing": {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"active"}, Open: true, BlocksDependents: true, Next: []string{"qa", "coding"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Testing", Column: 2}},
+		"qa":      {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"review"}, Open: true, Reviewable: true, BlocksDependents: true, Next: []string{"shipped", "testing"}}, Presentation: ticket.WorkflowStatePresentation{Label: "QA", Column: 3}},
+		"shipped": {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"completed"}, Terminal: true, Next: []string{}}, Presentation: ticket.WorkflowStatePresentation{Label: "Shipped", Column: 4}},
+	}}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "tickets": [
+    {"ref": "epic", "title": "Epic", "description": "Root epic", "state": "coding"},
+    {"ref": "child", "title": "Child", "description": "Child item", "parent_ref": "epic", "state": "testing"}
+  ]
+}`
+	specPath := writeSpecFile(t, tmpDir, "custom-backlog.json", spec)
+
+	out, _, err := runRootCommand(t, "backlog", "apply", "--spec", specPath)
+	if err != nil {
+		t.Fatalf("backlog apply failed: %v", err)
+	}
+
+	var res struct {
+		CreatedIDs map[string]string `json:"created_ids"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("parse output: %v\noutput=%s", err, out)
+	}
+
+	s := local.New(tmpDir)
+	epic, err := s.GetTicket(context.Background(), res.CreatedIDs["epic"])
+	if err != nil {
+		t.Fatalf("get epic: %v", err)
+	}
+	child, err := s.GetTicket(context.Background(), res.CreatedIDs["child"])
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if epic.State != ticket.State("coding") {
+		t.Fatalf("epic state = %q, want coding", epic.State)
+	}
+	if child.State != ticket.State("testing") {
+		t.Fatalf("child state = %q, want testing", child.State)
+	}
+}

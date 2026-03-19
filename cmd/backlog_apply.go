@@ -46,7 +46,11 @@ var backlogApplyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		spec, report, err := applyspec.ParseBacklogSpec(raw)
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			return err
+		}
+		spec, report, err := applyspec.ParseBacklogSpecWithStates(raw, applyAllowedStates(cfg))
 		if err != nil {
 			return fmt.Errorf("parse spec JSON: %w", err)
 		}
@@ -58,7 +62,7 @@ var backlogApplyCmd = &cobra.Command{
 			return renderMutationValidationError(cmd, fmt.Errorf("backlog apply spec validation failed"), field, report)
 		}
 
-		res, err := executeBacklogApply(context.Background(), repo, spec)
+		res, err := executeBacklogApply(context.Background(), repo, cfg, spec)
 		if err != nil {
 			return err
 		}
@@ -82,12 +86,8 @@ var backlogApplyCmd = &cobra.Command{
 	},
 }
 
-func executeBacklogApply(ctx context.Context, repoRoot string, spec applyspec.BacklogApplySpec) (backlogApplyOutput, error) {
+func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.BacklogApplySpec) (backlogApplyOutput, error) {
 	s := local.New(repoRoot)
-	cfg, err := ticket.LoadConfig(repoRoot)
-	if err != nil {
-		return backlogApplyOutput{}, err
-	}
 
 	allocations, rollback, err := reserveBacklogIDs(repoRoot, len(spec.Tickets), s)
 	if err != nil {

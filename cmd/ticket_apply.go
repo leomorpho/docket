@@ -60,7 +60,12 @@ var ticketApplyCmd = &cobra.Command{
 			return err
 		}
 
-		spec, report, err := applyspec.ParseTicketSpec(raw)
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			return err
+		}
+
+		spec, report, err := applyspec.ParseTicketSpecWithStates(raw, applyAllowedStates(cfg))
 		if err != nil {
 			return fmt.Errorf("parse spec JSON: %w", err)
 		}
@@ -77,7 +82,7 @@ var ticketApplyCmd = &cobra.Command{
 			return fmt.Errorf("parse ticket field presence: %w", err)
 		}
 
-		res, err := executeTicketApply(context.Background(), repo, spec, presence)
+		res, err := executeTicketApply(context.Background(), repo, cfg, spec, presence)
 		if err != nil {
 			return err
 		}
@@ -101,12 +106,8 @@ var ticketApplyCmd = &cobra.Command{
 	},
 }
 
-func executeTicketApply(ctx context.Context, repoRoot string, spec applyspec.TicketApplySpec, presence ticketApplyPresence) (ticketApplyOutput, error) {
+func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.TicketApplySpec, presence ticketApplyPresence) (ticketApplyOutput, error) {
 	s := local.New(repoRoot)
-	cfg, err := ticket.LoadConfig(repoRoot)
-	if err != nil {
-		return ticketApplyOutput{}, err
-	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	actor := detectActor()

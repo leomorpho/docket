@@ -113,6 +113,65 @@ func TestParseBacklogSpecInvalidRelations(t *testing.T) {
 	assertHasError(t, report, "tickets[2].ref", CodeDuplicate)
 }
 
+func TestParseTicketSpecWithStatesAcceptsCustomWorkflowNames(t *testing.T) {
+	raw := []byte(`{
+  "version": "docket.apply/v1",
+  "operation": "create",
+  "ticket": {
+    "title": "Custom workflow",
+    "description": "Uses renamed states from config.",
+    "state": "building"
+  }
+}`)
+
+	spec, report, err := ParseTicketSpecWithStates(raw, map[string]struct{}{
+		"queued":   {},
+		"building": {},
+		"qa":       {},
+		"shipped":  {},
+	})
+	if err != nil {
+		t.Fatalf("ParseTicketSpecWithStates returned error: %v", err)
+	}
+	if !report.Valid() {
+		t.Fatalf("expected valid report, got %#v", report.Errors)
+	}
+	if spec.Ticket.State != "building" {
+		t.Fatalf("state = %q, want building", spec.Ticket.State)
+	}
+}
+
+func TestParseBacklogSpecWithStatesRejectsUnknownCustomStateDeterministically(t *testing.T) {
+	raw := []byte(`{
+  "version": "docket.apply/v1",
+  "tickets": [
+    {
+      "ref": "epic",
+      "title": "Epic",
+      "description": "Root",
+      "state": "reviewing"
+    }
+  ]
+}`)
+
+	_, report, err := ParseBacklogSpecWithStates(raw, map[string]struct{}{
+		"queued":   {},
+		"building": {},
+		"qa":       {},
+		"shipped":  {},
+	})
+	if err != nil {
+		t.Fatalf("ParseBacklogSpecWithStates returned error: %v", err)
+	}
+	if report.Valid() {
+		t.Fatal("expected validation errors")
+	}
+	assertHasError(t, report, "tickets[0].state", CodeInvalidValue)
+	if got := report.Errors[0].Message; got != "must be one of building,qa,queued,shipped" {
+		t.Fatalf("unexpected state error message %q", got)
+	}
+}
+
 func TestLoadSpecFilesIntegration(t *testing.T) {
 	tmp := t.TempDir()
 	goodPath := filepath.Join(tmp, "ticket.good.json")
@@ -207,6 +266,41 @@ func TestEmbeddedSchemasIncludeVersionConst(t *testing.T) {
 			}
 			if version["const"] != SchemaVersionV1 {
 				t.Fatalf("expected version const %q, got %#v", SchemaVersionV1, version["const"])
+			}
+		})
+	}
+}
+
+func TestEmbeddedSchemasDoNotHardcodeWorkflowStateEnum(t *testing.T) {
+	cases := []struct {
+		name      string
+		data      []byte
+		fieldPath []string
+	}{
+		{name: "ticket", data: TicketSchemaJSON(), fieldPath: []string{"properties", "ticket", "properties", "state"}},
+		{name: "backlog", data: BacklogSchemaJSON(), fieldPath: []string{"properties", "tickets", "items", "properties", "state"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var doc map[string]any
+			if err := json.Unmarshal(tc.data, &doc); err != nil {
+				t.Fatalf("failed to parse embedded schema: %v", err)
+			}
+			node := any(doc)
+			for _, key := range tc.fieldPath {
+				obj, ok := node.(map[string]any)
+				if !ok {
+					t.Fatalf("schema path %v missing object at %q", tc.fieldPath, key)
+				}
+				node = obj[key]
+			}
+			stateSchema, ok := node.(map[string]any)
+			if !ok {
+				t.Fatalf("state schema at path %v is not an object: %#v", tc.fieldPath, node)
+			}
+			if _, ok := stateSchema["enum"]; ok {
+				t.Fatalf("state schema unexpectedly contains fixed enum: %#v", stateSchema["enum"])
 			}
 		})
 	}

@@ -29,7 +29,7 @@ var (
 	ticketIDPattern = regexp.MustCompile(`^TKT-\d+$`)
 	refPattern      = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]*$`)
 
-	allowedStates = map[string]struct{}{
+	defaultAllowedStates = map[string]struct{}{
 		"backlog":     {},
 		"todo":        {},
 		"in-progress": {},
@@ -121,6 +121,14 @@ func LoadTicketSpecFile(path string) (TicketApplySpec, ValidationReport, error) 
 	return ParseTicketSpec(data)
 }
 
+func LoadTicketSpecFileWithStates(path string, allowedStates map[string]struct{}) (TicketApplySpec, ValidationReport, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return TicketApplySpec{}, ValidationReport{}, err
+	}
+	return ParseTicketSpecWithStates(data, allowedStates)
+}
+
 func LoadBacklogSpecFile(path string) (BacklogApplySpec, ValidationReport, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -129,7 +137,19 @@ func LoadBacklogSpecFile(path string) (BacklogApplySpec, ValidationReport, error
 	return ParseBacklogSpec(data)
 }
 
+func LoadBacklogSpecFileWithStates(path string, allowedStates map[string]struct{}) (BacklogApplySpec, ValidationReport, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return BacklogApplySpec{}, ValidationReport{}, err
+	}
+	return ParseBacklogSpecWithStates(data, allowedStates)
+}
+
 func ParseTicketSpec(data []byte) (TicketApplySpec, ValidationReport, error) {
+	return ParseTicketSpecWithStates(data, nil)
+}
+
+func ParseTicketSpecWithStates(data []byte, allowedStates map[string]struct{}) (TicketApplySpec, ValidationReport, error) {
 	root, err := decodeRootObject(data)
 	if err != nil {
 		return TicketApplySpec{}, ValidationReport{}, err
@@ -148,7 +168,7 @@ func ParseTicketSpec(data []byte) (TicketApplySpec, ValidationReport, error) {
 		if !ok {
 			v.add("ticket", CodeTypeMismatch, "must be an object")
 		} else {
-			ticketSpec, present := parseTicketObject(obj, "ticket", false, v)
+			ticketSpec, present := parseTicketObject(obj, "ticket", false, allowedStateNames(allowedStates), v)
 			spec.Ticket = TicketSpec{
 				ID:          ticketSpec.ID,
 				Title:       ticketSpec.Title,
@@ -169,6 +189,10 @@ func ParseTicketSpec(data []byte) (TicketApplySpec, ValidationReport, error) {
 }
 
 func ParseBacklogSpec(data []byte) (BacklogApplySpec, ValidationReport, error) {
+	return ParseBacklogSpecWithStates(data, nil)
+}
+
+func ParseBacklogSpecWithStates(data []byte, allowedStates map[string]struct{}) (BacklogApplySpec, ValidationReport, error) {
 	root, err := decodeRootObject(data)
 	if err != nil {
 		return BacklogApplySpec{}, ValidationReport{}, err
@@ -205,7 +229,7 @@ func ParseBacklogSpec(data []byte) (BacklogApplySpec, ValidationReport, error) {
 			spec.Tickets = append(spec.Tickets, BacklogTicketSpec{})
 			continue
 		}
-		ticketSpec, _ := parseTicketObject(obj, path, true, v)
+		ticketSpec, _ := parseTicketObject(obj, path, true, allowedStateNames(allowedStates), v)
 		backlogTicket := BacklogTicketSpec{
 			Ref:         ticketSpec.Ref,
 			ID:          ticketSpec.ID,
@@ -261,7 +285,7 @@ type fieldPresence struct {
 	AC          bool
 }
 
-func parseTicketObject(obj map[string]any, path string, allowRefs bool, v *validator) (parsedTicket, fieldPresence) {
+func parseTicketObject(obj map[string]any, path string, allowRefs bool, allowedStates []string, v *validator) (parsedTicket, fieldPresence) {
 	out := parsedTicket{}
 	present := fieldPresence{}
 
@@ -307,8 +331,8 @@ func parseTicketObject(obj map[string]any, path string, allowRefs bool, v *valid
 		present.State = true
 		out.State = val
 		if val != "" {
-			if _, exists := allowedStates[val]; !exists {
-				v.add(path+".state", CodeInvalidValue, "must be one of backlog,todo,in-progress,in-review,done,archived")
+			if !containsString(allowedStates, val) {
+				v.add(path+".state", CodeInvalidValue, fmt.Sprintf("must be one of %s", strings.Join(allowedStates, ",")))
 			}
 		}
 	}
@@ -558,6 +582,27 @@ func readOptionalInt(obj map[string]any, key, path string, v *validator) (*int, 
 
 type validator struct {
 	errors []ValidationError
+}
+
+func allowedStateNames(allowedStates map[string]struct{}) []string {
+	if len(allowedStates) == 0 {
+		allowedStates = defaultAllowedStates
+	}
+	names := make([]string, 0, len(allowedStates))
+	for state := range allowedStates {
+		names = append(names, state)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (v *validator) add(path, code, message string) {

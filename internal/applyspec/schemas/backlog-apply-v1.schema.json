@@ -39,7 +39,7 @@
           },
           "state": {
             "type": "string",
-            "enum": ["backlog", "todo", "in-progress", "in-review", "done", "archived"]
+            "minLength": 1
           },
           "labels": {
             "type": "array",

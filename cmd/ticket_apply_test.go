@@ -201,6 +201,63 @@ func TestTicketApplyIntegrationMarkdownAndIndex(t *testing.T) {
 	}
 }
 
+func TestTicketApplyUsesConfiguredWorkflowStates(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued":   {Label: "Queued", Open: true, Column: 0, Next: []string{"building"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"building": {Label: "Building", Open: true, Column: 1, Next: []string{"qa", "queued"}, Roles: []string{"active"}, BlocksDependents: true},
+		"qa":       {Label: "QA", Open: true, Column: 2, Next: []string{"shipped", "building"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"shipped":  {Label: "Shipped", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.Workflow = ticket.WorkflowConfig{Version: 1, States: map[string]ticket.WorkflowStateConfig{
+		"queued":   {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"intake"}, Open: true, Startable: true, BlocksDependents: true, Next: []string{"building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Queued", Column: 0}},
+		"building": {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"active"}, Open: true, BlocksDependents: true, Next: []string{"qa", "queued"}}, Presentation: ticket.WorkflowStatePresentation{Label: "Building", Column: 1}},
+		"qa":       {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"review"}, Open: true, Reviewable: true, BlocksDependents: true, Next: []string{"shipped", "building"}}, Presentation: ticket.WorkflowStatePresentation{Label: "QA", Column: 2}},
+		"shipped":  {Semantics: ticket.WorkflowStateSemantics{Roles: []string{"completed"}, Terminal: true, Next: []string{}}, Presentation: ticket.WorkflowStatePresentation{Label: "Shipped", Column: 3}},
+	}}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "operation": "create",
+  "ticket": {
+    "title": "Custom state create",
+    "description": "Create ticket in renamed workflow.",
+    "state": "building"
+  }
+}`
+	specPath := writeSpecFile(t, tmpDir, "custom-state.json", spec)
+
+	out, _, err := runRootCommand(t, "ticket", "apply", "--spec", specPath)
+	if err != nil {
+		t.Fatalf("ticket apply failed: %v", err)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("parse output: %v\noutput=%s", err, out)
+	}
+	if res["id"] != "TKT-001" {
+		t.Fatalf("expected TKT-001, got %#v", res["id"])
+	}
+
+	s := local.New(tmpDir)
+	created, err := s.GetTicket(context.Background(), "TKT-001")
+	if err != nil {
+		t.Fatalf("get created ticket: %v", err)
+	}
+	if created.State != ticket.State("building") {
+		t.Fatalf("state = %q, want building", created.State)
+	}
+}
+
 func runRootCommand(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 	out := new(bytes.Buffer)
