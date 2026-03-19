@@ -10,13 +10,18 @@ import (
 
 type Checker struct {
 	Backend store.Backend
+	Config  *ticket.Config
 	Now     func() time.Time
 	Rules   []Rule
 }
 
-func NewChecker(backend store.Backend) *Checker {
+func NewChecker(backend store.Backend, cfg *ticket.Config) *Checker {
+	if cfg == nil {
+		cfg = ticket.DefaultConfig()
+	}
 	return &Checker{
 		Backend: backend,
+		Config:  cfg,
 		Now:     func() time.Time { return time.Now().UTC() },
 		Rules:   []Rule{RuleR001, RuleR006, RuleR008},
 	}
@@ -43,7 +48,7 @@ func (c *Checker) Run(ctx context.Context, tickets []*ticket.Ticket, fix bool) (
 		}
 
 		for _, r := range c.Rules {
-			findings = append(findings, r(ctx, c.Backend, t, now)...)
+			findings = append(findings, r(ctx, c.Backend, c.Config, t, now)...)
 		}
 	}
 
@@ -64,7 +69,7 @@ func (c *Checker) fixResolvedBlockers(ctx context.Context, t *ticket.Ticket) (bo
 		if blocker == nil {
 			continue
 		}
-		if blocker.State == "done" || blocker.State == "archived" {
+		if !c.Config.BlocksDependents(blocker.State) {
 			resolved[blockerID] = struct{}{}
 		}
 	}

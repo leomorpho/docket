@@ -194,6 +194,37 @@ func (s *Store) ListTickets(ctx context.Context, f store.Filter) ([]*ticket.Tick
 	return tickets, nil
 }
 
+func (s *Store) loadConfigOrDefault() *ticket.Config {
+	cfg, err := ticket.LoadConfig(s.RepoRoot)
+	if err != nil {
+		return ticket.DefaultConfig()
+	}
+	return cfg
+}
+
+func (s *Store) hasUnresolvedBlockers(ctx context.Context, t *ticket.Ticket, cfg *ticket.Config) bool {
+	blockers, _ := s.unresolvedBlockers(ctx, t, cfg)
+	return len(blockers) > 0
+}
+
+func (s *Store) unresolvedBlockers(ctx context.Context, t *ticket.Ticket, cfg *ticket.Config) ([]string, error) {
+	var unresolved []string
+	for _, blockerID := range t.BlockedBy {
+		blocker, err := s.GetTicket(ctx, blockerID)
+		if err != nil {
+			return nil, err
+		}
+		if blocker == nil || cfg.BlocksDependents(blocker.State) {
+			unresolved = append(unresolved, blockerID)
+		}
+	}
+	return unresolved, nil
+}
+
+func (s *Store) UnresolvedBlockers(ctx context.Context, t *ticket.Ticket) ([]string, error) {
+	return s.unresolvedBlockers(ctx, t, s.loadConfigOrDefault())
+}
+
 func (s *Store) matches(t *ticket.Ticket, f store.Filter) bool {
 	if !f.IncludeArchived && t.State == "archived" {
 		return false
@@ -236,8 +267,11 @@ func (s *Store) matches(t *ticket.Ticket, f store.Filter) bool {
 		return false
 	}
 
-	if f.OnlyUnblocked && t.IsBlocked() {
-		return false
+	if f.OnlyUnblocked && len(t.BlockedBy) > 0 {
+		cfg := s.loadConfigOrDefault()
+		if s.hasUnresolvedBlockers(context.Background(), t, cfg) {
+			return false
+		}
 	}
 
 	return true

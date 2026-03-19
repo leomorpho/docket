@@ -100,6 +100,39 @@ func TestSelectNextTicket(t *testing.T) {
 	}
 }
 
+func TestSelectNextTicket_HonorsConfigForReviewBlockers(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := local.New(tmpDir)
+	ctx := context.Background()
+
+	cfg := ticket.DefaultConfig()
+	backlog := cfg.States["backlog"]
+	backlog.Next = append(backlog.Next, "in-progress")
+	cfg.States["backlog"] = backlog
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	cfg.States["in-review"] = review
+
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Reviewed blocker", State: "in-review", Priority: 1})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "Dependent", State: "backlog", Priority: 1, BlockedBy: []string{"TKT-001"}})
+
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil || got.ID != "TKT-002" {
+		t.Fatalf("expected dependent ticket to become selectable, got %#v", got)
+	}
+}
+
 func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := local.New(tmpDir)

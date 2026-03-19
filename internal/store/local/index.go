@@ -136,6 +136,7 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 		acDone  int
 	}
 	rowsToInsert := make([]ticketRow, 0, len(entries))
+	ticketsByID := make(map[string]*ticket.Ticket, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".md" {
 			id := entry.Name()[:len(entry.Name())-3]
@@ -159,8 +160,10 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 				acTotal: acTotal,
 				acDone:  acDone,
 			})
+			ticketsByID[t.ID] = t
 		}
 	}
+	cfg := s.loadConfigOrDefault()
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -190,7 +193,15 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 	defer stmtCommit.Close()
 
 	for _, row := range rowsToInsert {
-		_, err = stmtTicket.ExecContext(ctx, row.t.ID, row.t.Seq, row.t.State, row.t.Priority, row.t.Parent, row.t.Title, row.t.CreatedBy, row.t.CreatedAt, row.t.UpdatedAt, row.t.IsBlocked(), row.acTotal, row.acDone)
+		isBlocked := false
+		for _, blockerID := range row.t.BlockedBy {
+			blocker, ok := ticketsByID[blockerID]
+			if !ok || cfg.BlocksDependents(blocker.State) {
+				isBlocked = true
+				break
+			}
+		}
+		_, err = stmtTicket.ExecContext(ctx, row.t.ID, row.t.Seq, row.t.State, row.t.Priority, row.t.Parent, row.t.Title, row.t.CreatedBy, row.t.CreatedAt, row.t.UpdatedAt, isBlocked, row.acTotal, row.acDone)
 		if err != nil {
 			return err
 		}
@@ -252,10 +263,6 @@ func (s *Store) queryTickets(ctx context.Context, f store.Filter) ([]*ticket.Tic
 		args = append(args, f.MaxPriority)
 	}
 
-	if f.OnlyUnblocked {
-		query += " AND is_blocked = 0"
-	}
-
 	if len(f.Labels) > 0 {
 		for _, l := range f.Labels {
 			query += " AND id IN (SELECT ticket_id FROM labels WHERE label = ?)"
@@ -282,6 +289,24 @@ func (s *Store) queryTickets(ctx context.Context, f store.Filter) ([]*ticket.Tic
 		t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		t.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 		results = append(results, t)
+	}
+
+	if f.OnlyUnblocked {
+		cfg := s.loadConfigOrDefault()
+		filtered := results[:0]
+		for _, t := range results {
+			full, err := s.GetTicket(ctx, t.ID)
+			if err != nil {
+				return nil, err
+			}
+			if full == nil {
+				continue
+			}
+			if !s.hasUnresolvedBlockers(ctx, full, cfg) {
+				filtered = append(filtered, t)
+			}
+		}
+		results = filtered
 	}
 
 	return results, nil

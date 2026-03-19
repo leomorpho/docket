@@ -173,6 +173,12 @@ func TestLoadConfigWorkflowV1Schema(t *testing.T) {
 	if got := cfg.ValidTransitions("queued"); len(got) != 1 || got[0] != "building" {
 		t.Fatalf("queued transitions = %#v", got)
 	}
+	if cfg.BlocksDependents("review") {
+		t.Fatal("review should not block dependents via helper")
+	}
+	if !cfg.BlocksDependents("queued") {
+		t.Fatal("queued should block dependents via helper")
+	}
 }
 
 func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {

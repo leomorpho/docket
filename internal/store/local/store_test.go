@@ -291,25 +291,55 @@ func TestStoreFilterUnblocked(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := New(tmpDir)
 	ctx := context.Background()
-	
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "T1", State: "todo"})
+
+	cfg := ticket.DefaultConfig()
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	cfg.States["in-review"] = review
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "T1", State: "in-review"})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "T2", State: "todo", BlockedBy: []string{"TKT-001"}})
 
 	res, _ := s.ListTickets(ctx, store.Filter{OnlyUnblocked: true})
-	if len(res) != 1 || res[0].ID != "TKT-001" {
-		t.Errorf("expected only TKT-001 (unblocked), got %v", res)
+	if len(res) != 2 {
+		t.Errorf("expected both tickets when in-review no longer blocks, got %v", res)
+	}
+}
+
+func TestMatchesOnlyUnblockedHonorsConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	cfg := ticket.DefaultConfig()
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	cfg.States["in-review"] = review
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "review", State: "in-review"}); err != nil {
+		t.Fatalf("create blocker: %v", err)
+	}
+
+	target := &ticket.Ticket{ID: "TKT-002", Title: "target", State: "todo", BlockedBy: []string{"TKT-001"}}
+	if got := s.matches(target, store.Filter{OnlyUnblocked: true}); !got {
+		t.Fatal("expected target to match unblocked filter when config marks in-review as non-blocking")
 	}
 }
 
 func TestGetTicketCorrupt(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := New(tmpDir)
-	
+
 	ticketDir := filepath.Join(tmpDir, ".docket", "tickets")
 	os.MkdirAll(ticketDir, 0755)
 	// Invalid frontmatter
 	os.WriteFile(filepath.Join(ticketDir, "TKT-001.md"), []byte("---\ninvalid\n---\n# Title"), 0644)
-	
+
 	_, err := s.GetTicket(context.Background(), "TKT-001")
 	if err == nil {
 		t.Error("expected error for corrupt ticket")

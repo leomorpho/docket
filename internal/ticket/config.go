@@ -42,13 +42,13 @@ type WorkflowStateConfig struct {
 }
 
 type WorkflowStateSemantics struct {
-	Roles             []string `json:"roles,omitempty"`
-	Open              bool     `json:"open"`
-	Terminal          bool     `json:"terminal,omitempty"`
-	Startable         bool     `json:"startable,omitempty"`
-	Reviewable        bool     `json:"reviewable,omitempty"`
-	BlocksDependents  bool     `json:"blocks_dependents,omitempty"`
-	Next              []string `json:"next"`
+	Roles            []string `json:"roles,omitempty"`
+	Open             bool     `json:"open"`
+	Terminal         bool     `json:"terminal,omitempty"`
+	Startable        bool     `json:"startable,omitempty"`
+	Reviewable       bool     `json:"reviewable,omitempty"`
+	BlocksDependents bool     `json:"blocks_dependents,omitempty"`
+	Next             []string `json:"next"`
 }
 
 type WorkflowStatePresentation struct {
@@ -192,6 +192,19 @@ func (c *Config) ValidTransitions(from string) []string {
 		return nil
 	}
 	return sc.Next
+}
+
+// BlocksDependents reports whether tickets in the given state should still
+// block downstream work. Unknown states are treated conservatively as blocking.
+func (c *Config) BlocksDependents(state State) bool {
+	if c == nil {
+		return true
+	}
+	sc, ok := c.States[string(state)]
+	if !ok {
+		return true
+	}
+	return sc.BlocksDependents
 }
 
 // ColumnOrder returns all StateConfigs sorted by their Column value.
@@ -525,15 +538,15 @@ func statesFromWorkflow(workflowCfg WorkflowConfig) map[string]StateConfig {
 	states := make(map[string]StateConfig, len(workflowCfg.States))
 	for name, state := range workflowCfg.States {
 		states[name] = StateConfig{
-			Label:             state.Presentation.Label,
-			Open:              state.Semantics.Open,
-			Column:            state.Presentation.Column,
-			Next:              append([]string(nil), state.Semantics.Next...),
-			Roles:             append([]string(nil), state.Semantics.Roles...),
-			Terminal:          state.Semantics.Terminal,
-			Startable:         state.Semantics.Startable,
-			Reviewable:        state.Semantics.Reviewable,
-			BlocksDependents:  state.Semantics.BlocksDependents,
+			Label:            state.Presentation.Label,
+			Open:             state.Semantics.Open,
+			Column:           state.Presentation.Column,
+			Next:             append([]string(nil), state.Semantics.Next...),
+			Roles:            append([]string(nil), state.Semantics.Roles...),
+			Terminal:         state.Semantics.Terminal,
+			Startable:        state.Semantics.Startable,
+			Reviewable:       state.Semantics.Reviewable,
+			BlocksDependents: state.Semantics.BlocksDependents,
 		}
 	}
 	return states

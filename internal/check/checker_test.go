@@ -62,7 +62,7 @@ func TestChecker_R001AndR008(t *testing.T) {
 	b := newFake(&ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), UpdatedAt: now.Add(-8 * 24 * time.Hour)})
 	b.validate["TKT-001"] = []store.ValidationError{{Field: "state", Message: "bad"}}
 
-	c := NewChecker(b)
+	c := NewChecker(b, ticket.DefaultConfig())
 	c.Now = func() time.Time { return now }
 	findings, err := c.Run(context.Background(), []*ticket.Ticket{b.tickets["TKT-001"]}, false)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestChecker_R006Fix(t *testing.T) {
 	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now.Add(-8 * 24 * time.Hour)}
 	b := newFake(blocker, target)
 
-	c := NewChecker(b)
+	c := NewChecker(b, ticket.DefaultConfig())
 	c.Now = func() time.Time { return now }
 	findings, err := c.Run(context.Background(), []*ticket.Ticket{target}, true)
 	if err != nil {
@@ -92,5 +92,27 @@ func TestChecker_R006Fix(t *testing.T) {
 	}
 	if len(findings) == 0 || findings[0].Rule != "R001" || !strings.Contains(findings[0].Message, "No activity") {
 		t.Fatalf("expected R001 finding after fix, got %+v", findings)
+	}
+}
+
+func TestChecker_R006FixHonorsConfigForReviewState(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := ticket.DefaultConfig()
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	cfg.States["in-review"] = review
+
+	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.State("in-review"), UpdatedAt: now}
+	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now}
+	b := newFake(blocker, target)
+
+	c := NewChecker(b, cfg)
+	if _, err := c.Run(context.Background(), []*ticket.Ticket{target}, true); err != nil {
+		t.Fatalf("run with config-aware fix failed: %v", err)
+	}
+
+	updated, _ := b.GetTicket(context.Background(), "TKT-001")
+	if len(updated.BlockedBy) != 0 {
+		t.Fatalf("expected in-review blocker removed when config allows it, got %v", updated.BlockedBy)
 	}
 }

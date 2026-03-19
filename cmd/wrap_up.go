@@ -99,7 +99,7 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 		if err != nil {
 			return wrapUpReport{}, err
 		}
-		if b == nil || (b.State != ticket.State("done") && b.State != ticket.State("archived")) {
+		if b == nil || cfg.BlocksDependents(b.State) {
 			unresolvedBlockers = append(unresolvedBlockers, blockerID)
 		}
 	}

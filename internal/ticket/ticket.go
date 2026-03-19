@@ -54,7 +54,9 @@ type Comment struct {
 	Body   string
 }
 
-// IsBlocked returns true if this ticket has unresolved blockers.
+// IsBlocked returns true if this ticket declares blocker references.
+// Config-aware resolution lives above the ticket model because it depends on
+// both workflow policy and the current state of related tickets.
 func (t *Ticket) IsBlocked() bool {
 	return len(t.BlockedBy) > 0
 }

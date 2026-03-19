@@ -24,9 +24,9 @@ type Finding struct {
 	AutoFix  bool     `json:"auto_fix"`
 }
 
-type Rule func(ctx context.Context, backend store.Backend, t *ticket.Ticket, now time.Time) []Finding
+type Rule func(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding
 
-func RuleR001(ctx context.Context, backend store.Backend, t *ticket.Ticket, now time.Time) []Finding {
+func RuleR001(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding {
 	if t.State != "in-progress" {
 		return nil
 	}
@@ -37,14 +37,14 @@ func RuleR001(ctx context.Context, backend store.Backend, t *ticket.Ticket, now 
 	return []Finding{{TicketID: t.ID, Rule: "R001", Severity: SeverityWarn, Message: fmt.Sprintf("No activity for %d days (state: %s)", days, t.State), AutoFix: false}}
 }
 
-func RuleR006(ctx context.Context, backend store.Backend, t *ticket.Ticket, now time.Time) []Finding {
+func RuleR006(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding {
 	var out []Finding
 	for _, blockerID := range t.BlockedBy {
 		blocker, err := backend.GetTicket(ctx, blockerID)
 		if err != nil || blocker == nil {
 			continue
 		}
-		if blocker.State == "done" || blocker.State == "archived" {
+		if !cfg.BlocksDependents(blocker.State) {
 			out = append(out, Finding{
 				TicketID: t.ID,
 				Rule:     "R006",
@@ -57,7 +57,7 @@ func RuleR006(ctx context.Context, backend store.Backend, t *ticket.Ticket, now 
 	return out
 }
 
-func RuleR008(ctx context.Context, backend store.Backend, t *ticket.Ticket, now time.Time) []Finding {
+func RuleR008(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding {
 	errs, err := backend.Validate(ctx, t.ID)
 	if err != nil {
 		return []Finding{{TicketID: t.ID, Rule: "R008", Severity: SeverityError, Message: err.Error(), AutoFix: false}}

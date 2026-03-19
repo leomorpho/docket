@@ -33,7 +33,12 @@ var checkCmd = &cobra.Command{
 			return err
 		}
 
-		checker := ck.NewChecker(s)
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			cfg = ticket.DefaultConfig()
+		}
+
+		checker := ck.NewChecker(s, cfg)
 		findings, err := checker.Run(ctx, tickets, checkFix)
 		if err != nil {
 			return err

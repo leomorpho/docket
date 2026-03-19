@@ -104,11 +104,14 @@ func printContext(cmd *cobra.Command, rows []listRow) {
 		return
 	}
 
+	s := local.New(repo)
+	ctx := context.Background()
 	for _, row := range rows {
 		t := row.t
 		blockedStr := ""
-		if t.IsBlocked() {
-			blockedStr = " | BLOCKED by " + strings.Join(t.BlockedBy, ",")
+		unresolved, err := s.UnresolvedBlockers(ctx, t)
+		if err == nil && len(unresolved) > 0 {
+			blockedStr = " | BLOCKED by " + strings.Join(unresolved, ",")
 		} else {
 			if len(t.Labels) > 0 {
 				blockedStr = " | labels:" + strings.Join(t.Labels, ",")

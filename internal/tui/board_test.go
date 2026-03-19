@@ -191,6 +191,27 @@ func TestRebuildColumnsBlockedAndSorted(t *testing.T) {
 	}
 }
 
+func TestRebuildColumnsHonorsConfigForReviewBlockers(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := ticket.DefaultConfig()
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	cfg.States["in-review"] = review
+
+	m := newBoardModelWithDefaultCfg(nil, "human:test")
+	m.cfg = cfg
+	m.allTickets = []*ticket.Ticket{
+		{ID: "TKT-001", State: ticket.State("in-review"), Priority: 1, Title: "Blocker", CreatedAt: now},
+		{ID: "TKT-002", State: ticket.State("todo"), Priority: 2, Title: "Dependent", BlockedBy: []string{"TKT-001"}, CreatedAt: now.Add(time.Minute)},
+	}
+
+	m.rebuildColumns("")
+
+	if len(m.columns[m.blockedColIdx].tickets) != 0 {
+		t.Fatalf("expected no blocked tickets when in-review stops blocking, got %d", len(m.columns[m.blockedColIdx].tickets))
+	}
+}
+
 func TestUpdateStateCmdPersistsUsingFullTicket(t *testing.T) {
 	cfg := ticket.DefaultConfig()
 	now := time.Now().UTC().Add(-time.Hour)

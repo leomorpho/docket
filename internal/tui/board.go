@@ -415,6 +415,11 @@ func (m *BoardModel) rebuildColumns(selectedID string) {
 		m.columns[i].tickets = nil
 	}
 
+	ticketsByID := make(map[string]*ticket.Ticket, len(m.allTickets))
+	for _, t := range m.allTickets {
+		ticketsByID[t.ID] = t
+	}
+
 	for _, t := range m.allTickets {
 		// Assign to the matching state column.
 		if colIdx, ok := m.stateToColIdx[string(t.State)]; ok {
@@ -422,8 +427,14 @@ func (m *BoardModel) rebuildColumns(selectedID string) {
 		}
 
 		// Always add blocked tickets to the virtual blocked column.
-		if len(t.BlockedBy) > 0 && m.blockedColIdx >= 0 {
-			m.columns[m.blockedColIdx].tickets = append(m.columns[m.blockedColIdx].tickets, t)
+		if m.blockedColIdx >= 0 {
+			for _, blockerID := range t.BlockedBy {
+				blocker, ok := ticketsByID[blockerID]
+				if !ok || m.cfg.BlocksDependents(blocker.State) {
+					m.columns[m.blockedColIdx].tickets = append(m.columns[m.blockedColIdx].tickets, t)
+					break
+				}
+			}
 		}
 	}
 

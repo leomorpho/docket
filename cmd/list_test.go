@@ -122,3 +122,44 @@ func TestListCmd_DiscoveryHintShownForHumanButNotJSON(t *testing.T) {
 		t.Fatalf("expected no discovery hint in list json output, got:\n%s", out.String())
 	}
 }
+
+func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "context"
+
+	cfg := ticket.DefaultConfig()
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	cfg.States["in-review"] = review
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Reviewed blocker", State: ticket.State("in-review"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create blocker failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-002", Seq: 2, Title: "Dependent", State: ticket.State("todo"), Priority: 2, BlockedBy: []string{"TKT-001"},
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create dependent failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list", "--format", "context"})
+	listState = "open"
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list context failed: %v", err)
+	}
+	if strings.Contains(out.String(), "BLOCKED by TKT-001") {
+		t.Fatalf("expected in-review blocker to be treated as resolved by config, got:\n%s", out.String())
+	}
+}
