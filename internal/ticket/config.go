@@ -242,16 +242,21 @@ func (c *Config) StateHasRole(stateName, role string) bool {
 
 // StartTransitionTargets returns the configured active-work targets a startable state can enter.
 func (c *Config) StartTransitionTargets(from string) []string {
+	return c.TransitionTargetsWithRole(from, "active")
+}
+
+// TransitionTargetsWithRole returns configured next states from `from` that carry the given role.
+func (c *Config) TransitionTargetsWithRole(from, role string) []string {
 	if c == nil {
 		return nil
 	}
 	state, ok := c.States[from]
-	if !ok || !state.Startable {
+	if !ok {
 		return nil
 	}
 	targets := make([]string, 0, len(state.Next))
 	for _, next := range state.Next {
-		if c.StateHasRole(next, "active") {
+		if c.StateHasRole(next, role) {
 			targets = append(targets, next)
 		}
 	}

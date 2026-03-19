@@ -37,7 +37,10 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 		return nil, "", fmt.Errorf("ticket %s not found", ticketID)
 	}
 
-	newState := ticket.State("in-progress")
+	newState, err := resolveStartState(t, cfg)
+	if err != nil {
+		return nil, "", err
+	}
 	startCmd := UpdateStateCmd{
 		To:           newState,
 		SetStartedAt: true,
@@ -145,9 +148,33 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 }
 
 func buildFinishStateCmd(t *ticket.Ticket, cfg *ticket.Config) (UpdateStateCmd, error) {
-	reviewCmd := UpdateStateCmd{To: "in-review"}
-	if err := reviewCmd.Validate(t, cfg); err == nil {
-		return reviewCmd, nil
+	if t == nil {
+		return UpdateStateCmd{}, fmt.Errorf("ticket is required")
 	}
-	return UpdateStateCmd{}, fmt.Errorf("cannot transition %s from %s to in-review", t.ID, t.State)
+	if cfg == nil {
+		return UpdateStateCmd{}, fmt.Errorf("config is required")
+	}
+	for _, next := range cfg.TransitionTargetsWithRole(string(t.State), "review") {
+		reviewCmd := UpdateStateCmd{To: ticket.State(next)}
+		if err := reviewCmd.Validate(t, cfg); err == nil {
+			return reviewCmd, nil
+		}
+	}
+	return UpdateStateCmd{}, fmt.Errorf("cannot transition %s from %s to a configured review state", t.ID, t.State)
+}
+
+func resolveStartState(t *ticket.Ticket, cfg *ticket.Config) (ticket.State, error) {
+	if t == nil {
+		return "", fmt.Errorf("ticket is required")
+	}
+	if cfg == nil {
+		return "", fmt.Errorf("config is required")
+	}
+	for _, next := range cfg.StartTransitionTargets(string(t.State)) {
+		startCmd := UpdateStateCmd{To: ticket.State(next)}
+		if err := startCmd.Validate(t, cfg); err == nil {
+			return ticket.State(next), nil
+		}
+	}
+	return "", fmt.Errorf("cannot transition %s from %s to a configured active state", t.ID, t.State)
 }

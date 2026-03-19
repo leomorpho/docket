@@ -155,6 +155,61 @@ func TestWorkflowStartTask(t *testing.T) {
 	}
 }
 
+func TestWorkflowStartTask_UsesConfiguredActiveState(t *testing.T) {
+	cfg := &ticket.Config{
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "queued"}}
+	v := &MockVCS{currentCheckout: "/tmp/repo", isPrimary: true}
+	c := &MockClaim{claims: make(map[string]string)}
+	mgr := NewManager(s, v, c)
+
+	res, _, err := mgr.StartTask(context.Background(), "TKT-001", "agent:1", cfg)
+	if err != nil {
+		t.Fatalf("StartTask failed: %v", err)
+	}
+	if res.State != "building" {
+		t.Fatalf("expected configured active state building, got %s", res.State)
+	}
+}
+
 func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	cfg := ticket.DefaultConfig()
 
@@ -248,6 +303,64 @@ func TestWorkflowFinishTask(t *testing.T) {
 	}
 	if got, want := strings.Join(v.ops, ","), "commit,merge,remove,delete"; got != want {
 		t.Fatalf("expected VCS lifecycle %s, got %s", want, got)
+	}
+}
+
+func TestWorkflowFinishTask_UsesConfiguredReviewState(t *testing.T) {
+	cfg := &ticket.Config{
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   3,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "building"}}
+	v := &MockVCS{}
+	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
+	mgr := NewManager(s, v, c)
+
+	res, err := mgr.FinishTask(context.Background(), "TKT-001", cfg)
+	if err != nil {
+		t.Fatalf("FinishTask failed: %v", err)
+	}
+	if res.State != "qa" {
+		t.Fatalf("expected configured review state qa, got %s", res.State)
+	}
+	if !res.CompletedAt.IsZero() {
+		t.Fatal("expected review transition to leave CompletedAt unset")
 	}
 }
 
