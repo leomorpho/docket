@@ -12,6 +12,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/capabilities"
 	"github.com/leomorpho/docket/internal/skills"
+	"github.com/leomorpho/docket/internal/skillusage"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -420,9 +421,22 @@ func TestServeMCP_CapabilitiesDiscoveryIncludesSkillMetadata(t *testing.T) {
 	if quickstart["direct_edit_avoidance"] == nil {
 		t.Fatalf("expected quickstart direct_edit_avoidance guidance, got %#v", quickstart)
 	}
+	if quickstart["skills_reminder"] == nil {
+		t.Fatalf("expected quickstart skills_reminder guidance, got %#v", quickstart)
+	}
 	capDiscovery := quickstart["capability_discovery"].([]interface{})
 	if len(capDiscovery) == 0 {
 		t.Fatalf("expected quickstart capability discovery commands, got %#v", quickstart)
+	}
+	foundSkillList := false
+	for _, raw := range capDiscovery {
+		if strings.Contains(raw.(string), "docket skill list --format json") {
+			foundSkillList = true
+			break
+		}
+	}
+	if !foundSkillList {
+		t.Fatalf("expected quickstart capability discovery to include skill list, got %#v", capDiscovery)
 	}
 	quickPath := result["llm_quick_path"].(map[string]interface{})
 	if quickPath["ticket_apply"] == nil || quickPath["automation_hint"] == nil {
@@ -498,6 +512,16 @@ func TestServeMCP_SkillDiscoveryAndInvoke(t *testing.T) {
 	cmd := r3["result"].(map[string]interface{})["command"].(string)
 	if !strings.Contains(cmd, "docket learn replay TKT-964") {
 		t.Fatalf("expected resolved skill command, got %q", cmd)
+	}
+	events, err := skillusage.Load(repo)
+	if err != nil {
+		t.Fatalf("load skill usage failed: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one recorded MCP skill usage event, got %#v", events)
+	}
+	if events[0].Source != skillusage.SourceMCP || events[0].SkillID != "learning-replay" {
+		t.Fatalf("unexpected skill usage event: %#v", events[0])
 	}
 	if r4["ok"] != false {
 		t.Fatalf("expected missing ticket_id invoke to fail, got %v", r4)

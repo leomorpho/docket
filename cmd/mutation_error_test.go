@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +27,14 @@ func TestBuildMutationErrorEnvelopeValidationTransitionAndStorage(t *testing.T) 
 	}
 	if transition.Retryable {
 		t.Fatalf("transition errors should be non-retryable, got %+v", transition)
+	}
+	if !strings.Contains(transition.SuggestedFix, "`in-review`") {
+		t.Fatalf("expected done transition fix to point agents at in-review, got %+v", transition)
+	}
+
+	humanOnly := buildMutationErrorEnvelope(errors.New("transition to done is human-only. If you are an LLM agent, stop at `in-review` instead; that is enough to unblock yourself and hand off for human verification"))
+	if humanOnly.ErrorCode != "transition_error" || humanOnly.Field != "state" {
+		t.Fatalf("expected human-only transition envelope with state field, got %+v", humanOnly)
 	}
 
 	storage := buildMutationErrorEnvelope(errors.New("database is locked (5) (SQLITE_BUSY)"))

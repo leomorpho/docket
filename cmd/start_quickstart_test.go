@@ -9,7 +9,8 @@ import (
 )
 
 func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
-	quickstart := buildStartAgentQuickstart()
+	h := newFakeRepoHarness(t)
+	quickstart := buildStartAgentQuickstart(h.repo)
 
 	if !strings.Contains(strings.ToLower(quickstart.DirectEditAvoidance), "never edit .docket/tickets") {
 		t.Fatalf("direct edit guidance missing ticket file guardrail: %q", quickstart.DirectEditAvoidance)
@@ -26,12 +27,30 @@ func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
 	if !strings.Contains(strings.Join(quickstart.CapabilityDiscovery, "\n"), "docket capabilities") {
 		t.Fatalf("capability discovery missing capabilities entrypoint: %#v", quickstart.CapabilityDiscovery)
 	}
+	if !strings.Contains(quickstart.SkillsReminder, "docket skill list --format json") {
+		t.Fatalf("skills reminder missing skill list guidance: %#v", quickstart)
+	}
+	if !strings.Contains(quickstart.SkillsReminder, "docket skill audit") {
+		t.Fatalf("skills reminder missing audit guidance: %#v", quickstart)
+	}
+	if len(quickstart.Skills) == 0 {
+		t.Fatalf("expected built-in skills in quickstart, got %#v", quickstart)
+	}
+	if quickstart.Skills[0].ID == "" || quickstart.Skills[0].Title == "" {
+		t.Fatalf("expected skill ids and titles in quickstart, got %#v", quickstart.Skills)
+	}
 
 	rendered := renderStartAgentQuickstartHuman(quickstart)
 	if !strings.Contains(rendered, "Agent quickstart:") {
 		t.Fatalf("human render missing quickstart heading: %q", rendered)
 	}
-	if len(rendered) > 700 {
+	if !strings.Contains(rendered, "built-ins by intent:") {
+		t.Fatalf("human render missing grouped skills summary: %q", rendered)
+	}
+	if !strings.Contains(rendered, "planning=ticket-discovery") {
+		t.Fatalf("human render missing planning skill grouping: %q", rendered)
+	}
+	if len(rendered) > 1200 {
 		t.Fatalf("quickstart should stay compact (<700 chars), got %d chars\n%s", len(rendered), rendered)
 	}
 }
@@ -53,6 +72,15 @@ func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(humanOut, "docket capabilities --format json") {
 		t.Fatalf("expected capability discovery command in human output, got:\n%s", humanOut)
+	}
+	if !strings.Contains(humanOut, "docket skill list --format json") {
+		t.Fatalf("expected skill list reminder in human output, got:\n%s", humanOut)
+	}
+	if !strings.Contains(humanOut, "docket skill invoke <skill-id>") {
+		t.Fatalf("expected skill invoke reminder in human output, got:\n%s", humanOut)
+	}
+	if !strings.Contains(humanOut, "quality=learning-replay") {
+		t.Fatalf("expected grouped concrete skill inventory in human output, got:\n%s", humanOut)
 	}
 
 	jsonOut, err := h.run("start", "--format", "json")
@@ -78,6 +106,12 @@ func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {
 
 	if !strings.Contains(strings.ToLower(quickstart.DirectEditAvoidance), "never edit .docket/tickets") {
 		t.Fatalf("json quickstart missing direct-edit guidance: %#v", quickstart)
+	}
+	if !strings.Contains(quickstart.SkillsReminder, "docket skill list --format json") {
+		t.Fatalf("json quickstart missing skills reminder: %#v", quickstart)
+	}
+	if len(quickstart.Skills) == 0 {
+		t.Fatalf("json quickstart missing concrete skills inventory: %#v", quickstart)
 	}
 	if len(strings.Join(quickstart.CoreWorkflow, "\n"))+len(strings.Join(quickstart.CapabilityDiscovery, "\n")) > 900 {
 		t.Fatalf("json quickstart should remain compact, got %#v", quickstart)

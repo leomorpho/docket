@@ -130,6 +130,7 @@ func commandExamples(name string) []string {
 		"skill list":       {"docket skill list", "docket skill list --format json"},
 		"skill show":       {"docket skill show ticket-discovery"},
 		"skill invoke":     {"docket skill invoke ticket-discovery", "docket skill invoke learning-replay --ticket TKT-001"},
+		"skill audit":      {"docket skill audit", "docket skill audit learning-replay --bucket day --format json"},
 		"hook list":        {"docket hook list", "docket hook list --format json"},
 		"hook show":        {"docket hook show ticket.review"},
 		"hook status":      {"docket hook status", "docket hook status --format json"},
@@ -150,20 +151,21 @@ func commandExamples(name string) []string {
 
 func commandOutputShape(name string) map[string]any {
 	shapes := map[string]map[string]any{
-		"create":       {"human": "Created TKT-001: <title>", "json": map[string]string{"id": "string", "seq": "int", "title": "string", "state": "string"}},
-		"list":         {"human": "table/lines", "json": "array of tickets"},
-		"show":         {"human": "expanded ticket", "json": "ticket object", "context": "compact ticket context"},
-		"skill list":   {"human": "skill inventory with metadata", "json": map[string]string{"total": "int", "metadata_checksum": "string", "skills": "array"}},
-		"skill show":   {"human": "single skill metadata", "json": map[string]string{"skill": "object", "metadata_checksum": "string"}},
-		"skill invoke": {"human": "resolved invocation command", "json": map[string]string{"skill_id": "string", "ticket_id": "string", "command": "string", "intent": "string"}},
-		"hook list":    {"human": "hook events and modes", "json": map[string]string{"total": "int", "events": "array"}},
-		"hook show":    {"human": "single hook event detail", "json": map[string]string{"event": "object", "namespace": "string", "invocation": "string", "execution": "string"}},
-		"hook status":  {"human": "hook readiness and metadata", "json": map[string]string{"ready": "bool", "readiness": "string", "events": "array"}},
+		"create":           {"human": "Created TKT-001: <title>", "json": map[string]string{"id": "string", "seq": "int", "title": "string", "state": "string"}},
+		"list":             {"human": "table/lines", "json": "array of tickets"},
+		"show":             {"human": "expanded ticket", "json": "ticket object", "context": "compact ticket context"},
+		"skill list":       {"human": "skill inventory with metadata", "json": map[string]string{"total": "int", "metadata_checksum": "string", "skills": "array"}},
+		"skill show":       {"human": "single skill metadata", "json": map[string]string{"skill": "object", "metadata_checksum": "string"}},
+		"skill invoke":     {"human": "resolved invocation command", "json": map[string]string{"skill_id": "string", "ticket_id": "string", "command": "string", "intent": "string"}},
+		"skill audit":      {"human": "skill usage totals and timeline", "json": map[string]string{"total_invocations": "int", "bucket_size": "string", "skills": "array", "timeline": "array"}},
+		"hook list":        {"human": "hook events and modes", "json": map[string]string{"total": "int", "events": "array"}},
+		"hook show":        {"human": "single hook event detail", "json": map[string]string{"event": "object", "namespace": "string", "invocation": "string", "execution": "string"}},
+		"hook status":      {"human": "hook readiness and metadata", "json": map[string]string{"ready": "bool", "readiness": "string", "events": "array"}},
 		"context-optimize": {"human": "compact ticket brief from related work, learnings, and recent activity", "json": map[string]string{"ticket_id": "string", "brief": "string", "related_work": "array", "learning_rules": "array", "recent_activity": "object", "next_steps": "array"}},
-		"smart-commit": {"human": "review-ready commit guidance with ticket trailer", "json": map[string]string{"ticket_id": "string", "ready": "bool", "commit_message": "string", "git_command": "string"}},
-		"check":        {"human": "findings summary", "json": map[string]string{"checked": "int", "findings": "array", "summary": "object"}},
-		"wrap-up":      {"human": "ticket readiness summary with next steps", "json": map[string]string{"ticket_id": "string", "ready": "bool", "checks": "array", "next_steps": "array"}},
-		"help-json":    {"json": "manifest object"},
+		"smart-commit":     {"human": "review-ready commit guidance with ticket trailer", "json": map[string]string{"ticket_id": "string", "ready": "bool", "commit_message": "string", "git_command": "string"}},
+		"check":            {"human": "findings summary", "json": map[string]string{"checked": "int", "findings": "array", "summary": "object"}},
+		"wrap-up":          {"human": "ticket readiness summary with next steps", "json": map[string]string{"ticket_id": "string", "ready": "bool", "checks": "array", "next_steps": "array"}},
+		"help-json":        {"json": "manifest object"},
 	}
 	if v, ok := shapes[name]; ok {
 		return v

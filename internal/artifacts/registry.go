@@ -56,6 +56,7 @@ const (
 	RepoInstallManifest     Key = "repo.install.manifest"
 	RepoLifecycleEvents     Key = "repo.runtime.lifecycle_events"
 	RepoLearnRules          Key = "repo.runtime.learn_rules"
+	RepoSkillUsageEvents    Key = "repo.runtime.skill_usage_events"
 	RepoLocks               Key = "repo.locks"
 	RepoManifest            Key = "repo.manifest"
 	RepoProofsDir           Key = "repo.proofs"
@@ -97,6 +98,7 @@ var registry = map[Key]Entry{
 	RepoInstallManifest:     {Key: RepoInstallManifest, Category: CategoryHooks, Root: RootRepo, Kind: KindFile, RelPath: ".docket/install.json", Policy: PolicyTracked, Migration: MigrationRegenerate},
 	RepoLifecycleEvents:     {Key: RepoLifecycleEvents, Category: CategoryRuntime, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/lifecycle-events.jsonl", CanonicalRelPath: ".docket/local/runtime/lifecycle-events.jsonl", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
 	RepoLearnRules:          {Key: RepoLearnRules, Category: CategoryLearning, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/learn-rules.json", CanonicalRelPath: ".docket/local/runtime/learn-rules.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
+	RepoSkillUsageEvents:    {Key: RepoSkillUsageEvents, Category: CategoryRuntime, Root: RootRepo, Kind: KindFile, RelPath: ".docket/runtime/skill-usage.jsonl", CanonicalRelPath: ".docket/local/runtime/skill-usage.jsonl", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
 	RepoLocks:               {Key: RepoLocks, Category: CategoryRelations, Root: RootRepo, Kind: KindFile, RelPath: ".docket/locks.json", CanonicalRelPath: ".docket/local/locks.json", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/locks.json"},
 	RepoManifest:            {Key: RepoManifest, Category: CategoryTickets, Root: RootRepo, Kind: KindFile, RelPath: ".docket/manifest.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoProofsDir:           {Key: RepoProofsDir, Category: CategoryProofs, Root: RootRepo, Kind: KindDir, RelPath: ".docket/proofs", Policy: PolicyTracked, Migration: MigrationStable},

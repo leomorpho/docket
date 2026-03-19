@@ -7,6 +7,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/capabilities"
 	"github.com/leomorpho/docket/internal/skills"
+	"github.com/leomorpho/docket/internal/skillusage"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -38,6 +39,7 @@ type skillInvokePayload struct {
 
 var (
 	skillInvokeTicket string
+	skillAuditBucket  string
 )
 
 var skillCmd = &cobra.Command{
@@ -148,6 +150,16 @@ var skillInvokeCmd = &cobra.Command{
 				return fmt.Errorf("ticket %s not found", resolvedTicket)
 			}
 		}
+		if err := skillusage.Append(repo, skillusage.Event{
+			SkillID:          entry.ID,
+			Source:           skillusage.SourceCLI,
+			TicketID:         resolvedTicket,
+			Intent:           entry.Intent,
+			Command:          resolved,
+			MetadataChecksum: payload.MetadataChecksum,
+		}); err != nil {
+			return err
+		}
 
 		out := skillInvokePayload{
 			SkillID:  entry.ID,
@@ -167,6 +179,32 @@ var skillInvokeCmd = &cobra.Command{
 		if out.TicketID != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "Ticket: %s\n", out.TicketID)
 		}
+		return nil
+	},
+}
+
+var skillAuditCmd = &cobra.Command{
+	Use:   "audit [skill-id]",
+	Short: "Show skill usage over time",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		events, err := skillusage.Load(repo)
+		if err != nil {
+			return err
+		}
+		filter := ""
+		if len(args) == 1 {
+			filter = args[0]
+		}
+		audit, err := skillusage.BuildAudit(events, filter, skillusage.BucketSize(strings.ToLower(strings.TrimSpace(skillAuditBucket))))
+		if err != nil {
+			return err
+		}
+		if format == "json" {
+			printJSON(cmd, audit)
+			return nil
+		}
+		renderSkillAuditHuman(cmd, audit)
 		return nil
 	},
 }
@@ -223,10 +261,56 @@ func resolveSkillCommand(template, ticketID string) (string, error) {
 	return command, nil
 }
 
+func renderSkillAuditHuman(cmd *cobra.Command, audit skillusage.Audit) {
+	out := cmd.OutOrStdout()
+	if audit.SkillFilter != "" {
+		fmt.Fprintf(out, "Skill usage for %s\n", audit.SkillFilter)
+	} else {
+		fmt.Fprintln(out, "Skill usage")
+	}
+	if audit.TotalInvocations == 0 {
+		fmt.Fprintln(out, "No skill usage recorded.")
+		return
+	}
+	fmt.Fprintf(out, "Total invocations: %d\n", audit.TotalInvocations)
+	fmt.Fprintf(out, "Bucket size: %s\n", audit.BucketSize)
+	if audit.From != "" && audit.To != "" {
+		fmt.Fprintf(out, "Window: %s to %s\n", audit.From, audit.To)
+	}
+	if len(audit.Skills) > 0 {
+		fmt.Fprintln(out, "By skill:")
+		for _, entry := range audit.Skills {
+			fmt.Fprintf(out, "- %s: %d\n", entry.ID, entry.Count)
+		}
+	}
+	if len(audit.Timeline) > 0 {
+		fmt.Fprintln(out, "Timeline:")
+		for _, bucket := range audit.Timeline {
+			parts := make([]string, 0, len(bucket.Skills))
+			for _, entry := range audit.Skills {
+				if count := bucket.Skills[entry.ID]; count > 0 {
+					parts = append(parts, fmt.Sprintf("%s=%d", entry.ID, count))
+				}
+			}
+			label := bucket.Start
+			if audit.BucketSize == skillusage.BucketWeek && bucket.End != "" && bucket.End != bucket.Start {
+				label = bucket.Start + " to " + bucket.End
+			}
+			if len(parts) == 0 {
+				fmt.Fprintf(out, "- %s: total=%d\n", label, bucket.Total)
+				continue
+			}
+			fmt.Fprintf(out, "- %s: total=%d (%s)\n", label, bucket.Total, strings.Join(parts, ", "))
+		}
+	}
+}
+
 func init() {
 	skillInvokeCmd.Flags().StringVar(&skillInvokeTicket, "ticket", "", "ticket ID used to resolve {ticket_id} placeholders")
+	skillAuditCmd.Flags().StringVar(&skillAuditBucket, "bucket", "auto", "bucket size for audit output (auto, day, week)")
 	skillCmd.AddCommand(skillListCmd)
 	skillCmd.AddCommand(skillShowCmd)
 	skillCmd.AddCommand(skillInvokeCmd)
+	skillCmd.AddCommand(skillAuditCmd)
 	rootCmd.AddCommand(skillCmd)
 }

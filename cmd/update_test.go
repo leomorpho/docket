@@ -62,6 +62,8 @@ func TestUpdateCmd(t *testing.T) {
 	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "done"})
 	if err := rootCmd.Execute(); err == nil {
 		t.Error("expected error for invalid transition todo -> done, got nil")
+	} else if !strings.Contains(err.Error(), "--ticket is required") {
+		t.Fatalf("expected human done transition to require privileged surface, got: %v", err)
 	}
 
 	// 3. Labels and Blockers
@@ -355,6 +357,8 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	rootCmd.SetArgs([]string{"update", "TKT-186", "--state", "done"})
 	if err := rootCmd.Execute(); err == nil {
 		t.Fatalf("expected privileged rejection for done transition without secure surface")
+	} else if !strings.Contains(err.Error(), "--ticket is required") {
+		t.Fatalf("expected secure-surface guidance for human done transition, got: %v", err)
 	}
 
 	rootCmd.SetArgs([]string{"secure", "unlock", "--password", "pw-1", "--ttl", "5m"})
@@ -381,6 +385,46 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	session := security.NewSessionManager(tmpHome)
 	if err := session.RequireActive(tmpDir); err != nil {
 		t.Fatalf("expected secure session to remain active, got: %v", err)
+	}
+}
+
+func TestUpdateCmd_AgentDoneTransitionRedirectsToInReview(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	t.Setenv("DOCKET_AGENT_ID", "codex-test")
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-333",
+		Seq:         333,
+		Title:       "Agent closure attempt",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
+		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-333", "--state", "done", "--ticket", "TKT-333", "--yes"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatalf("expected agent done transition to be redirected")
+	} else if !strings.Contains(err.Error(), "human-only") || !strings.Contains(err.Error(), "in-review") {
+		t.Fatalf("expected agent done transition guidance to point at in-review, got: %v", err)
 	}
 }
 

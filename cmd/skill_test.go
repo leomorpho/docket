@@ -5,9 +5,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leomorpho/docket/internal/capabilities"
 	"github.com/leomorpho/docket/internal/skills"
+	"github.com/leomorpho/docket/internal/skillusage"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
@@ -113,5 +115,60 @@ func TestSkillInvokeResolvesCommandsAndValidatesInputs(t *testing.T) {
 	}
 	if !strings.Contains(unknownOut, "skill not-a-skill not found") {
 		t.Fatalf("expected unknown skill error, got:\n%s", unknownOut)
+	}
+}
+
+func TestSkillAuditReportsRecordedUsage(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	h.seedTicket("TKT-301", 301, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+
+	originalNow := skillusage.Now
+	defer func() { skillusage.Now = originalNow }()
+	stamps := []string{
+		"2026-03-01T10:00:00Z",
+		"2026-03-02T11:00:00Z",
+	}
+	idx := 0
+	skillusage.Now = func() time.Time {
+		ts := stamps[idx]
+		if idx < len(stamps)-1 {
+			idx++
+		}
+		parsed, _ := time.Parse(time.RFC3339, ts)
+		return parsed
+	}
+
+	if _, err := h.run("skill", "invoke", "learning-replay", "--ticket", "TKT-301"); err != nil {
+		t.Fatalf("first invoke failed: %v", err)
+	}
+	if _, err := h.run("skill", "invoke", "learning-replay", "--ticket", "TKT-301"); err != nil {
+		t.Fatalf("second invoke failed: %v", err)
+	}
+
+	out, err := h.run("skill", "audit", "--format", "json")
+	if err != nil {
+		t.Fatalf("skill audit failed: %v\n%s", err, out)
+	}
+	var audit map[string]any
+	if err := json.Unmarshal([]byte(out), &audit); err != nil {
+		t.Fatalf("unmarshal skill audit json failed: %v\n%s", err, out)
+	}
+	if audit["total_invocations"] != float64(2) {
+		t.Fatalf("expected 2 invocations, got %#v", audit["total_invocations"])
+	}
+	if audit["bucket_size"] != "day" {
+		t.Fatalf("expected day bucket, got %#v", audit["bucket_size"])
+	}
+	skillsList := audit["skills"].([]any)
+	if len(skillsList) != 1 {
+		t.Fatalf("expected 1 skill entry, got %#v", skillsList)
+	}
+	skillEntry := skillsList[0].(map[string]any)
+	if skillEntry["id"] != "learning-replay" || skillEntry["count"] != float64(2) {
+		t.Fatalf("unexpected skill entry: %#v", skillEntry)
+	}
+	timeline := audit["timeline"].([]any)
+	if len(timeline) != 2 {
+		t.Fatalf("expected 2 timeline rows, got %#v", timeline)
 	}
 }

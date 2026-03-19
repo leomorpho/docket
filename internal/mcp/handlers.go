@@ -12,6 +12,7 @@ import (
 	"github.com/leomorpho/docket/internal/adapters"
 	"github.com/leomorpho/docket/internal/capabilities"
 	"github.com/leomorpho/docket/internal/skills"
+	"github.com/leomorpho/docket/internal/skillusage"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -423,6 +424,15 @@ func handleSkillInvoke(ctx context.Context, repoRoot string, s store.Backend, ar
 				return nil, fmt.Errorf("ticket %s not found", ticketID)
 			}
 		}
+		if err := skillusage.Append(repoRoot, skillusage.Event{
+			SkillID:  item.ID,
+			Source:   skillusage.SourceMCP,
+			TicketID: ticketID,
+			Intent:   item.Intent,
+			Command:  command,
+		}); err != nil {
+			return nil, err
+		}
 		return map[string]interface{}{
 			"skill_id":  item.ID,
 			"ticket_id": ticketID,
@@ -648,6 +658,7 @@ func fileContains(path, needle string) bool {
 func buildAgentQuickstartView() map[string]any {
 	return map[string]any{
 		"direct_edit_avoidance": "Never edit .docket/tickets/*.md directly; use `docket` commands so ticket signatures and metadata remain valid.",
+		"skills_reminder":       "Docket has built-in skills. Check `docket skill list --format json`, use `docket skill.invoke` or `docket skill invoke <skill-id>` when a skill matches the task, and confirm usage with `docket skill audit`.",
 		"core_workflow": []string{
 			"docket list --state open --format context",
 			"docket show TKT-NNN --format context",
@@ -655,6 +666,7 @@ func buildAgentQuickstartView() map[string]any {
 			"docket ac check TKT-NNN",
 		},
 		"capability_discovery": []string{
+			"docket skill list --format json",
 			"docket capabilities --format json",
 			"docket doctor --format json",
 			"docket help-json",

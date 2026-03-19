@@ -406,4 +406,10 @@ func TestStartCmd_EmptyWorkableSetShowsStartableStates(t *testing.T) {
 	if !strings.Contains(b.String(), "Startable states in current config: none configured.") {
 		t.Fatalf("expected startable-state summary, got:\n%s", b.String())
 	}
+	if !strings.Contains(b.String(), "=== Docket Intro ===") {
+		t.Fatalf("expected intro block on empty workable-set path, got:\n%s", b.String())
+	}
+	if !strings.Contains(b.String(), "docket skill list --format json") {
+		t.Fatalf("expected skill reminder in empty workable-set intro, got:\n%s", b.String())
+	}
 }

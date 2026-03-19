@@ -55,11 +55,24 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			return err
 		}
 		if t == nil {
-			fmt.Fprintf(
-				cmd.OutOrStdout(),
-				"No workable tickets found. Startable states in current config: %s.\n",
-				startableStatesSummary(cfg),
-			)
+			capabilityDigest := buildStartCapabilityDigest(repo)
+			quickPath := buildLLMQuickPath()
+			agentQuickstart := buildStartAgentQuickstart(repo)
+			if format == "json" {
+				printJSON(cmd, map[string]interface{}{
+					"ticket":               nil,
+					"no_workable_ticket":   true,
+					"message":              fmt.Sprintf("No workable tickets found. Startable states in current config: %s.", startableStatesSummary(cfg)),
+					"runtime_policy_mode":  runtimePolicyMode,
+					"runtime_policy_note":  runtimePolicyMessage,
+					"active_workflow_hash": activeWorkflowHash,
+					"capability_digest":    capabilityDigest,
+					"llm_quick_path":       quickPath,
+					"agent_quickstart":     agentQuickstart,
+				})
+				return nil
+			}
+			renderStartNoTicketIntro(cmd, cfg, runtimePolicyMode, runtimePolicyMessage, capabilityDigest, quickPath, agentQuickstart)
 			return nil
 		}
 
@@ -139,7 +152,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		capabilityDigest := buildStartCapabilityDigest(repo)
 		learnReplay := buildLearnReplay(repo, t, 3)
 		quickPath := buildLLMQuickPath()
-		agentQuickstart := buildStartAgentQuickstart()
+		agentQuickstart := buildStartAgentQuickstart(repo)
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
@@ -200,6 +213,26 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 
 		return nil
 	},
+}
+
+func renderStartNoTicketIntro(cmd *cobra.Command, cfg *ticket.Config, runtimePolicyMode, runtimePolicyMessage string, capabilityDigest startCapabilityDigest, quickPath llmQuickPath, agentQuickstart startAgentQuickstart) {
+	fmt.Fprintf(cmd.OutOrStdout(), "No workable tickets found. Startable states in current config: %s.\n", startableStatesSummary(cfg))
+	fmt.Fprintf(cmd.OutOrStdout(), "\n=== Docket Intro ===\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "Docket is ready even without an active ticket.\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
+	fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
+	fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartAgentQuickstartHuman(agentQuickstart))
+	fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
+	fmt.Fprintf(
+		cmd.OutOrStdout(),
+		"LLM quick path:\n- %s\n- %s\n- %s\n- %s\n",
+		quickPath.TicketApply,
+		quickPath.BacklogApply,
+		quickPath.ProofAttach,
+		quickPath.ProofVerify,
+	)
+	fmt.Fprintf(cmd.OutOrStdout(), "Automation: %s\n", quickPath.AutomationHint)
+	fmt.Fprintf(cmd.OutOrStdout(), "====================\n")
 }
 
 func startInstruction(ticketID string, yolo bool) string {

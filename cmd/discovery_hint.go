@@ -15,7 +15,7 @@ func shouldEmitDiscoveryHint(outputFormat string) bool {
 }
 
 func discoveryHintLine() string {
-	return "Hint: Use `docket ls --full` for the full graph, `docket search \"query\"` for ticket discovery, `docket start --format json` for workflow guidance, and `docket capabilities --format json` for capability discovery."
+	return "Hint: Use `docket skill list --format json` to discover built-in skills, `docket skill invoke <skill-id>` when one matches the task, `docket ls --full` for the full graph, `docket search \"query\"` for ticket discovery, `docket start --format json` for workflow guidance, and `docket capabilities --format json` for capability discovery."
 }
 
 func printDiscoveryHint(out io.Writer, outputFormat string) {
