@@ -113,6 +113,9 @@ func TestBuildStartAgentQuickstartUsesConfiguredActiveStateName(t *testing.T) {
 	if !strings.Contains(strings.Join(quickstart.CoreWorkflow, "\n"), "docket update TKT-NNN --state building") {
 		t.Fatalf("expected quickstart to use configured active state, got %#v", quickstart.CoreWorkflow)
 	}
+	if !strings.Contains(quickstart.ManagedRunBinding, "moving to `qa`") {
+		t.Fatalf("expected managed binding to mention configured review state, got %#v", quickstart.ManagedRunBinding)
+	}
 }
 
 func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {

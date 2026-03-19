@@ -450,12 +450,7 @@ func init() {
 }
 
 func preferredReviewState(cfg *ticket.Config) string {
-	if cfg != nil {
-		if review, ok := cfg.PrimaryStateWithRole("review"); ok {
-			return review
-		}
-	}
-	return "in-review"
+	return preferredStateForRole(cfg, "review", "in-review")
 }
 
 func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id string) ([]*ticket.Ticket, error) {

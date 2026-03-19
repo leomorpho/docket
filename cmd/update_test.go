@@ -1028,3 +1028,106 @@ func TestUpdateDoesNotAutoTransitionWhenReadinessFails(t *testing.T) {
 		t.Fatalf("expected readiness-failure reasons in diagnostic, got: %s", out.String())
 	}
 }
+
+func TestUpdateAutoTransitionsReviewReadyTicketsWithCustomWorkflow(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"coding"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"coding": {
+				Label:            "Coding",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"testing"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"testing": {
+				Label:            "Testing",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           3,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   4,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState:    "queued",
+		DefaultPriority: 10,
+		HandoffSections: []string{"Current state", "Decisions made"},
+	}
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	handoff := "Current state\n\nDecisions made"
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-903",
+		Seq:         903,
+		Title:       "Custom auto transition ready",
+		State:       "testing",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		Handoff:     handoff,
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1", Done: true, Evidence: "done"},
+			{Description: "A2", Done: true, Evidence: "done"},
+		},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"update", "TKT-903", "--desc", "updated desc"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-903")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != ticket.State("qa") {
+		t.Fatalf("expected auto transition to qa, got %s", got.State)
+	}
+	if !strings.Contains(out.String(), "Auto-transitioned TKT-903") {
+		t.Fatalf("expected auto-transition diagnostic, got: %s", out.String())
+	}
+}

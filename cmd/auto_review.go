@@ -18,9 +18,10 @@ func maybeAutoTransitionReviewReady(
 	t *ticket.Ticket,
 	actor string,
 ) (*ticket.Ticket, bool) {
-	if t == nil || t.State != ticket.State("in-progress") {
+	if t == nil || cfg == nil || !cfg.StateHasRole(string(t.State), "active") {
 		return t, false
 	}
+	reviewState := ticket.State(nextStateForRole(cfg, t.State, "review", "in-review"))
 
 	failures := reviewReadinessFailures(t, cfg)
 	if len(failures) > 0 {
@@ -28,12 +29,12 @@ func maybeAutoTransitionReviewReady(
 		return t, false
 	}
 
-	if err := ticket.ValidateTransition(cfg, t.State, ticket.State("in-review")); err != nil {
+	if err := ticket.ValidateTransition(cfg, t.State, reviewState); err != nil {
 		fmt.Fprintf(out, "Auto-review skipped for %s: %v\n", t.ID, err)
 		return t, false
 	}
 
-	if err := enforceManagedRunCommitLinkage(t.ID, ticket.State("in-review")); err != nil {
+	if err := enforceManagedRunCommitLinkage(t.ID, reviewState); err != nil {
 		fmt.Fprintf(out, "Auto-review skipped for %s: %v\n", t.ID, err)
 		return t, false
 	}

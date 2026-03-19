@@ -95,3 +95,87 @@ func TestWrapUpReportsReadyTicketAndReviewTransitionHint(t *testing.T) {
 		t.Fatalf("expected ready=true, got %#v", payload["ready"])
 	}
 }
+
+func TestWrapUpUsesConfiguredWorkflowRoleStates(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	cfg := &ticket.Config{
+		Backend: "local",
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"coding"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"coding": {
+				Label:            "Coding",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"testing"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"testing": {
+				Label:            "Testing",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           3,
+				Next:             []string{"shipped"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"shipped": {
+				Label:    "Shipped",
+				Open:     false,
+				Column:   4,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState:    "queued",
+		DefaultPriority: 10,
+		HandoffSections: []string{"Current state", "Decisions made"},
+	}
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := local.New(h.repo).CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-971",
+		Seq:         971,
+		Title:       "Custom wrap-up",
+		Description: "custom wrap-up ticket",
+		State:       "testing",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Handoff:     "Current state\n\nDecisions made",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "done", Done: true, Evidence: "verified"},
+		},
+	}); err != nil {
+		t.Fatalf("seed custom wrap-up ticket failed: %v", err)
+	}
+
+	out, err := h.run("wrap-up", "TKT-971")
+	if err != nil {
+		t.Fatalf("wrap-up human failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "docket update TKT-971 --state qa") {
+		t.Fatalf("expected configured review transition hint, got:\n%s", out)
+	}
+}

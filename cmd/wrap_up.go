@@ -114,15 +114,17 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 		next = append(next, fmt.Sprintf("Resolve or remove blockers: docket update %s --unblock <TKT-NNN>", t.ID))
 	}
 
-	reviewStateOK := t.State == ticket.State("in-progress") || t.State == ticket.State("in-review")
+	activeState := preferredStateForRole(cfg, "active", "in-progress")
+	reviewState := nextStateForRole(cfg, t.State, "review", "in-review")
+	reviewStateOK := cfg.StateHasRole(string(t.State), "active") || cfg.StateHasRole(string(t.State), "review")
 	checks = append(checks, wrapUpCheck{
 		ID:      "state_ready",
 		OK:      reviewStateOK,
-		Message: "Ticket is in a reviewable workflow state (in-progress or in-review).",
+		Message: "Ticket is in an active or review workflow state.",
 		Details: []string{string(t.State)},
 	})
 	if !reviewStateOK {
-		next = append(next, fmt.Sprintf("Move ticket into active work before wrap-up: docket update %s --state in-progress", t.ID))
+		next = append(next, fmt.Sprintf("Move ticket into active work before wrap-up: docket update %s --state %s", t.ID, activeState))
 	}
 
 	ready := true
@@ -132,8 +134,8 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 			break
 		}
 	}
-	if ready && t.State != ticket.State("in-review") {
-		next = append(next, fmt.Sprintf("Transition to review when ready: docket update %s --state in-review", t.ID))
+	if ready && !cfg.StateHasRole(string(t.State), "review") {
+		next = append(next, fmt.Sprintf("Transition to review when ready: docket update %s --state %s", t.ID, reviewState))
 	}
 
 	return wrapUpReport{
