@@ -2,8 +2,10 @@ package selector
 
 import (
 	"context"
+	"strings"
 
 	"github.com/leomorpho/docket/internal/agentrun"
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -33,6 +35,9 @@ func New(deps Dependencies) *Service {
 func (s *Service) Next(ctx context.Context) (agentrun.Selection, error) {
 	if s.store == nil {
 		return agentrun.Selection{}, nil
+	}
+	if err := s.store.SyncIndex(ctx); err != nil {
+		return agentrun.Selection{}, err
 	}
 	cfg, err := s.loadConfig(s.store.RepoRoot)
 	if err != nil {
@@ -84,9 +89,24 @@ func workableTickets(ctx context.Context, s *local.Store, cfg *ticket.Config, f 
 		if full == nil || !isWorkableTicket(cfg, full) {
 			continue
 		}
+		cl, err := lookupClaimIfAvailable(s.RepoRoot, full.ID)
+		if err != nil {
+			return nil, err
+		}
+		if cl != nil {
+			continue
+		}
 		out = append(out, full)
 	}
 	return out, nil
+}
+
+func lookupClaimIfAvailable(repoRoot, ticketID string) (*claim.ClaimMetadata, error) {
+	cl, err := claim.GetClaim(repoRoot, ticketID)
+	if err != nil && strings.Contains(err.Error(), "not a git repository") {
+		return nil, nil
+	}
+	return cl, err
 }
 
 func isWorkableTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
@@ -107,4 +127,3 @@ func isWorkableTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 	}
 	return true
 }
-

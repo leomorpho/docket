@@ -39,6 +39,9 @@ var listCmd = &cobra.Command{
 
 		s := local.New(repo)
 		ctx := context.Background()
+		if err := s.SyncIndex(ctx); err != nil {
+			return fmt.Errorf("syncing index: %w", err)
+		}
 
 		f := store.Filter{
 			Labels:          listLabels,

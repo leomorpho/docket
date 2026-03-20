@@ -3,11 +3,14 @@ package local
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
@@ -114,5 +117,55 @@ func TestSyncIndexPreservesAnnotations(t *testing.T) {
 	}
 	if got[0].FilePath != seed[0].FilePath || got[0].LineNum != seed[0].LineNum || got[0].Context != seed[0].Context {
 		t.Fatalf("annotation changed across sync: got=%#v want=%#v", got[0], seed[0])
+	}
+}
+
+func TestListTicketsAutoRefreshesIndexAfterTicketFileChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		Title:       "fixture TKT-001",
+		Description: "fixture ticket for auto-refresh integration test",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ok"}},
+	}); err != nil {
+		t.Fatalf("create fixture ticket: %v", err)
+	}
+
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("sync index: %v", err)
+	}
+
+	path := filepath.Join(tmpDir, ".docket", "tickets", "TKT-001.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ticket file: %v", err)
+	}
+	updated := strings.Replace(string(data), "state: backlog", "state: todo", 1)
+	if updated == string(data) {
+		t.Fatalf("expected to rewrite state in ticket file")
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		t.Fatalf("write ticket file: %v", err)
+	}
+
+	tickets, err := s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.State("todo")}})
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if len(tickets) != 1 || tickets[0].ID != "TKT-001" || tickets[0].State != ticket.State("todo") {
+		t.Fatalf("expected refreshed todo ticket after file edit, got %#v", tickets)
 	}
 }

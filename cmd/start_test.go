@@ -11,6 +11,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -339,6 +340,56 @@ func TestSelectNextTicket_LegacyCanonicalMapConfigRemainsWorkable(t *testing.T) 
 	}
 	if got == nil || got.ID != "TKT-001" {
 		t.Fatalf("expected legacy map config to keep backlog ticket workable, got %#v", got)
+	}
+}
+
+func TestSelectNextTicket_SkipsClaimedTickets(t *testing.T) {
+	tmpDir := t.TempDir()
+	runGitSession(t, tmpDir, "init")
+	s := local.New(tmpDir)
+	ctx := context.Background()
+
+	cfg := ticket.DefaultConfig()
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tc := range []struct {
+		id       string
+		priority int
+	}{
+		{id: "TKT-001", priority: 1},
+		{id: "TKT-002", priority: 2},
+	} {
+		if err := s.CreateTicket(ctx, &ticket.Ticket{
+			ID:          tc.id,
+			Seq:         tc.priority,
+			Title:       tc.id,
+			State:       "todo",
+			Priority:    tc.priority,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		}); err != nil {
+			t.Fatalf("CreateTicket(%s) failed: %v", tc.id, err)
+		}
+	}
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex failed: %v", err)
+	}
+	if err := claim.Claim(tmpDir, "TKT-001", filepath.Join(tmpDir, "wt-001"), "human:test"); err != nil {
+		t.Fatalf("Claim failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil || got.ID != "TKT-002" {
+		t.Fatalf("expected claimed ticket to be skipped, got %#v", got)
 	}
 }
 

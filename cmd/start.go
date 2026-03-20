@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/leomorpho/docket/internal/agentrun"
+	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/security"
@@ -32,6 +33,9 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		deps := newRuntimeDeps(repo)
 		s := deps.store
 		ctx := context.Background()
+		if err := s.SyncIndex(ctx); err != nil {
+			return fmt.Errorf("syncing index: %w", err)
+		}
 
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
@@ -223,6 +227,9 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 }
 
 func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cfg *ticket.Config) error {
+	if err := s.SyncIndex(ctx); err != nil {
+		return fmt.Errorf("syncing index: %w", err)
+	}
 	svc := newRunOrchestrator(repo, runReviewEnabled())
 	if startAuto {
 		summary, err := executeCycleRun(cmd, func(ctx context.Context) (agentrun.CycleSummary, error) {
@@ -324,10 +331,25 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 	}
 
 	for _, t := range tickets {
+		cl, err := lookupClaimIfAvailable(s.RepoRoot, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		if cl != nil {
+			continue
+		}
 		return t, nil
 	}
 
 	return nil, nil
+}
+
+func lookupClaimIfAvailable(repoRoot, ticketID string) (*claim.ClaimMetadata, error) {
+	cl, err := claim.GetClaim(repoRoot, ticketID)
+	if err != nil && strings.Contains(err.Error(), "not a git repository") {
+		return nil, nil
+	}
+	return cl, err
 }
 
 func init() {

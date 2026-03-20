@@ -41,18 +41,8 @@ func (s *Store) isIndexStale() bool {
 }
 
 func (s *Store) ensureIndex(ctx context.Context) error {
-	if !s.isIndexStale() {
-		return nil
-	}
-
 	s.indexSyncMu.Lock()
 	defer s.indexSyncMu.Unlock()
-
-	// Another goroutine may have rebuilt while we were waiting.
-	if !s.isIndexStale() {
-		return nil
-	}
-
 	return s.syncIndexWithRetry(ctx)
 }
 
