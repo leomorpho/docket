@@ -455,12 +455,21 @@ func TestRunWatchLaunchOptionsIncludesCleanupAction(t *testing.T) {
 
 func TestRunWatchLaunchOptionsIncludesPingAction(t *testing.T) {
 	options := runWatchLaunchOptions(t.TempDir())
+	var labels []string
 	for _, option := range options {
+		labels = append(labels, option.Label)
 		if option.ID == "ping" {
-			return
+			goto found
 		}
 	}
 	t.Fatalf("expected ping launch option")
+found:
+	if len(options) != 5 {
+		t.Fatalf("expected 5 launch options after session-only simplification, got %d (%v)", len(options), labels)
+	}
+	if labels[0] != "Start Next Ticket" || labels[1] != "Start Auto Cycle" {
+		t.Fatalf("unexpected primary launch labels: %v", labels)
+	}
 }
 
 func TestFormatManagedRunTitle(t *testing.T) {

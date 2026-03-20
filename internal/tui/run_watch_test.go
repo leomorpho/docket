@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -276,11 +277,73 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	if !strings.Contains(view, "4") || !strings.Contains(view, "MESSAGES") {
 		t.Fatalf("view missing session message count: %q", view)
 	}
-	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "Raw Codex Conversation") {
+	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "Codex Session Transcript") {
 		t.Fatalf("view missing dual-pane titles: %q", view)
 	}
 	if !strings.Contains(view, "assistant: I checked the repo") || !strings.Contains(view, "session: thread started thread-700") {
 		t.Fatalf("view missing parsed conversation content: %q", view)
+	}
+}
+
+func TestLoadRunWatchSnapshotPrefersRealCodexSessionTranscript(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-703",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-703",
+		SessionID:    "019d0d32-3b5c-7713-a7ce-c739487d21fb",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:    record.TicketID,
+		SessionID:   record.SessionID,
+		Active:      true,
+		LastEventAt: now,
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+	if err := store.AppendStdout(record.TicketID, []byte("{\"type\":\"thread.started\",\"thread_id\":\"fallback-thread\"}\n")); err != nil {
+		t.Fatalf("AppendStdout() error = %v", err)
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sessionDir := filepath.Join(home, ".codex", "sessions", "2026", "03", "20")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	sessionPath := filepath.Join(sessionDir, "rollout-2026-03-20T14-41-29-019d0d32-3b5c-7713-a7ce-c739487d21fb.jsonl")
+	sessionBody := strings.Join([]string{
+		`{"timestamp":"2026-03-20T21:41:36.544Z","type":"session_meta","payload":{"id":"019d0d32-3b5c-7713-a7ce-c739487d21fb"}}`,
+		`{"timestamp":"2026-03-20T21:41:36.545Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"start work"}]}}`,
+		`{"timestamp":"2026-03-20T21:41:36.546Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"PLAN ticket=TKT-703 steps=2"}]}}`,
+		`{"timestamp":"2026-03-20T21:41:36.547Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"pwd\"}"}}`,
+	}, "\n")
+	if err := os.WriteFile(sessionPath, []byte(sessionBody), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	snapshot, err := loadRunWatchSnapshot(store, "TKT-703")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	if len(snapshot.conversation) == 0 {
+		t.Fatalf("expected conversation lines")
+	}
+	if !slices.Contains(snapshot.conversation, "session: started 019d0d32-3b5c-7713-a7ce-c739487d21fb") {
+		t.Fatalf("expected real codex session transcript, got %#v", snapshot.conversation)
+	}
+	if !slices.Contains(snapshot.conversation, "user: start work") || !slices.Contains(snapshot.conversation, "assistant: PLAN ticket=TKT-703 steps=2") {
+		t.Fatalf("expected message lines from codex session transcript, got %#v", snapshot.conversation)
+	}
+	if slices.Contains(snapshot.conversation, "session: thread started fallback-thread") {
+		t.Fatalf("expected session transcript to take precedence over stdout fallback, got %#v", snapshot.conversation)
 	}
 }
 
@@ -290,6 +353,8 @@ func TestParseCodexConversationFormatsSessionAndAssistantLines(t *testing.T) {
 	got := parseCodexConversation([]string{
 		`{"type":"thread.started","thread_id":"thread-123"}`,
 		`{"type":"item.completed","item":{"id":"item_1","type":"assistant_message","content":[{"type":"output_text","text":"I checked the repo"},{"type":"output_text","text":"STATUS ticket=TKT-123 phase=analysis"}]}}`,
+		`{"type":"item.completed","item":{"id":"item_2","type":"error","message":"Disabled js_repl for this session"}}`,
+		`{"type":"response.delta","delta":"thinking"}`,
 		`plain raw line`,
 	})
 
@@ -297,10 +362,53 @@ func TestParseCodexConversationFormatsSessionAndAssistantLines(t *testing.T) {
 		"session: thread started thread-123",
 		"assistant: I checked the repo",
 		"assistant: STATUS ticket=TKT-123 phase=analysis",
+		"error: Disabled js_repl for this session",
+		"event: response.delta",
 		"raw: plain raw line",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected parsed conversation:\nwant=%#v\ngot=%#v", want, got)
+	}
+}
+
+func TestRunWatchViewShowsErrorEventsInConversationPane(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-702",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-702",
+		SessionID:    "session-702",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:    "TKT-702",
+		SessionID:   "session-702",
+		Active:      true,
+		LastEventAt: now,
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+	if err := store.AppendStdout("TKT-702", []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Disabled js_repl for this session\"}}\n")); err != nil {
+		t.Fatalf("AppendStdout() error = %v", err)
+	}
+
+	model := NewRunWatchModel(repoRoot, "TKT-702", nil, false, nil)
+	snapshot, err := loadRunWatchSnapshot(store, "TKT-702")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	model.snapshot = snapshot
+	view := model.View()
+	if !strings.Contains(view, "error: Disabled js_repl for this session") {
+		t.Fatalf("view missing error event in conversation pane: %q", view)
 	}
 }
 

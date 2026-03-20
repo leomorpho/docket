@@ -559,32 +559,16 @@ func runWatchDashboard(repoRoot, ticketID string, doneCh <-chan struct{}, quitOn
 func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 	return []tui.RunWatchLaunchOption{
 		{
-			ID:          "single",
-			Label:       "Start Next Ticket",
-			Description: "Pick the next runnable ticket and run it with review in a fresh managed session.",
-			Start: func() error {
-				return launchManagedSingleRun(repoRoot)
-			},
-		},
-		{
 			ID:          "single-session",
-			Label:       "Start Next Ticket (Session)",
+			Label:       "Start Next Ticket",
 			Description: "Pick the next runnable ticket and run it in a persisted Codex session that can be resumed later.",
 			Start: func() error {
 				return launchManagedSingleRunWithMode(repoRoot, "session")
 			},
 		},
 		{
-			ID:          "auto",
-			Label:       "Start Auto Cycle",
-			Description: "Keep running the next runnable ticket until blocked, exhausted, or asked to stop.",
-			Start: func() error {
-				return launchManagedAutoCycle(repoRoot)
-			},
-		},
-		{
 			ID:          "auto-session",
-			Label:       "Start Auto Cycle (Session)",
+			Label:       "Start Auto Cycle",
 			Description: "Keep running tickets using persisted Codex sessions so follow-up resumes stay on the same thread.",
 			Start: func() error {
 				return launchManagedAutoCycleWithMode(repoRoot, "session")
@@ -702,16 +686,16 @@ func init() {
 	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runTicketCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
-	runTicketCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	runTicketCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runNextCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
-	runNextCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	runNextCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runResumeCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
-	runResumeCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	runResumeCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runResumeCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
-	runPingCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	runPingCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	rootCmd.AddCommand(runTicketCmd)
 	rootCmd.AddCommand(runNextCmd)
 	rootCmd.AddCommand(runStatusCmd)

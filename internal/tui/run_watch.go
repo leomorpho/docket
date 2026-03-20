@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -463,7 +464,7 @@ func (m RunWatchModel) renderWatchView() string {
 		leftWidth := max(30, (contentWidth-2)/2)
 		rightWidth := max(30, contentWidth-leftWidth-2)
 		leftCard := runWatchCardStyle.Copy().Width(leftWidth).Height(bodyOuterHeight).Render("Visible Session Log\n\n" + m.renderScrollableBody(m.renderLogBody(), leftWidth, bodyInnerHeight))
-		rightCard := runWatchCardStyle.Copy().Width(rightWidth).Height(bodyOuterHeight).Render("Raw Codex Conversation\n\n" + m.renderScrollableBody(m.renderConversationBody(), rightWidth, bodyInnerHeight))
+		rightCard := runWatchCardStyle.Copy().Width(rightWidth).Height(bodyOuterHeight).Render("Codex Session Transcript\n\n" + m.renderScrollableBody(m.renderConversationBody(), rightWidth, bodyInnerHeight))
 		bodyTitle = ""
 		bodyContent = lipgloss.JoinHorizontal(lipgloss.Top, leftCard, "  ", rightCard)
 	} else {
@@ -963,14 +964,78 @@ func loadRunWatchSnapshot(store *runruntime.Store, focusTicketID string) (runWat
 		} else {
 			snapshot.transcript = transcript
 		}
-		stdoutLines, err := store.LoadStdoutLines(ticketID)
-		if err != nil {
-			snapshot.warnings = append(snapshot.warnings, "raw stdout unavailable for "+ticketID+": "+err.Error())
+		if sessionLines, ok, err := loadCodexSessionLines(status.SessionID); err != nil {
+			snapshot.warnings = append(snapshot.warnings, "codex session unavailable for "+ticketID+": "+err.Error())
+		} else if ok {
+			snapshot.conversation = parseCodexSessionConversation(sessionLines)
 		} else {
-			snapshot.conversation = parseCodexConversation(stdoutLines)
+			stdoutLines, err := store.LoadStdoutLines(ticketID)
+			if err != nil {
+				snapshot.warnings = append(snapshot.warnings, "raw stdout unavailable for "+ticketID+": "+err.Error())
+			} else {
+				snapshot.conversation = parseCodexConversation(stdoutLines)
+			}
 		}
 	}
 	return snapshot, nil
+}
+
+func loadCodexSessionLines(sessionID string) ([]string, bool, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, false, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, false, err
+	}
+	for _, root := range []string{
+		filepath.Join(home, ".codex", "sessions"),
+		filepath.Join(home, ".codex", "archived_sessions"),
+	} {
+		path, found, err := findCodexSessionFile(root, sessionID)
+		if err != nil {
+			return nil, false, err
+		}
+		if !found {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, false, err
+		}
+		var lines []string
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			lines = append(lines, line)
+		}
+		return lines, true, nil
+	}
+	return nil, false, nil
+}
+
+func findCodexSessionFile(root, sessionID string) (string, bool, error) {
+	info, err := os.Stat(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if !info.IsDir() {
+		return "", false, nil
+	}
+	pattern := "*" + sessionID + ".jsonl"
+	if matches, err := filepath.Glob(filepath.Join(root, pattern)); err == nil && len(matches) > 0 {
+		return matches[0], true, nil
+	}
+	if matches, err := filepath.Glob(filepath.Join(root, "*", "*", "*", pattern)); err == nil && len(matches) > 0 {
+		return matches[0], true, nil
+	}
+	return "", false, nil
 }
 
 func parseCodexConversation(lines []string) []string {
@@ -985,6 +1050,123 @@ func parseCodexConversation(lines []string) []string {
 		}
 	}
 	return out
+}
+
+func parseCodexSessionConversation(lines []string) []string {
+	var out []string
+	for _, line := range lines {
+		for _, item := range codexSessionConversationLines(line) {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func codexSessionConversationLines(line string) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return []string{"raw: " + line}
+	}
+	eventType, _ := event["type"].(string)
+	payload, _ := event["payload"].(map[string]any)
+	switch eventType {
+	case "session_meta":
+		if id, _ := payload["id"].(string); strings.TrimSpace(id) != "" {
+			return []string{"session: started " + id}
+		}
+		return []string{"session: started"}
+	case "turn_context":
+		return []string{"session: turn context"}
+	case "event_msg":
+		return codexSessionEventMsgLines(payload)
+	case "response_item":
+		return codexSessionResponseItemLines(payload)
+	case "token_count":
+		return nil
+	default:
+		if strings.TrimSpace(eventType) != "" {
+			return []string{"event: " + eventType}
+		}
+		return []string{"raw: " + line}
+	}
+}
+
+func codexSessionEventMsgLines(payload map[string]any) []string {
+	msgType, _ := payload["type"].(string)
+	switch msgType {
+	case "user_message":
+		if msg, _ := payload["message"].(string); strings.TrimSpace(msg) != "" {
+			return prefixedLines("user", msg)
+		}
+	case "agent_message":
+		if msg, _ := payload["message"].(string); strings.TrimSpace(msg) != "" {
+			return prefixedLines("assistant", msg)
+		}
+	case "task_started":
+		return []string{"session: task started"}
+	}
+	return nil
+}
+
+func codexSessionResponseItemLines(payload map[string]any) []string {
+	itemType, _ := payload["type"].(string)
+	switch itemType {
+	case "message":
+		role, _ := payload["role"].(string)
+		prefix := conversationPrefix(role + "_message")
+		if lines := collectConversationTextValues(prefix, payload); len(lines) > 0 {
+			return lines
+		}
+		return []string{prefix + ": [message]"}
+	case "function_call":
+		name, _ := payload["name"].(string)
+		arguments, _ := payload["arguments"].(string)
+		if strings.TrimSpace(name) == "" {
+			return []string{"tool: call"}
+		}
+		if strings.TrimSpace(arguments) != "" {
+			return prefixedLines("tool", fmt.Sprintf("call %s %s", name, arguments))
+		}
+		return []string{"tool: call " + name}
+	case "function_call_output":
+		if output, _ := payload["output"].(string); strings.TrimSpace(output) != "" {
+			return prefixedLines("tool", output)
+		}
+		return []string{"tool: function output"}
+	case "custom_tool_call":
+		name, _ := payload["name"].(string)
+		status, _ := payload["status"].(string)
+		input, _ := payload["input"].(string)
+		label := strings.TrimSpace(name)
+		if label == "" {
+			label = "custom tool"
+		}
+		switch {
+		case strings.TrimSpace(status) != "" && strings.TrimSpace(input) != "":
+			return prefixedLines("tool", fmt.Sprintf("%s [%s]\n%s", label, status, input))
+		case strings.TrimSpace(status) != "":
+			return []string{"tool: " + label + " [" + status + "]"}
+		case strings.TrimSpace(input) != "":
+			return prefixedLines("tool", fmt.Sprintf("%s\n%s", label, input))
+		default:
+			return []string{"tool: " + label}
+		}
+	case "reasoning":
+		return nil
+	default:
+		if strings.TrimSpace(itemType) != "" {
+			return []string{"item: " + itemType}
+		}
+		return nil
+	}
 }
 
 func codexConversationLines(line string) []string {
@@ -1005,41 +1187,102 @@ func codexConversationLines(line string) []string {
 		return []string{"session: thread started"}
 	case "turn.started":
 		return []string{"session: turn started"}
+	case "turn.completed":
+		return []string{"session: turn completed"}
 	}
 	item, _ := event["item"].(map[string]any)
 	if len(item) == 0 {
-		return nil
+		if strings.TrimSpace(eventType) != "" {
+			return []string{"event: " + eventType}
+		}
+		return []string{"raw: " + line}
 	}
 	itemType, _ := item["type"].(string)
-	prefix := "assistant"
+	prefix := conversationPrefix(itemType)
 	switch itemType {
-	case "user_message":
-		prefix = "user"
-	case "tool_result", "tool_call", "tool_message":
-		prefix = "tool"
+	case "tool_call":
+		if lines := toolCallConversationLines(item); len(lines) > 0 {
+			return lines
+		}
 	}
-	if text, _ := item["text"].(string); strings.TrimSpace(text) != "" {
-		return prefixedLines(prefix, text)
+	if lines := collectConversationTextValues(prefix, item); len(lines) > 0 {
+		return lines
 	}
-	if content, ok := item["content"].([]any); ok {
-		return collectConversationContent(prefix, content)
+	if strings.TrimSpace(itemType) != "" {
+		return []string{prefix + ": [" + itemType + "]"}
 	}
-	return nil
+	return []string{"raw: " + line}
 }
 
-func collectConversationContent(prefix string, items []any) []string {
-	var out []string
-	for _, item := range items {
-		typed, _ := item.(map[string]any)
-		if len(typed) == 0 {
-			continue
-		}
-		text, _ := typed["text"].(string)
-		if strings.TrimSpace(text) == "" {
-			continue
-		}
-		out = append(out, prefixedLines(prefix, text)...)
+func conversationPrefix(itemType string) string {
+	switch strings.TrimSpace(itemType) {
+	case "user_message":
+		return "user"
+	case "developer_message":
+		return "developer"
+	case "tool_result", "tool_call", "tool_message":
+		return "tool"
+	case "error":
+		return "error"
+	case "system_message":
+		return "system"
+	default:
+		return "assistant"
 	}
+}
+
+func collectConversationTextValues(prefix string, value any) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	var walk func(any)
+	walk = func(v any) {
+		switch typed := v.(type) {
+		case map[string]any:
+			for _, key := range []string{"text", "delta", "message"} {
+				if str, _ := typed[key].(string); strings.TrimSpace(str) != "" {
+					for _, line := range prefixedLines(prefix, str) {
+						if _, ok := seen[line]; ok {
+							continue
+						}
+						seen[line] = struct{}{}
+						out = append(out, line)
+					}
+				}
+			}
+			keys := make([]string, 0, len(typed))
+			for key := range typed {
+				if key == "text" || key == "delta" || key == "message" {
+					continue
+				}
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				walk(typed[key])
+			}
+		case []any:
+			for _, item := range typed {
+				walk(item)
+			}
+		}
+	}
+	walk(value)
+	return out
+}
+
+func toolCallConversationLines(item map[string]any) []string {
+	var out []string
+	name, _ := item["name"].(string)
+	name = strings.TrimSpace(name)
+	arguments, _ := item["arguments"].(string)
+	arguments = strings.TrimSpace(arguments)
+	switch {
+	case name != "" && arguments != "":
+		out = append(out, prefixedLines("tool", fmt.Sprintf("call %s %s", name, arguments))...)
+	case name != "":
+		out = append(out, "tool: call "+name)
+	}
+	out = append(out, collectConversationTextValues("tool", item)...)
 	return out
 }
 
