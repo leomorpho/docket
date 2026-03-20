@@ -191,6 +191,12 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	if err := store.UpdateCycleCurrent("TKT-700", time.Now()); err != nil {
 		t.Fatalf("UpdateCycleCurrent() error = %v", err)
 	}
+	if err := store.AppendCycleCompleted("TKT-698", "done", "3m", time.Now()); err != nil {
+		t.Fatalf("AppendCycleCompleted() error = %v", err)
+	}
+	if err := store.AppendCycleCompleted("TKT-699", "done", "12m", time.Now()); err != nil {
+		t.Fatalf("AppendCycleCompleted() error = %v", err)
+	}
 	if err := store.WriteStatus(runruntime.StatusSnapshot{
 		TicketID:         "TKT-700",
 		SessionID:        "session-700",
@@ -225,6 +231,33 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "PLAN ticket=TKT-700 steps=3") {
 		t.Fatalf("view missing summary content: %q", view)
+	}
+	if !strings.Contains(view, "Completed This Cycle") || !strings.Contains(view, "TKT-698") || !strings.Contains(view, "12m") {
+		t.Fatalf("view missing cycle completion content: %q", view)
+	}
+	if !strings.Contains(view, "PROGRESS") || !strings.Contains(view, "33%") {
+		t.Fatalf("view missing progress bar content: %q", view)
+	}
+}
+
+func TestRunWatchModelRenderStepBar(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, nil)
+	model.snapshot.statusOK = true
+	model.snapshot.status = runruntime.StatusSnapshot{
+		PlannedSteps: 4,
+		CurrentStep:  2,
+	}
+	got := model.renderStepBar()
+	if !strings.Contains(got, "50%") {
+		t.Fatalf("expected 50%% progress, got %q", got)
+	}
+
+	model.snapshot.status = runruntime.StatusSnapshot{}
+	got = model.renderStepBar()
+	if !strings.Contains(got, "waiting") {
+		t.Fatalf("expected waiting fallback, got %q", got)
 	}
 }
 

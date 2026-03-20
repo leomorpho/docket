@@ -50,11 +50,18 @@ type StatusSnapshot struct {
 }
 
 type CycleState struct {
-	Active           bool   `json:"active"`
-	CurrentTicketID  string `json:"current_ticket_id,omitempty"`
-	StopAfterCurrent bool   `json:"stop_after_current,omitempty"`
-	StartedAt        string `json:"started_at,omitempty"`
-	UpdatedAt        string `json:"updated_at,omitempty"`
+	Active           bool                `json:"active"`
+	CurrentTicketID  string              `json:"current_ticket_id,omitempty"`
+	StopAfterCurrent bool                `json:"stop_after_current,omitempty"`
+	StartedAt        string              `json:"started_at,omitempty"`
+	UpdatedAt        string              `json:"updated_at,omitempty"`
+	Completed        []CycleCompletedRun `json:"completed,omitempty"`
+}
+
+type CycleCompletedRun struct {
+	TicketID string `json:"ticket_id"`
+	Status   string `json:"status,omitempty"`
+	Length   string `json:"length,omitempty"`
 }
 
 type Store struct {
@@ -234,6 +241,21 @@ func (s *Store) RequestStopAfterCurrent(now time.Time) error {
 		return err
 	}
 	state.StopAfterCurrent = true
+	state.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
+	return s.WriteCycleState(state)
+}
+
+func (s *Store) AppendCycleCompleted(ticketID, status, length string, now time.Time) error {
+	state, _, err := s.LoadCycleState()
+	if err != nil {
+		return err
+	}
+	state.Active = true
+	state.Completed = append(state.Completed, CycleCompletedRun{
+		TicketID: ticketID,
+		Status:   status,
+		Length:   length,
+	})
 	state.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
 	return s.WriteCycleState(state)
 }

@@ -214,6 +214,31 @@ func successfulStreamBehavior(t *testing.T, ticketID string) streamBehavior {
 	}
 }
 
+func TestFormatRunLength(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   time.Duration
+		want string
+	}{
+		{name: "under minute", in: 20 * time.Second, want: "<1m"},
+		{name: "minutes", in: 4*time.Minute + 10*time.Second, want: "4m"},
+		{name: "hours and minutes", in: 2*time.Hour + 7*time.Minute, want: "2h 7m"},
+		{name: "hours exact", in: 3 * time.Hour, want: "3h"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := formatRunLength(tc.in); got != tc.want {
+				t.Fatalf("formatRunLength(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func hangingStreamBehavior(ticketID string) streamBehavior {
 	return func(spec agentrun.RunSpec, stdout, stderr *io.PipeWriter, handle *streamingHandle) {
 		defer stdout.Close()

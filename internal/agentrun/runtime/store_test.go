@@ -164,12 +164,18 @@ func TestStoreCycleStateAndStopRequestLifecycle(t *testing.T) {
 	if err := store.RequestStopAfterCurrent(now.Add(2 * time.Second)); err != nil {
 		t.Fatalf("RequestStopAfterCurrent() error = %v", err)
 	}
+	if err := store.AppendCycleCompleted("TKT-399", "done", "4m", now.Add(3*time.Second)); err != nil {
+		t.Fatalf("AppendCycleCompleted() error = %v", err)
+	}
 	state, ok, err := store.LoadCycleState()
 	if err != nil || !ok {
 		t.Fatalf("LoadCycleState() ok=%v err=%v", ok, err)
 	}
 	if !state.Active || state.CurrentTicketID != "TKT-400" || !state.StopAfterCurrent {
 		t.Fatalf("unexpected cycle state: %#v", state)
+	}
+	if len(state.Completed) != 1 || state.Completed[0].TicketID != "TKT-399" || state.Completed[0].Length != "4m" {
+		t.Fatalf("unexpected completed cycle runs: %#v", state.Completed)
 	}
 	stopRequested, err := store.StopAfterCurrentRequested()
 	if err != nil {

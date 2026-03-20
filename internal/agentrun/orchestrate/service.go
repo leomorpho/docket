@@ -269,11 +269,17 @@ func (s *Service) RunNext(ctx context.Context) (agentrun.CycleSummary, error) {
 				return summary, err
 			}
 		}
+		runStartedAt := time.Now()
 		runSummary, err := s.RunTicket(ctx, selection.TicketID)
 		if err != nil {
 			return summary, err
 		}
 		summary.Runs = append(summary.Runs, runSummary)
+		if s.runtime != nil && runSummary.Status == agentrun.StatusDone {
+			if err := s.runtime.AppendCycleCompleted(selection.TicketID, string(runSummary.Status), formatRunLength(time.Since(runStartedAt)), time.Now()); err != nil {
+				return summary, err
+			}
+		}
 		if runSummary.Status != agentrun.StatusDone {
 			if runSummary.Reason != "" {
 				summary.StopReason = runSummary.Reason
@@ -282,6 +288,22 @@ func (s *Service) RunNext(ctx context.Context) (agentrun.CycleSummary, error) {
 			}
 			return summary, nil
 		}
+	}
+}
+
+func formatRunLength(d time.Duration) string {
+	if d < time.Minute {
+		return "<1m"
+	}
+	hours := int(d / time.Hour)
+	minutes := int((d % time.Hour) / time.Minute)
+	switch {
+	case hours > 0 && minutes > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	case hours > 0:
+		return fmt.Sprintf("%dh", hours)
+	default:
+		return fmt.Sprintf("%dm", minutes)
 	}
 }
 

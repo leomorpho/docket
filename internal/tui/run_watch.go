@@ -59,25 +59,25 @@ type runWatchLaunchResultMsg struct {
 }
 
 type RunWatchModel struct {
-	repoRoot       string
-	store          *runruntime.Store
-	focusTicketID  string
-	launchMode     launchMode
-	launchOptions  []RunWatchLaunchOption
-	selectedOption int
-	launching      bool
-	mode           watchMode
-	showOverview   bool
-	followLog      bool
-	scrollOffset   int
-	width          int
-	height         int
-	statusMessage  string
-	snapshot       runWatchSnapshot
-	doneCh         <-chan struct{}
-	quitOnDone     bool
-	showDoneNotice bool
-	showHelp       bool
+	repoRoot        string
+	store           *runruntime.Store
+	focusTicketID   string
+	launchMode      launchMode
+	launchOptions   []RunWatchLaunchOption
+	selectedOption  int
+	launching       bool
+	mode            watchMode
+	showOverview    bool
+	followLog       bool
+	scrollOffset    int
+	width           int
+	height          int
+	statusMessage   string
+	snapshot        runWatchSnapshot
+	doneCh          <-chan struct{}
+	quitOnDone      bool
+	showDoneNotice  bool
+	showHelp        bool
 	confirmHardStop bool
 }
 
@@ -115,6 +115,10 @@ var (
 	runWatchStatusErrStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("203"))
+	runWatchProgressDoneStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("42"))
+	runWatchProgressTodoStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("240"))
 	runWatchSelectedStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("230")).
@@ -454,14 +458,30 @@ func (m RunWatchModel) renderHeaderMeta() string {
 }
 
 func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
+	sections := make([]string, 0, 2)
+	if len(m.snapshot.cycle.Completed) > 0 {
+		completed := make([]string, 0, len(m.snapshot.cycle.Completed)+2)
+		completed = append(completed, "Completed This Cycle", "")
+		for _, item := range m.snapshot.cycle.Completed {
+			line := item.TicketID
+			if strings.TrimSpace(item.Length) != "" {
+				line += "  " + runWatchSubtleStyle.Render(item.Length)
+			}
+			completed = append(completed, line)
+		}
+		sections = append(sections, strings.Join(completed, "\n"))
+	}
+
 	rows := []string{
 		m.renderKeyValue("Ticket", valueOrFallback(m.snapshot.ticketID, "(none)")),
 		m.renderKeyValue("Run state", m.renderRunState()),
 		m.renderKeyValue("Step", m.renderStepProgress()),
+		m.renderKeyValue("Progress", m.renderStepBar()),
 		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
 		m.renderKeyValue("Last event", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
 	}
-	return "Run Overview\n\n" + strings.Join(rows, "\n")
+	sections = append(sections, "Run Overview\n\n"+strings.Join(rows, "\n"))
+	return strings.Join(sections, "\n\n")
 }
 
 func (m RunWatchModel) renderRunState() string {
@@ -513,6 +533,31 @@ func (m RunWatchModel) renderStepProgress() string {
 		prefix += "/" + strconv.Itoa(m.snapshot.status.PlannedSteps)
 	}
 	return prefix + "  " + m.snapshot.status.CurrentStepTitle
+}
+
+func (m RunWatchModel) renderStepBar() string {
+	if !m.snapshot.statusOK || m.snapshot.status.PlannedSteps <= 0 {
+		return runWatchSubtleStyle.Render("waiting")
+	}
+	current := m.snapshot.status.CurrentStep
+	if current < 0 {
+		current = 0
+	}
+	if current > m.snapshot.status.PlannedSteps {
+		current = m.snapshot.status.PlannedSteps
+	}
+	const width = 12
+	filled := int(float64(current) / float64(m.snapshot.status.PlannedSteps) * float64(width))
+	if current > 0 && filled == 0 {
+		filled = 1
+	}
+	if filled > width {
+		filled = width
+	}
+	bar := runWatchProgressDoneStyle.Render(strings.Repeat("█", filled)) +
+		runWatchProgressTodoStyle.Render(strings.Repeat("█", width-filled))
+	percent := int(float64(current) / float64(m.snapshot.status.PlannedSteps) * 100)
+	return fmt.Sprintf("%s %d%%", bar, percent)
 }
 
 func (m RunWatchModel) renderStatusBanner(contentWidth int) string {
