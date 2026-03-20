@@ -311,7 +311,7 @@ func (m RunWatchModel) renderSummaryBody() string {
 		body = append(body, "  "+m.snapshot.status.LastVisibleText)
 	}
 	if m.snapshot.status.LastEventAt != "" {
-		body = append(body, "Last event: "+m.snapshot.status.LastEventAt)
+		body = append(body, "Last event: "+formatRuntimeTimestamp(m.snapshot.status.LastEventAt))
 	}
 	transcript := m.snapshot.transcript
 	if len(transcript) > 5 {
@@ -373,7 +373,7 @@ func (m RunWatchModel) renderWatchView() string {
 	}
 	bodyCard := runWatchCardStyle.Copy().Width(contentWidth).Render(bodyTitle + "\n\n" + m.renderScrollableBody(bodyContent, contentWidth))
 	statusBanner := ""
-	if m.showDoneNotice || m.shouldRenderStatusBanner() {
+	if m.shouldRenderStatusBanner() {
 		statusBanner = m.renderStatusBanner(contentWidth)
 	}
 	footer := m.renderFooter(contentWidth)
@@ -415,7 +415,7 @@ func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 		m.renderKeyValue("Run state", m.renderRunState()),
 		m.renderKeyValue("Step", m.renderStepProgress()),
 		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
-		m.renderKeyValue("Last event", valueOrFallback(m.snapshot.status.LastEventAt, "none yet")),
+		m.renderKeyValue("Last event", formattedRuntimeTimestampOrFallback(m.snapshot.status.LastEventAt, "none yet")),
 	}
 	return "Run Overview\n\n" + strings.Join(rows, "\n")
 }
@@ -583,6 +583,25 @@ func valueOrFallback(value, fallback string) string {
 	return value
 }
 
+func formattedRuntimeTimestampOrFallback(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return formatRuntimeTimestamp(value)
+}
+
+func formatRuntimeTimestamp(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value
+	}
+	return parsed.In(time.Local).Format("Jan 2, 2006 3:04:05 PM MST")
+}
+
 func (m RunWatchModel) reloadTick() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
 		return runWatchTickMsg{}
@@ -678,6 +697,9 @@ func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle ru
 			return "", runruntime.StatusSnapshot{}, false, err
 		}
 		if !ok {
+			continue
+		}
+		if !status.Active {
 			continue
 		}
 		candidates = append(candidates, candidate{ticketID: ticketID, status: status})

@@ -96,6 +96,42 @@ func TestLoadRunWatchSnapshotPrefersCycleCurrentTicket(t *testing.T) {
 	}
 }
 
+func TestLoadRunWatchSnapshotIgnoresStaleInactiveRunsWithoutCycle(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-602",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-602",
+		SessionID:    "session-602",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:         "TKT-602",
+		SessionID:        "session-602",
+		Active:           false,
+		Hung:             true,
+		LastEventAt:      time.Now().UTC().Format(time.RFC3339Nano),
+		LastResultStatus: string(agentrun.StatusFailed),
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	snapshot, err := loadRunWatchSnapshot(store, "")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	if snapshot.ticketID != "" || snapshot.statusOK {
+		t.Fatalf("expected no active watched ticket, got %#v", snapshot)
+	}
+}
+
 func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	t.Parallel()
 
@@ -153,6 +189,68 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "PLAN ticket=TKT-700 steps=3") {
 		t.Fatalf("view missing summary content: %q", view)
+	}
+}
+
+func TestRunWatchModelViewFormatsLastEventInLocalTime(t *testing.T) {
+	t.Parallel()
+
+	originalLocal := time.Local
+	time.Local = time.FixedZone("PDT", -7*60*60)
+	defer func() { time.Local = originalLocal }()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	now := "2026-03-20T15:48:15.187027Z"
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-701",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-701",
+		SessionID:    "session-701",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:    "TKT-701",
+		SessionID:   "session-701",
+		Active:      true,
+		LastEventAt: now,
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	model := NewRunWatchModel(repoRoot, "TKT-701", nil, false, nil)
+	snapshot, err := loadRunWatchSnapshot(store, "TKT-701")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	model.snapshot = snapshot
+	view := model.View()
+	if strings.Contains(view, now) {
+		t.Fatalf("view should not render raw RFC3339 timestamp: %q", view)
+	}
+	if !strings.Contains(view, "Mar 20, 2026 8:48:15 AM PDT") {
+		t.Fatalf("view missing localized timestamp: %q", view)
+	}
+}
+
+func TestRunWatchModelViewKeepsRunFinishedInFooterNotBanner(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, nil)
+	model.showDoneNotice = true
+	view := model.View()
+	if strings.Contains(view, "Run finished\n") && strings.Contains(view, "╭") {
+		// ensure we do not render a separate status card just for finished state
+		if strings.Contains(view, "Run finished\n  │") || strings.Contains(view, "│  Run finished") {
+			t.Fatalf("view rendered separate finished banner: %q", view)
+		}
+	}
+	if !strings.Contains(strings.ToLower(view), "run finished") {
+		t.Fatalf("view missing footer finished status: %q", view)
 	}
 }
 
