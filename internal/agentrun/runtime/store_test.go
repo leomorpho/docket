@@ -149,3 +149,39 @@ func TestStoreInitResetsPreviousActiveRunArtifacts(t *testing.T) {
 		t.Fatalf("unexpected reset status: %#v", status)
 	}
 }
+
+func TestStoreCycleStateAndStopRequestLifecycle(t *testing.T) {
+	t.Parallel()
+
+	store := New(t.TempDir())
+	now := time.Date(2026, 3, 20, 5, 0, 0, 0, time.UTC)
+	if err := store.BeginCycle(now); err != nil {
+		t.Fatalf("BeginCycle() error = %v", err)
+	}
+	if err := store.UpdateCycleCurrent("TKT-400", now.Add(time.Second)); err != nil {
+		t.Fatalf("UpdateCycleCurrent() error = %v", err)
+	}
+	if err := store.RequestStopAfterCurrent(now.Add(2 * time.Second)); err != nil {
+		t.Fatalf("RequestStopAfterCurrent() error = %v", err)
+	}
+	state, ok, err := store.LoadCycleState()
+	if err != nil || !ok {
+		t.Fatalf("LoadCycleState() ok=%v err=%v", ok, err)
+	}
+	if !state.Active || state.CurrentTicketID != "TKT-400" || !state.StopAfterCurrent {
+		t.Fatalf("unexpected cycle state: %#v", state)
+	}
+	stopRequested, err := store.StopAfterCurrentRequested()
+	if err != nil {
+		t.Fatalf("StopAfterCurrentRequested() error = %v", err)
+	}
+	if !stopRequested {
+		t.Fatalf("expected stop request to be true")
+	}
+	if err := store.EndCycle(); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("EndCycle() error = %v", err)
+	}
+	if _, ok, err := store.LoadCycleState(); err != nil || ok {
+		t.Fatalf("expected no cycle state after EndCycle, ok=%v err=%v", ok, err)
+	}
+}

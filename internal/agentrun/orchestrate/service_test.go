@@ -80,6 +80,24 @@ func (v fakeValidator) Finalize(ctx context.Context, input agentrun.ValidationIn
 	return v.Validate(ctx, input)
 }
 
+type fakeValidatorWithFinalizeHook struct {
+	base         fakeValidator
+	finalizeHook func(input agentrun.ValidationInput) error
+}
+
+func (v fakeValidatorWithFinalizeHook) Validate(ctx context.Context, input agentrun.ValidationInput) (agentrun.ValidationResult, error) {
+	return v.base.Validate(ctx, input)
+}
+
+func (v fakeValidatorWithFinalizeHook) Finalize(ctx context.Context, input agentrun.ValidationInput) (agentrun.ValidationResult, error) {
+	if v.finalizeHook != nil {
+		if err := v.finalizeHook(input); err != nil {
+			return agentrun.ValidationResult{}, err
+		}
+	}
+	return v.base.Finalize(ctx, input)
+}
+
 type fakeSelector struct {
 	queue []agentrun.Selection
 	idx   int
@@ -471,6 +489,74 @@ func TestServiceRunNextReturnsSelectorReasonWhenNoRunnableTicketsRemain(t *testi
 	}
 	if len(summary.Runs) != 0 || summary.StopReason != "no runnable tickets remain" {
 		t.Fatalf("unexpected summary: %#v", summary)
+	}
+}
+
+func TestServiceRunNextHonorsStopAfterCurrentRequest(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, id := range []string{"TKT-410", "TKT-411"} {
+		if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+			ID:          id,
+			Seq:         410,
+			Title:       id,
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "desc",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		}); err != nil {
+			t.Fatalf("create %s: %v", id, err)
+		}
+	}
+
+	runtimeStore := runruntime.New(repoRoot)
+	validator := fakeValidator{}
+	calls := 0
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
+		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Adapter:   &recordingAdapter{},
+		Monitor: &fakeMonitor{queue: []agentrun.Observation{
+			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-410", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
+		}},
+		Validator: fakeValidatorWithFinalizeHook{
+			base: validator,
+			finalizeHook: func(input agentrun.ValidationInput) error {
+				calls++
+				if calls == 1 {
+					return runtimeStore.RequestStopAfterCurrent(time.Now())
+				}
+				return nil
+			},
+		},
+		Selector: &fakeSelector{queue: []agentrun.Selection{
+			{Found: true, TicketID: "TKT-410", Reason: "first"},
+			{Found: true, TicketID: "TKT-411", Reason: "second"},
+		}},
+		Runtime: runtimeStore,
+	})
+
+	summary, err := service.RunNext(context.Background())
+	if err != nil {
+		t.Fatalf("RunNext() error = %v", err)
+	}
+	if len(summary.Runs) != 1 || summary.Runs[0].TicketID != "TKT-410" {
+		t.Fatalf("expected one completed run before stop, got %#v", summary)
+	}
+	if summary.StopReason != "operator requested stop after current ticket" {
+		t.Fatalf("unexpected stop reason: %#v", summary)
 	}
 }
 

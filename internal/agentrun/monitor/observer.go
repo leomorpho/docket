@@ -40,6 +40,7 @@ func New(deps ...Dependencies) *Observer {
 type lineEvent struct {
 	stream string
 	line   string
+	done   bool
 }
 
 func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput) (agentrun.Observation, error) {
@@ -48,12 +49,10 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 	}
 
 	lines := make(chan lineEvent, 64)
-	stdoutDone := make(chan string, 1)
-	stderrDone := make(chan string, 1)
 	waitCh := make(chan error, 1)
 
-	go scanStream(input.Handle.Stdout(), "stdout", lines, stdoutDone)
-	go scanStream(input.Handle.Stderr(), "stderr", lines, stderrDone)
+	go scanStream(input.Handle.Stdout(), "stdout", lines)
+	go scanStream(input.Handle.Stderr(), "stderr", lines)
 	go func() {
 		waitCh <- input.Handle.Wait()
 	}()
@@ -83,8 +82,6 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 	waited := false
 	stdoutClosed := false
 	stderrClosed := false
-	stdoutProcessed := 0
-	stderrProcessed := 0
 	for {
 		if waited && stdoutClosed && stderrClosed {
 			return o.finalizeObservation(input, status, waitErr, stdoutLines, stderrLines)
@@ -111,12 +108,18 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 				TimedOut: true,
 			}, nil
 		case event := <-lines:
+			if event.done {
+				if event.stream == "stdout" {
+					stdoutClosed = true
+				} else {
+					stderrClosed = true
+				}
+				continue
+			}
 			if event.stream == "stdout" {
 				stdoutLines = append(stdoutLines, event.line)
-				stdoutProcessed++
 			} else {
 				stderrLines = append(stderrLines, event.line)
-				stderrProcessed++
 			}
 			o.applyLine(input.Record.TicketID, event.stream, event.line, &status)
 			if !timer.Stop() {
@@ -126,24 +129,6 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 				}
 			}
 			timer.Reset(timeout)
-		case combined := <-stdoutDone:
-			stdoutClosed = true
-			if combined != "" {
-				all := splitNonEmptyLines(combined)
-				stdoutLines = all
-				for _, line := range all[stdoutProcessed:] {
-					o.applyLine(input.Record.TicketID, "stdout", line, &status)
-				}
-			}
-		case combined := <-stderrDone:
-			stderrClosed = true
-			if combined != "" {
-				all := splitNonEmptyLines(combined)
-				stderrLines = all
-				for _, line := range all[stderrProcessed:] {
-					o.applyLine(input.Record.TicketID, "stderr", line, &status)
-				}
-			}
 		case err := <-waitCh:
 			waited = true
 			waitErr = err
@@ -264,19 +249,17 @@ func (o *Observer) updateProgressStatus(status *runruntime.StatusSnapshot, visib
 	}
 }
 
-func scanStream(r io.Reader, stream string, lines chan<- lineEvent, done chan<- string) {
+func scanStream(r io.Reader, stream string, lines chan<- lineEvent) {
 	if r == nil {
-		done <- ""
+		lines <- lineEvent{stream: stream, done: true}
 		return
 	}
-	var collected []string
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		collected = append(collected, line)
 		lines <- lineEvent{stream: stream, line: line}
 	}
-	done <- strings.Join(collected, "\n")
+	lines <- lineEvent{stream: stream, done: true}
 }
 
 func splitNonEmptyLines(content string) []string {

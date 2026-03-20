@@ -47,6 +47,7 @@ var rootCmd = &cobra.Command{
 		automationMode = false
 		runDisableReview = false
 		runInactivityLimit = 0
+		runWatch = false
 		if f := cmd.Root().PersistentFlags().Lookup("automation"); f != nil {
 			f.Changed = false
 		}

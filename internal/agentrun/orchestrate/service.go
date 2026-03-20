@@ -213,8 +213,28 @@ func (s *Service) RunNext(ctx context.Context) (agentrun.CycleSummary, error) {
 	if s.selector == nil {
 		return agentrun.CycleSummary{}, fmt.Errorf("selector is required")
 	}
+	if s.runtime != nil {
+		if err := s.runtime.BeginCycle(time.Now()); err != nil {
+			return agentrun.CycleSummary{}, err
+		}
+		defer func() { _ = s.runtime.EndCycle() }()
+	}
 	var summary agentrun.CycleSummary
 	for {
+		if s.runtime != nil {
+			stopRequested, err := s.runtime.StopAfterCurrentRequested()
+			if err != nil {
+				return summary, err
+			}
+			if stopRequested {
+				if len(summary.Runs) == 0 {
+					summary.StopReason = "operator requested stop before starting the next ticket"
+				} else {
+					summary.StopReason = "operator requested stop after current ticket"
+				}
+				return summary, nil
+			}
+		}
 		selection, err := s.selector.Next(ctx)
 		if err != nil {
 			return summary, err
@@ -225,6 +245,11 @@ func (s *Service) RunNext(ctx context.Context) (agentrun.CycleSummary, error) {
 				summary.StopReason = "no runnable tickets remain"
 			}
 			return summary, nil
+		}
+		if s.runtime != nil {
+			if err := s.runtime.UpdateCycleCurrent(selection.TicketID, time.Now()); err != nil {
+				return summary, err
+			}
 		}
 		runSummary, err := s.RunTicket(ctx, selection.TicketID)
 		if err != nil {

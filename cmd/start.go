@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/agentrun"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/security"
@@ -222,11 +223,11 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 }
 
 func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cfg *ticket.Config) error {
-	stopLogs := startLiveRunLogs(cmd, repo)
-	defer stopLogs()
 	svc := newRunOrchestrator(repo, runReviewEnabled())
 	if startAuto {
-		summary, err := svc.RunNext(ctx)
+		summary, err := executeCycleRun(cmd, func(ctx context.Context) (agentrun.CycleSummary, error) {
+			return svc.RunNext(ctx)
+		})
 		if err != nil {
 			return err
 		}
@@ -250,7 +251,9 @@ func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cf
 		return nil
 	}
 
-	summary, err := svc.RunTicket(ctx, t.ID)
+	summary, err := executeTicketRun(cmd, t.ID, func(ctx context.Context) (agentrun.TicketRunSummary, error) {
+		return svc.RunTicket(ctx, t.ID)
+	})
 	if err != nil {
 		return err
 	}
@@ -330,6 +333,7 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 func init() {
 	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion")
 	startCmd.Flags().BoolVar(&startRun, "run", false, "run the next workable ticket through the Codex flow instead of printing a prompt")
+	startCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	startCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the managed run hung after this much time without new Codex output")
 	rootCmd.AddCommand(startCmd)

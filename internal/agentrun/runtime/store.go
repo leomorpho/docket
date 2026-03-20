@@ -16,6 +16,7 @@ const (
 	transcriptFile = "transcript.json"
 	statusFile     = "status.json"
 	promptFile     = "prompt.txt"
+	cycleFile      = "cycle.json"
 )
 
 type TranscriptEntry struct {
@@ -42,6 +43,14 @@ type StatusSnapshot struct {
 	LastResultStatus  string `json:"last_result_status,omitempty"`
 }
 
+type CycleState struct {
+	Active           bool   `json:"active"`
+	CurrentTicketID  string `json:"current_ticket_id,omitempty"`
+	StopAfterCurrent bool   `json:"stop_after_current,omitempty"`
+	StartedAt        string `json:"started_at,omitempty"`
+	UpdatedAt        string `json:"updated_at,omitempty"`
+}
+
 type Store struct {
 	repoRoot string
 }
@@ -52,6 +61,10 @@ func New(repoRoot string) *Store {
 
 func (s *Store) RunsRootDir() string {
 	return artifacts.WriteRepoPath(s.repoRoot, artifacts.RepoAgentRunsDir)
+}
+
+func (s *Store) RuntimeRootDir() string {
+	return filepath.Dir(s.RunsRootDir())
 }
 
 func (s *Store) RunDir(ticketID string) string {
@@ -141,6 +154,86 @@ func (s *Store) LoadPrompt(ticketID string) (string, error) {
 
 func (s *Store) Cleanup(ticketID string) error {
 	return os.RemoveAll(s.RunDir(ticketID))
+}
+
+func (s *Store) BeginCycle(now time.Time) error {
+	return s.WriteCycleState(CycleState{
+		Active:    true,
+		StartedAt: now.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: now.UTC().Format(time.RFC3339Nano),
+	})
+}
+
+func (s *Store) UpdateCycleCurrent(ticketID string, now time.Time) error {
+	state, _, err := s.LoadCycleState()
+	if err != nil {
+		return err
+	}
+	state.Active = true
+	state.CurrentTicketID = ticketID
+	if state.StartedAt == "" {
+		state.StartedAt = now.UTC().Format(time.RFC3339Nano)
+	}
+	state.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
+	return s.WriteCycleState(state)
+}
+
+func (s *Store) RequestStopAfterCurrent(now time.Time) error {
+	state, _, err := s.LoadCycleState()
+	if err != nil {
+		return err
+	}
+	state.StopAfterCurrent = true
+	state.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
+	return s.WriteCycleState(state)
+}
+
+func (s *Store) StopAfterCurrentRequested() (bool, error) {
+	state, ok, err := s.LoadCycleState()
+	if err != nil || !ok {
+		return false, err
+	}
+	return state.StopAfterCurrent, nil
+}
+
+func (s *Store) WriteCycleState(state CycleState) error {
+	return writeJSON(filepath.Join(s.RuntimeRootDir(), cycleFile), state)
+}
+
+func (s *Store) LoadCycleState() (CycleState, bool, error) {
+	data, err := os.ReadFile(filepath.Join(s.RuntimeRootDir(), cycleFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return CycleState{}, false, nil
+		}
+		return CycleState{}, false, err
+	}
+	var state CycleState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return CycleState{}, false, err
+	}
+	return state, true, nil
+}
+
+func (s *Store) EndCycle() error {
+	return os.Remove(filepath.Join(s.RuntimeRootDir(), cycleFile))
+}
+
+func (s *Store) ListRunTicketIDs() ([]string, error) {
+	entries, err := os.ReadDir(s.RunsRootDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			ids = append(ids, entry.Name())
+		}
+	}
+	return ids, nil
 }
 
 func appendFile(path string, line []byte) error {

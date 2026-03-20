@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/leomorpho/docket/internal/agentrun"
 	"github.com/leomorpho/docket/internal/agentrun/codex"
 	"github.com/leomorpho/docket/internal/agentrun/monitor"
@@ -18,6 +19,7 @@ import (
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/tui"
 	"github.com/leomorpho/docket/internal/vcs"
 	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
@@ -28,6 +30,7 @@ const DefaultRunInactivityTimeout = 10 * time.Minute
 var (
 	runDisableReview   bool
 	runInactivityLimit time.Duration
+	runWatch           bool
 )
 
 var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
@@ -186,10 +189,10 @@ var runTicketCmd = &cobra.Command{
 	Short: "Run one ticket through the Codex implementer flow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		stopLogs := startLiveRunLogs(cmd, repo)
-		defer stopLogs()
 		svc := newRunOrchestrator(repo, runReviewEnabled())
-		summary, err := svc.RunTicket(context.Background(), args[0])
+		summary, err := executeTicketRun(cmd, args[0], func(ctx context.Context) (agentrun.TicketRunSummary, error) {
+			return svc.RunTicket(ctx, args[0])
+		})
 		if err != nil {
 			return err
 		}
@@ -201,10 +204,10 @@ var runNextCmd = &cobra.Command{
 	Use:   "run-next",
 	Short: "Run the next logical tickets serially until exhausted or blocked",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		stopLogs := startLiveRunLogs(cmd, repo)
-		defer stopLogs()
 		svc := newRunOrchestrator(repo, runReviewEnabled())
-		summary, err := svc.RunNext(context.Background())
+		summary, err := executeCycleRun(cmd, func(ctx context.Context) (agentrun.CycleSummary, error) {
+			return svc.RunNext(ctx)
+		})
 		if err != nil {
 			return err
 		}
@@ -257,14 +260,27 @@ var runResumeCmd = &cobra.Command{
 	Short: "Resume a hung ticket run in a fresh Codex session",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		stopLogs := startLiveRunLogs(cmd, repo)
-		defer stopLogs()
 		svc := newRunOrchestrator(repo, runReviewEnabled())
-		summary, err := svc.ResumeTicket(context.Background(), args[0])
+		summary, err := executeTicketRun(cmd, args[0], func(ctx context.Context) (agentrun.TicketRunSummary, error) {
+			return svc.ResumeTicket(ctx, args[0])
+		})
 		if err != nil {
 			return err
 		}
 		return renderTicketRunSummary(cmd, summary)
+	},
+}
+
+var runWatchCmd = &cobra.Command{
+	Use:   "run-watch [TKT-NNN]",
+	Short: "Open an interactive dashboard for active managed runs",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ticketID := ""
+		if len(args) == 1 {
+			ticketID = args[0]
+		}
+		return runWatchDashboard(repo, ticketID, nil, false)
 	},
 }
 
@@ -299,15 +315,82 @@ func renderCycleSummary(cmd *cobra.Command, summary agentrun.CycleSummary) error
 	return nil
 }
 
+func executeTicketRun(cmd *cobra.Command, ticketID string, run func(context.Context) (agentrun.TicketRunSummary, error)) (agentrun.TicketRunSummary, error) {
+	if !runWatch {
+		stopLogs := startLiveRunLogs(cmd, repo)
+		defer stopLogs()
+		return run(context.Background())
+	}
+	return runTicketWithWatch(repo, ticketID, run)
+}
+
+func executeCycleRun(cmd *cobra.Command, run func(context.Context) (agentrun.CycleSummary, error)) (agentrun.CycleSummary, error) {
+	if !runWatch {
+		stopLogs := startLiveRunLogs(cmd, repo)
+		defer stopLogs()
+		return run(context.Background())
+	}
+	return runCycleWithWatch(repo, run)
+}
+
+func runTicketWithWatch(repoRoot, ticketID string, run func(context.Context) (agentrun.TicketRunSummary, error)) (agentrun.TicketRunSummary, error) {
+	type watchResult struct {
+		summary agentrun.TicketRunSummary
+		err     error
+	}
+	doneCh := make(chan struct{})
+	resultCh := make(chan watchResult, 1)
+	go func() {
+		defer close(doneCh)
+		summary, err := run(context.Background())
+		resultCh <- watchResult{summary: summary, err: err}
+	}()
+	if err := runWatchDashboard(repoRoot, ticketID, doneCh, true); err != nil {
+		return agentrun.TicketRunSummary{}, err
+	}
+	res := <-resultCh
+	return res.summary, res.err
+}
+
+func runCycleWithWatch(repoRoot string, run func(context.Context) (agentrun.CycleSummary, error)) (agentrun.CycleSummary, error) {
+	type watchResult struct {
+		summary agentrun.CycleSummary
+		err     error
+	}
+	doneCh := make(chan struct{})
+	resultCh := make(chan watchResult, 1)
+	go func() {
+		defer close(doneCh)
+		summary, err := run(context.Background())
+		resultCh <- watchResult{summary: summary, err: err}
+	}()
+	if err := runWatchDashboard(repoRoot, "", doneCh, true); err != nil {
+		return agentrun.CycleSummary{}, err
+	}
+	res := <-resultCh
+	return res.summary, res.err
+}
+
+func runWatchDashboard(repoRoot, ticketID string, doneCh <-chan struct{}, quitOnDone bool) error {
+	model := tui.NewRunWatchModel(repoRoot, ticketID, doneCh, quitOnDone)
+	program := tea.NewProgram(model, tea.WithAltScreen())
+	_, err := program.Run()
+	return err
+}
+
 func init() {
 	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
+	runTicketCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
+	runNextCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the run hung after this much time without new Codex output")
 	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the run hung after this much time without new Codex output")
 	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
+	runResumeCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	runResumeCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the resumed run hung after this much time without new Codex output")
 	rootCmd.AddCommand(runTicketCmd)
 	rootCmd.AddCommand(runNextCmd)
 	rootCmd.AddCommand(runStatusCmd)
 	rootCmd.AddCommand(runResumeCmd)
+	rootCmd.AddCommand(runWatchCmd)
 }
