@@ -24,7 +24,7 @@ import (
 const DefaultRunInactivityTimeout = 10 * time.Minute
 
 var (
-	runWithReview      bool
+	runDisableReview   bool
 	runInactivityLimit time.Duration
 )
 
@@ -64,6 +64,10 @@ func runActor() string {
 	return actor
 }
 
+func runReviewEnabled() bool {
+	return !runDisableReview
+}
+
 func runInactivityLimitOrDefault() time.Duration {
 	if runInactivityLimit > 0 {
 		return runInactivityLimit
@@ -76,7 +80,7 @@ var runTicketCmd = &cobra.Command{
 	Short: "Run one ticket through the Codex implementer flow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newRunOrchestrator(repo, runWithReview)
+		svc := newRunOrchestrator(repo, runReviewEnabled())
 		summary, err := svc.RunTicket(context.Background(), args[0])
 		if err != nil {
 			return err
@@ -89,7 +93,7 @@ var runNextCmd = &cobra.Command{
 	Use:   "run-next",
 	Short: "Run the next logical tickets serially until exhausted or blocked",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newRunOrchestrator(repo, runWithReview)
+		svc := newRunOrchestrator(repo, runReviewEnabled())
 		summary, err := svc.RunNext(context.Background())
 		if err != nil {
 			return err
@@ -143,7 +147,7 @@ var runResumeCmd = &cobra.Command{
 	Short: "Resume a hung ticket run in a fresh Codex session",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newRunOrchestrator(repo, runWithReview)
+		svc := newRunOrchestrator(repo, runReviewEnabled())
 		summary, err := svc.ResumeTicket(context.Background(), args[0])
 		if err != nil {
 			return err
@@ -184,11 +188,11 @@ func renderCycleSummary(cmd *cobra.Command, summary agentrun.CycleSummary) error
 }
 
 func init() {
-	runTicketCmd.Flags().BoolVar(&runWithReview, "review", false, "run one optional reviewer pass with a single capped fix-review loop")
-	runNextCmd.Flags().BoolVar(&runWithReview, "review", false, "run one optional reviewer pass with a single capped fix-review loop")
+	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
+	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the run hung after this much time without new Codex output")
 	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the run hung after this much time without new Codex output")
-	runResumeCmd.Flags().BoolVar(&runWithReview, "review", false, "run one optional reviewer pass with a single capped fix-review loop")
+	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runResumeCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the resumed run hung after this much time without new Codex output")
 	rootCmd.AddCommand(runTicketCmd)
 	rootCmd.AddCommand(runNextCmd)

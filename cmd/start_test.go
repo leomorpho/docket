@@ -422,14 +422,14 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
-	prevRunWithReview := runWithReview
+	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
 	t.Cleanup(func() {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
-		runWithReview = prevRunWithReview
+		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
 	})
@@ -439,7 +439,7 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
-	runWithReview = false
+	runDisableReview = false
 
 	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -484,8 +484,8 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 	if gotTicket != "TKT-501" {
 		t.Fatalf("expected start --run to choose TKT-501, got %q", gotTicket)
 	}
-	if gotReview {
-		t.Fatalf("expected review disabled by default")
+	if !gotReview {
+		t.Fatalf("expected review enabled by default")
 	}
 	if got := out.String(); !strings.Contains(got, "TKT-501: done") {
 		t.Fatalf("unexpected output: %s", got)
@@ -496,14 +496,14 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
-	prevRunWithReview := runWithReview
+	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
 	t.Cleanup(func() {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
-		runWithReview = prevRunWithReview
+		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
 	})
@@ -512,7 +512,7 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
-	runWithReview = false
+	runDisableReview = false
 	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -549,6 +549,71 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "TKT-601: done") || !strings.Contains(got, "Stopped: blocked") {
 		t.Fatalf("unexpected output: %s", got)
+	}
+}
+
+func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
+	prev := newRunOrchestrator
+	prevStartRun := startRun
+	prevStartAuto := startAuto
+	prevNoReview := runDisableReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		startRun = prevStartRun
+		startAuto = prevStartAuto
+		runDisableReview = prevNoReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	tmpRepo := t.TempDir()
+	repo = tmpRepo
+	format = "human"
+	startRun = false
+	startAuto = false
+	runDisableReview = false
+
+	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(tmpRepo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-502",
+		Seq:         502,
+		Title:       "Managed start no review",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	var gotReview bool
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		gotReview = enableReview
+		return stubRunOrchestrator{
+			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
+				return agentrun.TicketRunSummary{TicketID: ticketID, Status: agentrun.StatusDone}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"start", "--run", "--no-review"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start --run --no-review failed: %v\n%s", err, out.String())
+	}
+	if gotReview {
+		t.Fatalf("expected --no-review to disable reviewer loop")
 	}
 }
 

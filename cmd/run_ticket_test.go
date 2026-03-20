@@ -40,8 +40,16 @@ func (s stubRunOrchestrator) ResumeTicket(ctx context.Context, ticketID string) 
 
 func TestRunTicketCmdRendersJSONSummary(t *testing.T) {
 	prev := newRunOrchestrator
-	t.Cleanup(func() { newRunOrchestrator = prev })
+	prevNoReview := runDisableReview
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		runDisableReview = prevNoReview
+	})
+	runDisableReview = false
 	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		if !enableReview {
+			t.Fatalf("expected review enabled by default")
+		}
 		return stubRunOrchestrator{
 			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
 				return agentrun.TicketRunSummary{TicketID: ticketID, Status: agentrun.StatusDone, Reason: "validated and advanced"}, nil
@@ -70,8 +78,16 @@ func TestRunTicketCmdRendersJSONSummary(t *testing.T) {
 
 func TestRunNextCmdRendersHumanSummary(t *testing.T) {
 	prev := newRunOrchestrator
-	t.Cleanup(func() { newRunOrchestrator = prev })
+	prevNoReview := runDisableReview
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		runDisableReview = prevNoReview
+	})
+	runDisableReview = false
 	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		if !enableReview {
+			t.Fatalf("expected review enabled by default")
+		}
 		return stubRunOrchestrator{
 			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
 				return agentrun.CycleSummary{
@@ -97,6 +113,39 @@ func TestRunNextCmdRendersHumanSummary(t *testing.T) {
 
 	if got := out.String(); !bytes.Contains([]byte(got), []byte("TKT-376: done")) || !bytes.Contains([]byte(got), []byte("Stopped: review changes required")) {
 		t.Fatalf("unexpected output: %s", got)
+	}
+}
+
+func TestRunTicketCmdNoReviewDisablesReviewerLoop(t *testing.T) {
+	prev := newRunOrchestrator
+	prevNoReview := runDisableReview
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		runDisableReview = prevNoReview
+	})
+	runDisableReview = false
+
+	var gotReview bool
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		gotReview = enableReview
+		return stubRunOrchestrator{
+			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
+				return agentrun.TicketRunSummary{TicketID: ticketID, Status: agentrun.StatusDone}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	repo = t.TempDir()
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-ticket", "TKT-376", "--no-review"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-ticket --no-review failed: %v\n%s", err, out.String())
+	}
+	if gotReview {
+		t.Fatalf("expected --no-review to disable reviewer loop")
 	}
 }
 
