@@ -185,3 +185,40 @@ func TestStoreCycleStateAndStopRequestLifecycle(t *testing.T) {
 		t.Fatalf("expected no cycle state after EndCycle, ok=%v err=%v", ok, err)
 	}
 }
+
+func TestLoadStatusReconcilesDeadActiveProcessToHung(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-401",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "codex",
+		RepoRoot:     repoRoot,
+		WorktreePath: filepath.Join(repoRoot, "wt"),
+		Branch:       "docket/TKT-401",
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:    "session-401",
+	}
+	if err := store.Init(record, "prompt body", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{
+		TicketID:          record.TicketID,
+		SessionID:         record.SessionID,
+		PID:               999999,
+		Active:            true,
+		InactivityTimeout: "10m0s",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	status, ok, err := store.LoadStatus(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.Active || !status.Hung || status.LastResultStatus != string(agentrun.StatusFailed) {
+		t.Fatalf("expected dead process to reconcile to hung failed state, got %#v", status)
+	}
+}

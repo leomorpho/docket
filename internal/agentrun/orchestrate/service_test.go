@@ -721,6 +721,114 @@ func TestServiceRunTicketStopsAfterSingleFixReviewLoopWhenReviewerStillRequestsC
 	}
 }
 
+func TestServiceRunTicketFailsWhenReviewerOmitsReviewLine(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-375",
+		Seq:         375,
+		Title:       "Review contract",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   time.Now().UTC().Truncate(time.Second),
+		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	impl := &recordingAdapter{}
+	reviewer := &recordingAdapter{}
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
+		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Adapter:   impl,
+		Reviewer:  reviewer,
+		Monitor: &fakeMonitor{queue: []agentrun.Observation{
+			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-375", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
+			{Result: agentrun.Result{Status: agentrun.StatusFailed, TicketID: "TKT-375", Role: agentrun.RoleReviewer, Reason: "process exited without RESULT line"}},
+		}},
+		Validator: fakeValidator{},
+	})
+
+	summary, err := service.RunTicket(context.Background(), "TKT-375")
+	if err != nil {
+		t.Fatalf("RunTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusFailed || !strings.Contains(summary.Reason, "process exited without RESULT line") {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	impl.mu.Lock()
+	defer impl.mu.Unlock()
+	if got := strings.Join(impl.starts, ","); got != "TKT-375" {
+		t.Fatalf("expected no fix loop after reviewer contract failure, got implementer starts %s", got)
+	}
+}
+
+func TestServiceRunTicketFailsWhenReviewerEmitsMalformedReviewLine(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-375",
+		Seq:         375,
+		Title:       "Review contract",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   time.Now().UTC().Truncate(time.Second),
+		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	impl := &recordingAdapter{}
+	reviewer := &recordingAdapter{}
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
+		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Adapter:   impl,
+		Reviewer:  reviewer,
+		Monitor: &fakeMonitor{queue: []agentrun.Observation{
+			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-375", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
+			{Review: &agentrun.ReviewResult{Status: agentrun.ReviewChangesRequired, TicketID: "TKT-375", Role: agentrun.RoleReviewer, RequiredChanges: "malformed REVIEW line: invalid result line"}},
+		}},
+		Validator: fakeValidator{},
+	})
+
+	summary, err := service.RunTicket(context.Background(), "TKT-375")
+	if err != nil {
+		t.Fatalf("RunTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusFailed || !strings.Contains(summary.Reason, "malformed REVIEW line") {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	impl.mu.Lock()
+	defer impl.mu.Unlock()
+	if got := strings.Join(impl.starts, ","); got != "TKT-375" {
+		t.Fatalf("expected no fix loop after malformed review line, got implementer starts %s", got)
+	}
+}
+
 func TestServiceResumeTicketUsesHungRuntimeStateAndCleansUpOnSuccess(t *testing.T) {
 	t.Parallel()
 

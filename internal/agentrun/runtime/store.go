@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/leomorpho/docket/internal/agentrun"
@@ -141,6 +143,12 @@ func (s *Store) LoadStatus(ticketID string) (StatusSnapshot, bool, error) {
 	if err := json.Unmarshal(data, &status); err != nil {
 		return StatusSnapshot{}, false, err
 	}
+	if reconciled, changed := reconcileRuntimeStatus(status); changed {
+		status = reconciled
+		if err := s.WriteStatus(status); err != nil {
+			return StatusSnapshot{}, false, err
+		}
+	}
 	return status, true, nil
 }
 
@@ -247,6 +255,29 @@ func appendFile(path string, line []byte) error {
 	defer f.Close()
 	_, err = f.Write(line)
 	return err
+}
+
+func reconcileRuntimeStatus(status StatusSnapshot) (StatusSnapshot, bool) {
+	if !status.Active || status.PID <= 0 {
+		return status, false
+	}
+	if processAlive(status.PID) {
+		return status, false
+	}
+	status.Active = false
+	status.Hung = true
+	if status.LastResultStatus == "" {
+		status.LastResultStatus = string(agentrun.StatusFailed)
+	}
+	return status, true
+}
+
+func processAlive(pid int) bool {
+	err := syscall.Kill(pid, syscall.Signal(0))
+	if err == nil {
+		return true
+	}
+	return !errors.Is(err, syscall.ESRCH)
 }
 
 func writeJSON(path string, payload any) error {

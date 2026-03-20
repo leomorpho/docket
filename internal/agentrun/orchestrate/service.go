@@ -2,6 +2,7 @@ package orchestrate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -51,6 +52,14 @@ type StartedRun struct {
 	Record       agentrun.RunRecord
 	WorktreePath string
 	Branch       string
+}
+
+type reviewerContractError struct {
+	reason string
+}
+
+func (e reviewerContractError) Error() string {
+	return e.reason
 }
 
 func New(deps Dependencies) *Service {
@@ -179,6 +188,15 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 	if s.reviewer != nil {
 		review, currentResult, err := s.runReviewerLoop(ctx, ticketID, started.WorktreePath, started.Branch, obs.Result)
 		if err != nil {
+			var reviewErr reviewerContractError
+			if errors.As(err, &reviewErr) {
+				_ = s.cleanupRuntime(ticketID)
+				return agentrun.TicketRunSummary{
+					TicketID: ticketID,
+					Status:   agentrun.StatusFailed,
+					Reason:   reviewErr.reason,
+				}, nil
+			}
 			return agentrun.TicketRunSummary{}, err
 		}
 		if review.Status != agentrun.ReviewApproved {
@@ -426,12 +444,14 @@ func (s *Service) runReview(ctx context.Context, ticketID, worktreePath, branch 
 		return agentrun.ReviewResult{}, err
 	}
 	if obs.Review == nil {
-		return agentrun.ReviewResult{
-			Status:          agentrun.ReviewChangesRequired,
-			TicketID:        ticketID,
-			Role:            agentrun.RoleReviewer,
-			RequiredChanges: "reviewer did not emit a REVIEW line",
-		}, nil
+		reason := strings.TrimSpace(obs.Result.Reason)
+		if reason == "" {
+			reason = "reviewer did not emit a REVIEW line"
+		}
+		return agentrun.ReviewResult{}, reviewerContractError{reason: reason}
+	}
+	if strings.Contains(obs.Review.RequiredChanges, "malformed REVIEW line") {
+		return agentrun.ReviewResult{}, reviewerContractError{reason: obs.Review.RequiredChanges}
 	}
 	return *obs.Review, nil
 }
