@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/ticket"
 	"gopkg.in/yaml.v3"
 )
@@ -77,7 +78,7 @@ func builtinACDefaults(stack string) []ticket.AcceptanceCriterion {
 }
 
 func configACDefaults(repoRoot, stack string) ([]ticket.AcceptanceCriterion, bool) {
-	configPath := filepath.Join(repoRoot, ".docket", "config.yaml")
+	configPath := artifacts.RepoPath(repoRoot, artifacts.RepoConfigYAML)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, false

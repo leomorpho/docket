@@ -2034,7 +2034,7 @@
     },
     "TKT-367": {
       "title": "Refactor workflow service start and finish transitions to resolve active and review targets from config roles",
-      "state": "todo",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-310"
     },

@@ -32,6 +32,32 @@ func GetRepoRoot(repoRoot string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// SharedRepoRoot returns the canonical shared repository root for Docket-managed
+// metadata. In a normal checkout this is the repo root; in a git worktree it is
+// the main checkout that owns the shared git common dir.
+func SharedRepoRoot(repoRoot string) string {
+	repoRoot = strings.TrimSpace(repoRoot)
+	if repoRoot == "" {
+		return ""
+	}
+	if commonDir, err := GetGitCommonDir(repoRoot); err == nil && strings.TrimSpace(commonDir) != "" {
+		if absRoot, absErr := filepath.Abs(filepath.Dir(commonDir)); absErr == nil {
+			if resolved, resolveErr := filepath.EvalSymlinks(absRoot); resolveErr == nil {
+				return resolved
+			}
+			return absRoot
+		}
+		return filepath.Dir(commonDir)
+	}
+	if absRoot, err := filepath.Abs(repoRoot); err == nil {
+		if resolved, resolveErr := filepath.EvalSymlinks(absRoot); resolveErr == nil {
+			return resolved
+		}
+		return absRoot
+	}
+	return repoRoot
+}
+
 // IsWorktree returns true if the given directory is a git worktree.
 func IsWorktree(repoRoot string) (bool, error) {
 	out, err := runGit(repoRoot, "rev-parse", "--is-inside-work-tree")

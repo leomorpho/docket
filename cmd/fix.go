@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -78,7 +79,7 @@ func runFixOne(cmd *cobra.Command, s *local.Store, id string) error {
 }
 
 func runFixAll(cmd *cobra.Command, s *local.Store) error {
-	ticketsDir := filepath.Join(repo, ".docket", "tickets")
+	ticketsDir := artifacts.RepoPath(repo, artifacts.RepoTicketsDir)
 	entries, err := os.ReadDir(ticketsDir)
 	if err != nil {
 		return err

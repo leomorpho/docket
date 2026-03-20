@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
@@ -24,12 +24,13 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		prepareVersionNotice(cmd)
+		repoRoot := ticketRepoRoot(repo)
 
 		// Tamper detection is non-blocking but runs on command startup.
-		if _, err := os.Stat(filepath.Join(repo, ".docket", "config.json")); err != nil {
+		if _, err := os.Stat(artifacts.RepoPath(repoRoot, artifacts.RepoConfigJSON)); err != nil {
 			return nil
 		}
-		s := local.New(repo)
+		s := local.New(repoRoot)
 		changes, err := s.DetectTamperingAll(context.Background())
 		if err != nil {
 			return nil

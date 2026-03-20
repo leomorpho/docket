@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -198,6 +200,65 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "BLOCKED by TKT-001") {
 		t.Fatalf("expected in-review blocker to be treated as resolved by config, got:\n%s", out.String())
+	}
+}
+
+func TestListCmd_UsesSharedRepoRootWhenInvokedFromWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "context"
+	listFull = false
+	listState = "open"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := local.New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Canonical ticket", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "seed ticket")
+
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-001")
+	runGitSession(t, tmpDir, "worktree", "add", "-b", "docket/test-list", worktreePath)
+
+	worktreeTicketPath := filepath.Join(worktreePath, ".docket", "tickets", "TKT-001.md")
+	raw, err := os.ReadFile(worktreeTicketPath)
+	if err != nil {
+		t.Fatalf("read worktree ticket: %v", err)
+	}
+	stale := strings.Replace(string(raw), "state: todo", "state: in-progress", 1)
+	if stale == string(raw) {
+		t.Fatal("expected worktree ticket state line to be rewritten")
+	}
+	if err := os.WriteFile(worktreeTicketPath, []byte(stale), 0o644); err != nil {
+		t.Fatalf("write stale worktree ticket: %v", err)
+	}
+
+	oldRepo := repo
+	repo = worktreePath
+	t.Cleanup(func() { repo = oldRepo })
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list", "--format", "context"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list from worktree failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "[TKT-001] P1 todo") {
+		t.Fatalf("expected list to read canonical root state, got:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "[TKT-001] P1 in-progress") {
+		t.Fatalf("expected stale worktree state to be ignored, got:\n%s", out.String())
 	}
 }
 

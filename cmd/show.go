@@ -28,7 +28,8 @@ var showCmd = &cobra.Command{
 		if normalized, ok := ticket.NormalizeID(id); ok {
 			id = normalized
 		}
-		s := local.New(repo)
+		repoRoot := ticketRepoRoot(repo)
+		s := local.New(repoRoot)
 		ctx := context.Background()
 
 		if showWeb {
@@ -58,7 +59,7 @@ var showCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("listing proofs: %w", err)
 		}
-		transitions, err := loadTicketTransitionHistory(repo, id)
+		transitions, err := loadTicketTransitionHistory(repoRoot, id)
 		if err != nil {
 			return fmt.Errorf("loading transition history: %w", err)
 		}
@@ -282,7 +283,7 @@ func printTicketJSON(cmd *cobra.Command, t *ticket.Ticket, proofs []proof.Record
 }
 
 func ticketRelationsLine(id string) string {
-	st, err := loadRelations(repo)
+	st, err := loadRelations(ticketRepoRoot(repo))
 	if err != nil || len(st.Relations) == 0 {
 		return ""
 	}

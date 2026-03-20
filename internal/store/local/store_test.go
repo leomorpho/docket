@@ -3,10 +3,12 @@ package local
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -494,5 +496,37 @@ func TestUpdateTransitions(t *testing.T) {
 	res, _ = s.GetTicket(ctx, "TKT-001")
 	if res.CompletedAt.IsZero() {
 		t.Error("expected CompletedAt to be set")
+	}
+}
+
+func TestNewUsesSharedRootFromWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	runGitStore(t, tmpDir, "init")
+	runGitStore(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitStore(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	runGitStore(t, tmpDir, "add", ".")
+	runGitStore(t, tmpDir, "commit", "-m", "seed")
+
+	worktreePath := filepath.Join(tmpDir, "wt")
+	runGitStore(t, tmpDir, "worktree", "add", "-b", "docket/test-store", worktreePath)
+
+	sharedRoot := docketgit.SharedRepoRoot(tmpDir)
+	s := New(worktreePath)
+	if s.RepoRoot != sharedRoot {
+		t.Fatalf("Store.RepoRoot = %q, want shared root %q", s.RepoRoot, sharedRoot)
+	}
+	if got := s.ticketPath("TKT-001"); got != filepath.Join(sharedRoot, ".docket", "tickets", "TKT-001.md") {
+		t.Fatalf("ticketPath() = %q", got)
+	}
+}
+
+func runGitStore(t *testing.T, repoRoot string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repoRoot}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }

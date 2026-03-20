@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/artifacts"
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
@@ -41,7 +42,8 @@ func TestSessionAttachListResolveAndCompressMark(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("sessions count = %d, want 1", len(files))
 	}
-	if got, want := files[0].Path, filepath.Join(repo, ".docket", "local", "tickets", "TKT-001", "sessions", filepath.Base(files[0].Path)); got != want {
+	canonicalRepo := docketgit.SharedRepoRoot(repo)
+	if got, want := files[0].Path, filepath.Join(canonicalRepo, ".docket", "local", "tickets", "TKT-001", "sessions", filepath.Base(files[0].Path)); got != want {
 		t.Fatalf("session path = %q, want %q", got, want)
 	}
 

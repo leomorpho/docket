@@ -2,10 +2,13 @@ package artifacts
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	docketgit "github.com/leomorpho/docket/internal/git"
 )
 
 func TestRegistryCoversCoreManagedArtifacts(t *testing.T) {
@@ -131,6 +134,36 @@ func TestReadRepoPathPrefersCanonicalThenLegacy(t *testing.T) {
 	}
 }
 
+func TestRepoPathsResolveToSharedRootFromWorktree(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	runGitArtifact(t, repoRoot, "init")
+	runGitArtifact(t, repoRoot, "config", "user.email", "test@example.com")
+	runGitArtifact(t, repoRoot, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(repoRoot, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	runGitArtifact(t, repoRoot, "add", ".")
+	runGitArtifact(t, repoRoot, "commit", "-m", "seed")
+
+	worktreePath := filepath.Join(repoRoot, "wt")
+	runGitArtifact(t, repoRoot, "worktree", "add", "-b", "docket/test-paths", worktreePath)
+
+	sharedRoot := docketgit.SharedRepoRoot(tmpDirCanonical(t, repoRoot))
+	got := RepoPath(worktreePath, RepoConfigJSON)
+	want := filepath.Join(sharedRoot, ".docket", "config.json")
+	if got != want {
+		t.Fatalf("RepoPath(worktree) = %q, want shared root %q", got, want)
+	}
+
+	got = CanonicalRepoPath(worktreePath, RepoLifecycleEvents)
+	want = filepath.Join(sharedRoot, ".docket", "local", "runtime", "lifecycle-events.jsonl")
+	if got != want {
+		t.Fatalf("CanonicalRepoPath(worktree) = %q, want shared root %q", got, want)
+	}
+}
+
 func TestLocalOnlyRepoArtifactsDeclareCanonicalLocalLayout(t *testing.T) {
 	t.Parallel()
 
@@ -225,4 +258,23 @@ func contains(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func runGitArtifact(t *testing.T, repoRoot string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repoRoot}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
+}
+
+func tmpDirCanonical(t *testing.T, path string) string {
+	t.Helper()
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }

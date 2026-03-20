@@ -56,6 +56,7 @@ exit 0
 
 func commitMsgHookScript() string {
 	ticketsRelDir := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoTicketsDir))
+	configRelPath := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoConfigJSON))
 	return `#!/bin/sh
 set -eu
 
@@ -90,7 +91,7 @@ import sys
 
 repo_root = pathlib.Path(sys.argv[1])
 ticket_id = sys.argv[2]
-ticket_path = repo_root / ".docket" / "tickets" / f"{ticket_id}.md"
+ticket_path = repo_root / pathlib.PurePosixPath("` + ticketsRelDir + `") / f"{ticket_id}.md"
 if not ticket_path.exists():
     raise SystemExit(0)
 
@@ -100,7 +101,7 @@ if not match:
 state = match.group(1).strip()
 
 closed_states = {"done", "archived"}
-config_path = repo_root / ".docket" / "config.json"
+config_path = repo_root / pathlib.PurePosixPath("` + configRelPath + `")
 try:
     config = json.loads(config_path.read_text())
     states = config.get("states") or {}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -178,6 +179,74 @@ func TestShowCmd_AcceptsBracketedTicketIDFromContextList(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "TKT-001 · todo") {
 		t.Fatalf("expected ticket details for canonical id, got:\n%s", out.String())
+	}
+}
+
+func TestShowCmd_UsesSharedRepoRootWhenInvokedFromWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-111",
+		Seq:         111,
+		Title:       "Canonical root ticket",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+	}); err != nil {
+		t.Fatalf("create ticket failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed ticket")
+
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-111")
+	if err := docketgit.CreateWorktree(tmpDir, "TKT-111", "docket/TKT-111", worktreePath); err != nil {
+		t.Fatalf("create worktree failed: %v", err)
+	}
+
+	worktreeTicketPath := filepath.Join(worktreePath, ".docket", "tickets", "TKT-111.md")
+	raw, err := os.ReadFile(worktreeTicketPath)
+	if err != nil {
+		t.Fatalf("read worktree ticket failed: %v", err)
+	}
+	stale := strings.Replace(string(raw), "state: todo", "state: in-progress", 1)
+	if stale == string(raw) {
+		t.Fatal("expected worktree ticket state line to be rewritten")
+	}
+	if err := os.WriteFile(worktreeTicketPath, []byte(stale), 0o644); err != nil {
+		t.Fatalf("write stale worktree ticket failed: %v", err)
+	}
+
+	oldRepo := repo
+	repo = worktreePath
+	t.Cleanup(func() { repo = oldRepo })
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"show", "TKT-111"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("show from worktree failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-111 · todo") {
+		t.Fatalf("expected show to read canonical root ticket state, got:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "TKT-111 · in-progress") {
+		t.Fatalf("expected stale worktree state to be ignored, got:\n%s", out.String())
 	}
 }
 

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/leomorpho/docket/internal/applyspec"
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -177,7 +177,7 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 			}
 			return backlogApplyOutput{}, fmt.Errorf("creating %s failed: %w", id, err)
 		}
-		createdFiles = append(createdFiles, filepath.Join(repoRoot, ".docket", "tickets", id+".md"))
+		createdFiles = append(createdFiles, artifacts.RepoPath(repoRoot, artifacts.RepoTicketsDir, id+".md"))
 	}
 
 	return backlogApplyOutput{
@@ -201,7 +201,7 @@ func reserveBacklogIDs(repoRoot string, count int, s *local.Store) ([]idAllocati
 	if err != nil {
 		return nil, nil, fmt.Errorf("read config snapshot: %w", err)
 	}
-	manifestPath := filepath.Join(repoRoot, ".docket", "manifest.json")
+	manifestPath := artifacts.RepoPath(repoRoot, artifacts.RepoManifest)
 	manifestSnapshot, manifestExists, err := readOptionalFile(manifestPath)
 	if err != nil {
 		return nil, nil, err

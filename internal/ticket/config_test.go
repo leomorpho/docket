@@ -3,9 +3,12 @@ package ticket
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	docketgit "github.com/leomorpho/docket/internal/git"
 )
 
 func TestDefaultConfigSemanticDefaults(t *testing.T) {
@@ -181,6 +184,52 @@ func TestLoadConfigWorkflowV1Schema(t *testing.T) {
 	}
 }
 
+func TestConfigPathUsesSharedRootFromWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	runGitConfig(t, tmpDir, "init")
+	runGitConfig(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitConfig(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	runGitConfig(t, tmpDir, "add", ".")
+	runGitConfig(t, tmpDir, "commit", "-m", "seed")
+
+	worktreePath := filepath.Join(tmpDir, "wt")
+	runGitConfig(t, tmpDir, "worktree", "add", "-b", "docket/test-config", worktreePath)
+
+	sharedRoot := docketgit.SharedRepoRoot(tmpDir)
+	if got, want := ConfigPath(worktreePath), filepath.Join(sharedRoot, ".docket", "config.json"); got != want {
+		t.Fatalf("ConfigPath(worktree) = %q, want %q", got, want)
+	}
+}
+
+func TestSaveConfigPreservesFalseWorkflowBooleans(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultConfig()
+	review := cfg.States["in-review"]
+	review.BlocksDependents = false
+	review.Reviewable = false
+	cfg.States["in-review"] = review
+
+	if err := SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	loaded, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	reloaded := loaded.States["in-review"]
+	if reloaded.BlocksDependents {
+		t.Fatal("BlocksDependents should remain false after save/load")
+	}
+	if reloaded.Reviewable {
+		t.Fatal("Reviewable should remain false after save/load")
+	}
+}
+
 func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -320,6 +369,14 @@ func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.substr, err)
 			}
 		})
+	}
+}
+
+func runGitConfig(t *testing.T, repoRoot string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repoRoot}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
 

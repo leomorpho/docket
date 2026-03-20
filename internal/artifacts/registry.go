@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	docketgit "github.com/leomorpho/docket/internal/git"
 )
 
 type Key string
@@ -155,6 +157,7 @@ func RepoPath(repoRoot string, key Key, more ...string) string {
 	if entry.Root != RootRepo {
 		panic("artifact is not repo-rooted: " + string(key))
 	}
+	repoRoot = docketgit.SharedRepoRoot(repoRoot)
 	parts := append([]string{repoRoot, entry.RelPath}, more...)
 	return filepath.Join(parts...)
 }
@@ -198,6 +201,7 @@ func CanonicalRepoPath(repoRoot string, key Key, more ...string) string {
 	if entry.Root != RootRepo {
 		panic("artifact is not repo-rooted: " + string(key))
 	}
+	repoRoot = docketgit.SharedRepoRoot(repoRoot)
 	base := entry.RelPath
 	if entry.CanonicalRelPath != "" {
 		base = entry.CanonicalRelPath

@@ -44,10 +44,10 @@ type WorkflowStateConfig struct {
 type WorkflowStateSemantics struct {
 	Roles            []string `json:"roles,omitempty"`
 	Open             bool     `json:"open"`
-	Terminal         bool     `json:"terminal,omitempty"`
-	Startable        bool     `json:"startable,omitempty"`
-	Reviewable       bool     `json:"reviewable,omitempty"`
-	BlocksDependents bool     `json:"blocks_dependents,omitempty"`
+	Terminal         bool     `json:"terminal"`
+	Startable        bool     `json:"startable"`
+	Reviewable       bool     `json:"reviewable"`
+	BlocksDependents bool     `json:"blocks_dependents"`
 	Next             []string `json:"next"`
 }
 
@@ -70,13 +70,13 @@ type StateConfig struct {
 	// Roles describes semantic workflow roles like intake, active, review, completed, archived.
 	Roles []string `json:"roles,omitempty"`
 	// Terminal indicates a closed terminal state in the workflow graph.
-	Terminal bool `json:"terminal,omitempty"`
+	Terminal bool `json:"terminal"`
 	// Startable marks states that are valid intake points for work selection.
-	Startable bool `json:"startable,omitempty"`
+	Startable bool `json:"startable"`
 	// Reviewable marks states that require or represent review-oriented handoff.
-	Reviewable bool `json:"reviewable,omitempty"`
+	Reviewable bool `json:"reviewable"`
 	// BlocksDependents indicates whether tickets in this state still block downstream work.
-	BlocksDependents bool `json:"blocks_dependents,omitempty"`
+	BlocksDependents bool `json:"blocks_dependents"`
 }
 
 type Config struct {

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
@@ -301,7 +302,7 @@ func autoRepairTicketSignature(s *local.Store, id string) error {
 }
 
 func listTicketIDs(repoRoot string) ([]string, error) {
-	ticketsDir := filepath.Join(repoRoot, ".docket", "tickets")
+	ticketsDir := artifacts.RepoPath(repoRoot, artifacts.RepoTicketsDir)
 	entries, err := os.ReadDir(ticketsDir)
 	if err != nil {
 		if os.IsNotExist(err) {

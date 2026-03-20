@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/store/local"
 )
 
@@ -30,6 +31,7 @@ type checkpoint struct {
 }
 
 func checkpointsDir(repoRoot string) string {
+	repoRoot = docketgit.SharedRepoRoot(repoRoot)
 	return filepath.Join(repoRoot, ".docket", "checkpoints")
 }
 

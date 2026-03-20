@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 var (
@@ -183,13 +185,13 @@ func readAdapterHint(repoRoot string) string {
 	if strings.TrimSpace(repoRoot) == "" {
 		return ""
 	}
-	adapterPath := filepath.Join(repoRoot, ".docket", "adapter")
+	adapterPath := artifacts.RepoPath(repoRoot, artifacts.RepoAdapter)
 	if raw, err := os.ReadFile(adapterPath); err == nil {
 		if hint := strings.TrimSpace(strings.ToLower(string(raw))); hint != "" {
 			return hint
 		}
 	}
-	cfgPath := filepath.Join(repoRoot, ".docket", "config.json")
+	cfgPath := artifacts.RepoPath(repoRoot, artifacts.RepoConfigJSON)
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return ""

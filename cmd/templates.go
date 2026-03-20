@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/ticket"
 	"gopkg.in/yaml.v3"
 )
@@ -43,7 +43,7 @@ var builtinTemplates = map[string][]ticket.AcceptanceCriterion{
 }
 
 func loadUserTemplate(repoRoot, name string) ([]ticket.AcceptanceCriterion, bool) {
-	path := filepath.Join(repoRoot, ".docket", "templates", name+".yaml")
+	path := artifacts.RepoPath(repoRoot, artifacts.RepoTemplatesDir, name+".yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, false
@@ -78,7 +78,7 @@ func listTemplates(repoRoot string) []string {
 	for k := range builtinTemplates {
 		names[k] = true
 	}
-	userDir := filepath.Join(repoRoot, ".docket", "templates")
+	userDir := artifacts.RepoPath(repoRoot, artifacts.RepoTemplatesDir)
 	if entries, err := os.ReadDir(userDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {

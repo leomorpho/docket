@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/proof"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -35,7 +36,7 @@ var (
 )
 
 func New(repoRoot string) *Store {
-	absRepo, _ := filepath.Abs(repoRoot)
+	absRepo := docketgit.SharedRepoRoot(repoRoot)
 
 	storesMu.Lock()
 	defer storesMu.Unlock()
