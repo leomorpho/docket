@@ -18,7 +18,6 @@ import (
 
 var (
 	startAuto bool
-	startYolo bool
 	startRun  bool
 )
 
@@ -27,8 +26,7 @@ var startCmd = &cobra.Command{
 	Short: "Automatically pick up and start the next best ticket",
 	Long: `Identify the next unblocked high-priority ticket in an open state,
 claims it, creates a worktree for it if needed, and transitions it to the repo's configured active work state.
-In --auto mode, it will continue to the next ticket after each completion.
-In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM agents.`,
+In --auto mode, it will continue to the next ticket after each completion.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deps := newRuntimeDeps(repo)
 		s := deps.store
@@ -153,7 +151,7 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 			return failStart("security.record_run_routing", fmt.Errorf("recording run routing metadata: %w", err))
 		}
 		lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, lifecycle.StatusOK)
-		instruction := startInstruction(t.ID, startYolo)
+		instruction := startInstruction(t.ID)
 		capabilityDigest := buildStartCapabilityDigest(repo)
 		learnReplay := buildLearnReplay(repo, t, 3)
 		quickPath := buildLLMQuickPath()
@@ -172,7 +170,6 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 				"active_workflow_hash": activeWorkflowHash,
 				"managed_run_branch":   managedBranch,
 				"managed_run_worktree": worktreePath,
-				"yolo_mode":            startYolo,
 				"agent_instruction":    instruction,
 				"capability_digest":    capabilityDigest,
 				"learn_replay":         learnReplay,
@@ -278,30 +275,14 @@ func renderStartNoTicketIntro(cmd *cobra.Command, cfg *ticket.Config, runtimePol
 	fmt.Fprintf(cmd.OutOrStdout(), "====================\n")
 }
 
-func startInstruction(ticketID string, yolo bool) string {
-	perTicket := []string{
+func startInstruction(ticketID string) string {
+	lines := []string{
+		fmt.Sprintf("Work only ticket %s in this run.", ticketID),
 		"Use test-driven development.",
 		"Analyze requirements, write or update tests first, then implement the smallest passing change.",
 		"Before moving on, update ticket state/comments with `docket` commands and commit with a `Ticket: <TKT-NNN>` trailer.",
+		fmt.Sprintf("Use `Ticket: %s` in your commit trailer for this ticket.", ticketID),
 	}
-	if !yolo {
-		lines := []string{
-			fmt.Sprintf("Work only ticket %s in this run.", ticketID),
-		}
-		lines = append(lines, perTicket...)
-		lines = append(lines, fmt.Sprintf("Use `Ticket: %s` in your commit trailer for this ticket.", ticketID))
-		return strings.Join(lines, "\n")
-	}
-	lines := []string{
-		"YOLO mode: Work through all viable open tickets one at a time.",
-		"At each step, run `docket list --state open --format context` and pick the most viable unblocked ticket.",
-		"If a ticket is underspecified or non-viable, groom it first: analyze code impact, update the ticket details/AC with `docket` commands, then implement.",
-	}
-	lines = append(lines, perTicket...)
-	lines = append(lines,
-		"After each ticket commit, identify the next best ticket and repeat.",
-		"Stop when no viable tickets remain.",
-	)
 	return strings.Join(lines, "\n")
 }
 
@@ -346,7 +327,6 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 
 func init() {
 	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion")
-	startCmd.Flags().BoolVar(&startYolo, "yolo", false, "print a multi-ticket autonomous prompt for LLM agents")
 	startCmd.Flags().BoolVar(&startRun, "run", false, "run the next workable ticket through the Codex flow instead of printing a prompt")
 	startCmd.Flags().BoolVar(&runWithReview, "review", false, "run one optional reviewer pass with a single capped fix-review loop")
 	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the managed run hung after this much time without new Codex output")
