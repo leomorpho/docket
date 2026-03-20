@@ -84,6 +84,41 @@ func TestObserverParsesStructuredResultFromCodexJSONEvent(t *testing.T) {
 	}
 }
 
+func TestObserverCapturesPlainStdoutVisibleText(t *testing.T) {
+	t.Parallel()
+
+	handle := &fakeHandle{
+		stdout: bytes.NewBufferString("I am reading the code now\nRESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\n"),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	handle.waitCh <- nil
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer, SessionID: "session-plain"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	transcript, err := store.LoadTranscript("TKT-381")
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) == 0 || transcript[0].Text != "I am reading the code now" {
+		t.Fatalf("expected plain stdout to be captured, got %#v", transcript)
+	}
+}
+
 func TestObserverParsesStructuredReviewFromCodexJSONEvent(t *testing.T) {
 	t.Parallel()
 

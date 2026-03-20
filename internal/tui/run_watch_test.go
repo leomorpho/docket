@@ -36,10 +36,13 @@ func TestRunWatchModelToggleAndStopRequest(t *testing.T) {
 	}
 
 	model := NewRunWatchModel(repoRoot, "TKT-500", nil, false, nil)
+	if model.mode != watchModeLog {
+		t.Fatalf("expected watch to default to log mode, got %s", model.mode)
+	}
 	gotModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	toggled := gotModel.(RunWatchModel)
-	if toggled.mode != watchModeLog {
-		t.Fatalf("expected log mode, got %s", toggled.mode)
+	if toggled.mode != watchModeSummary {
+		t.Fatalf("expected toggle to switch to summary mode, got %s", toggled.mode)
 	}
 	gotModel, _ = toggled.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	afterStop := gotModel.(RunWatchModel)
@@ -148,7 +151,7 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	if strings.Contains(view, "m menu") {
 		t.Fatalf("view should not advertise menu key without launcher options: %q", view)
 	}
-	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "inspect repo") {
+	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "PLAN ticket=TKT-700 steps=3") {
 		t.Fatalf("view missing summary content: %q", view)
 	}
 }
@@ -247,6 +250,42 @@ func TestRunWatchModelMenuNavigationAndReturn(t *testing.T) {
 	}
 }
 
+func TestRunWatchModelFollowAndOverviewControls(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, nil)
+	model.snapshot.transcript = []runruntime.TranscriptEntry{
+		{Text: "line 1"},
+		{Text: "line 2"},
+		{Text: "line 3"},
+	}
+	model.height = 10
+
+	gotModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	toggledOverview := gotModel.(RunWatchModel)
+	if toggledOverview.showOverview {
+		t.Fatalf("expected h to hide overview")
+	}
+
+	gotModel, _ = toggledOverview.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	scrolled := gotModel.(RunWatchModel)
+	if scrolled.followLog {
+		t.Fatalf("expected manual scroll to disable follow mode")
+	}
+
+	gotModel, _ = scrolled.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	following := gotModel.(RunWatchModel)
+	if !following.followLog {
+		t.Fatalf("expected G to re-enable follow mode")
+	}
+
+	gotModel, _ = following.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	top := gotModel.(RunWatchModel)
+	if top.followLog || top.scrollOffset != 0 {
+		t.Fatalf("expected g to jump to top and disable follow, got %#v", top)
+	}
+}
+
 func TestRunWatchProgramQuitsOnQ(t *testing.T) {
 	t.Parallel()
 
@@ -269,5 +308,55 @@ func TestRunWatchProgramQuitsOnQ(t *testing.T) {
 	)
 	if _, err := program.Run(); err != nil {
 		t.Fatalf("program.Run() error = %v", err)
+	}
+}
+
+func TestRunWatchModelViewWrapsLongVisibleLines(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-888",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-888",
+		SessionID:    "session-888",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:        "TKT-888",
+		SessionID:       "session-888",
+		Active:          true,
+		LastEventAt:     now,
+		LastVisibleText: strings.Repeat("very long visible text ", 8),
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+	if err := store.AppendTranscript("TKT-888", runruntime.TranscriptEntry{
+		At:   now,
+		Text: strings.Repeat("wrapped visible transcript line ", 8),
+	}); err != nil {
+		t.Fatalf("AppendTranscript() error = %v", err)
+	}
+
+	model := NewRunWatchModel(repoRoot, "TKT-888", nil, false, nil)
+	model.width = 60
+	model.height = 20
+	snapshot, err := loadRunWatchSnapshot(store, "TKT-888")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	model.snapshot = snapshot
+	view := model.View()
+	if strings.Contains(view, strings.Repeat("wrapped visible transcript line ", 4)) {
+		t.Fatalf("expected long transcript text to wrap, got:\n%s", view)
+	}
+	if !strings.Contains(view, "wrapped visible transcript line") {
+		t.Fatalf("expected visible transcript content in view, got:\n%s", view)
 	}
 }

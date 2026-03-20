@@ -146,7 +146,7 @@ func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.S
 	} else if o.runtime != nil {
 		_ = o.runtime.AppendStderr(ticketID, []byte(line+"\n"))
 	}
-	for _, visible := range visibleTextsFromLine(line) {
+	for _, visible := range visibleTextsFromLine(stream, line) {
 		status.LastVisibleAt = now.Format(time.RFC3339Nano)
 		status.LastVisibleText = visible
 		o.updateProgressStatus(status, visible)
@@ -347,7 +347,7 @@ type codexJSONEvent struct {
 	Item codexJSONItem `json:"item"`
 }
 
-func visibleTextsFromLine(line string) []string {
+func visibleTextsFromLine(stream, line string) []string {
 	line = strings.TrimSpace(line)
 	switch {
 	case strings.HasPrefix(line, "PLAN "),
@@ -359,6 +359,9 @@ func visibleTextsFromLine(line string) []string {
 	}
 	var event codexJSONEvent
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		if stream == "stdout" && line != "" {
+			return []string{line}
+		}
 		return nil
 	}
 	text := strings.TrimSpace(event.Item.Text)
@@ -377,7 +380,7 @@ func visibleTextsFromLine(line string) []string {
 }
 
 func resultTextFromLine(line string) string {
-	for _, text := range visibleTextsFromLine(line) {
+	for _, text := range visibleTextsFromLine("stdout", line) {
 		if strings.HasPrefix(text, "RESULT ") {
 			return text
 		}
@@ -386,7 +389,7 @@ func resultTextFromLine(line string) string {
 }
 
 func reviewTextFromLine(line string) string {
-	for _, text := range visibleTextsFromLine(line) {
+	for _, text := range visibleTextsFromLine("stdout", line) {
 		if strings.HasPrefix(text, "REVIEW ") {
 			return text
 		}

@@ -63,6 +63,9 @@ type RunWatchModel struct {
 	selectedOption int
 	launching      bool
 	mode           watchMode
+	showOverview   bool
+	followLog      bool
+	scrollOffset   int
 	width          int
 	height         int
 	statusMessage  string
@@ -118,7 +121,9 @@ func NewRunWatchModel(repoRoot string, focusTicketID string, doneCh <-chan struc
 		repoRoot:      repoRoot,
 		store:         runruntime.New(repoRoot),
 		focusTicketID: focusTicketID,
-		mode:          watchModeSummary,
+		mode:          watchModeLog,
+		showOverview:  true,
+		followLog:     true,
 		doneCh:        doneCh,
 		quitOnDone:    quitOnDone,
 	}
@@ -142,11 +147,15 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case runWatchLoadedMsg:
+		prevTranscriptLen := len(m.snapshot.transcript)
 		if msg.err != nil {
 			m.statusMessage = "watch refresh failed: " + msg.err.Error()
 			return m, nil
 		}
 		m.snapshot = msg.snapshot
+		if m.followLog && len(m.snapshot.transcript) >= prevTranscriptLen {
+			m.scrollOffset = max(0, len(m.snapshot.transcript)-m.bodyViewportHeight())
+		}
 		if m.snapshot.ticketID == "" {
 			m.statusMessage = "waiting for managed run"
 		} else if m.snapshot.cycle.StopAfterCurrent {
@@ -191,11 +200,17 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.selectedOption < 0 {
 					m.selectedOption = len(m.launchOptions) - 1
 				}
+			} else if m.launchMode == launchModeWatch && m.scrollOffset > 0 {
+				m.followLog = false
+				m.scrollOffset--
 			}
 			return m, nil
 		case "down", "j":
 			if m.launchMode == launchModeMenu && len(m.launchOptions) > 0 {
 				m.selectedOption = (m.selectedOption + 1) % len(m.launchOptions)
+			} else if m.launchMode == launchModeWatch {
+				m.followLog = false
+				m.scrollOffset++
 			}
 			return m, nil
 		case "enter":
@@ -211,6 +226,25 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = watchModeLog
 			} else {
 				m.mode = watchModeSummary
+			}
+			m.scrollOffset = 0
+			m.followLog = true
+			return m, nil
+		case "g":
+			if m.launchMode == launchModeWatch {
+				m.followLog = false
+				m.scrollOffset = 0
+			}
+			return m, nil
+		case "G":
+			if m.launchMode == launchModeWatch {
+				m.followLog = true
+				m.scrollOffset = max(0, len(m.snapshot.transcript)-m.bodyViewportHeight())
+			}
+			return m, nil
+		case "h":
+			if m.launchMode == launchModeWatch {
+				m.showOverview = !m.showOverview
 			}
 			return m, nil
 		case "s":
@@ -305,36 +339,52 @@ func (m RunWatchModel) renderLogBody() string {
 
 func (m RunWatchModel) renderMenuView() string {
 	header := m.renderHeader("Managed Run Launcher", "choose a mode and start from the dashboard")
-	menu := runWatchActiveCardStyle.Render(m.renderMenuBody())
+	contentWidth := m.contentWidth()
+	menu := runWatchActiveCardStyle.Copy().Width(contentWidth).Render(m.renderMenuBody())
 	help := runWatchHelpStyle.Render("keys: " + menuKeyLegend())
 	sections := []string{header, menu}
-	if m.statusMessage != "" {
-		sections = append(sections, m.renderStatusBanner())
+	if m.shouldRenderStatusBanner() {
+		sections = append(sections, m.renderStatusBanner(contentWidth))
 	}
 	sections = append(sections, help)
-	return runWatchShellStyle.Render(strings.Join(sections, "\n\n"))
+	return runWatchShellStyle.Render(m.padToHeight(strings.Join(sections, "\n\n")))
 }
 
 func (m RunWatchModel) renderWatchView() string {
 	header := m.renderHeader("Managed Run Watch", m.renderHeaderMeta())
-	mainCardStyle := runWatchActiveCardStyle
-	if m.snapshot.ticketID == "" {
-		mainCardStyle = runWatchMutedCardStyle
+	contentWidth := m.contentWidth()
+	sections := []string{header}
+	if m.showOverview {
+		mainCardStyle := runWatchActiveCardStyle.Copy().Width(contentWidth)
+		if m.snapshot.ticketID == "" {
+			mainCardStyle = runWatchMutedCardStyle.Copy().Width(contentWidth)
+		}
+		summaryCard := mainCardStyle.Render(m.renderWatchSummaryCard(contentWidth))
+		sections = append(sections, summaryCard)
 	}
-	summaryCard := mainCardStyle.Render(m.renderWatchSummaryCard())
-	bodyTitle := "Summary"
-	bodyContent := m.renderSummaryBody()
+	bodyTitle := "Visible Session Log"
+	bodyContent := m.renderLogBody()
 	if m.mode == watchModeLog {
-		bodyTitle = "Transcript"
+		bodyTitle = "Visible Session Log"
 		bodyContent = m.renderLogBody()
+	} else {
+		bodyTitle = "Run Summary"
+		bodyContent = m.renderSummaryBody()
 	}
-	bodyCard := runWatchCardStyle.Render(bodyTitle + "\n\n" + bodyContent)
-	sections := []string{header, summaryCard, bodyCard}
-	if m.showDoneNotice || m.statusMessage != "" {
-		sections = append(sections, m.renderStatusBanner())
+	bodyCard := runWatchCardStyle.Copy().Width(contentWidth).Render(bodyTitle + "\n\n" + m.renderScrollableBody(bodyContent, contentWidth))
+	statusBanner := ""
+	if m.showDoneNotice || m.shouldRenderStatusBanner() {
+		statusBanner = m.renderStatusBanner(contentWidth)
 	}
-	sections = append(sections, runWatchHelpStyle.Render("keys: "+m.runWatchKeyLegend()))
-	return runWatchShellStyle.Render(strings.Join(sections, "\n\n"))
+	footer := m.renderFooter(contentWidth)
+
+	sections = append(sections, bodyCard)
+	if statusBanner != "" {
+		sections = append(sections, statusBanner)
+	}
+	sections = append(sections, footer)
+	content := strings.Join(sections, "\n\n")
+	return runWatchShellStyle.Render(m.padToHeight(content))
 }
 
 func (m RunWatchModel) renderHeader(title, subtitle string) string {
@@ -359,7 +409,7 @@ func (m RunWatchModel) renderHeaderMeta() string {
 	return strings.Join(parts, "  •  ")
 }
 
-func (m RunWatchModel) renderWatchSummaryCard() string {
+func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 	rows := []string{
 		m.renderKeyValue("Ticket", valueOrFallback(m.snapshot.ticketID, "(none)")),
 		m.renderKeyValue("Run state", m.renderRunState()),
@@ -398,12 +448,12 @@ func (m RunWatchModel) renderStepProgress() string {
 	return prefix + "  " + m.snapshot.status.CurrentStepTitle
 }
 
-func (m RunWatchModel) renderStatusBanner() string {
+func (m RunWatchModel) renderStatusBanner(contentWidth int) string {
 	lines := make([]string, 0, 2)
 	if m.showDoneNotice {
 		lines = append(lines, runWatchStatusOKStyle.Render("Run finished"))
 	}
-	if m.statusMessage != "" {
+	if m.shouldRenderStatusBanner() {
 		lines = append(lines, m.statusMessage)
 	}
 	style := runWatchMutedCardStyle
@@ -412,6 +462,7 @@ func (m RunWatchModel) renderStatusBanner() string {
 	} else if m.snapshot.cycle.StopAfterCurrent || m.launching {
 		style = runWatchCardStyle.Copy().BorderForeground(lipgloss.Color("214"))
 	}
+	style = style.Width(contentWidth)
 	return style.Render(strings.Join(lines, "\n"))
 }
 
@@ -420,6 +471,109 @@ func (m RunWatchModel) renderKeyValue(key, value string) string {
 		runWatchSubtleStyle.Width(12).Render(strings.ToUpper(key)),
 		value,
 	)
+}
+
+func (m RunWatchModel) renderScrollableBody(content string, contentWidth int) string {
+	innerWidth := max(20, contentWidth-6)
+	wrapped := lipgloss.NewStyle().Width(innerWidth).Render(content)
+	lines := strings.Split(wrapped, "\n")
+	viewportHeight := m.bodyViewportHeight()
+	if viewportHeight <= 0 || len(lines) <= viewportHeight {
+		marker := "showing all lines"
+		if m.followLog {
+			marker += "  •  follow"
+		}
+		hint := runWatchSubtleStyle.Render(marker)
+		return strings.TrimRight(wrapped, "\n") + "\n\n" + hint
+	}
+	maxOffset := len(lines) - viewportHeight
+	offset := m.scrollOffset
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	maxOffset = max(0, maxOffset)
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+	visible := lines[offset : offset+viewportHeight]
+	position := "scroll " + strconv.Itoa(offset+1) + "-" + strconv.Itoa(offset+len(visible)) + " of " + strconv.Itoa(len(lines))
+	if m.followLog {
+		position += "  •  follow"
+	}
+	topMarker := runWatchSubtleStyle.Render(position)
+	return strings.Join(visible, "\n") + "\n\n" + topMarker
+}
+
+func (m RunWatchModel) renderFooter(contentWidth int) string {
+	help := runWatchHelpStyle.Render("keys: " + m.runWatchKeyLegend())
+	status := runWatchSubtleStyle.Render("")
+	if m.showDoneNotice {
+		status = runWatchStatusOKStyle.Render("run finished")
+	} else if m.shouldRenderFooterStatus() {
+		status = runWatchSubtleStyle.Render(m.statusMessage)
+	}
+	if status == "" {
+		status = runWatchSubtleStyle.Render(" ")
+	}
+	if contentWidth < lipgloss.Width(help)+lipgloss.Width(status)+2 {
+		return help + "\n" + lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Right).Render(status)
+	}
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		help,
+		lipgloss.NewStyle().Width(max(0, contentWidth-lipgloss.Width(help))).Align(lipgloss.Right).Render(status),
+	)
+}
+
+func (m RunWatchModel) shouldRenderStatusBanner() bool {
+	switch strings.TrimSpace(m.statusMessage) {
+	case "", "watching managed run", "waiting for managed run":
+		return false
+	default:
+		return true
+	}
+}
+
+func (m RunWatchModel) shouldRenderFooterStatus() bool {
+	switch strings.TrimSpace(m.statusMessage) {
+	case "", "watching managed run":
+		return false
+	default:
+		return true
+	}
+}
+
+func (m RunWatchModel) padToHeight(content string) string {
+	if m.height <= 0 {
+		return content
+	}
+	contentLines := lipgloss.Height(content)
+	target := max(0, m.height-2)
+	if contentLines >= target {
+		return content
+	}
+	return content + strings.Repeat("\n", target-contentLines)
+}
+
+func (m RunWatchModel) contentWidth() int {
+	if m.width <= 0 {
+		return 96
+	}
+	return max(40, m.width-6)
+}
+
+func (m RunWatchModel) bodyViewportHeight() int {
+	if m.height <= 0 {
+		return 14
+	}
+	base := m.height - 18
+	if base < 6 {
+		return 6
+	}
+	return base
 }
 
 func valueOrFallback(value, fallback string) string {
@@ -546,7 +700,7 @@ func RunWatchKeys() []string {
 }
 
 func (m RunWatchModel) runWatchKeyLegend() string {
-	parts := []string{"l/tab toggle logs", "s stop after current", "r refresh"}
+	parts := []string{"l/tab toggle", "j/k scroll", "g top", "G follow", "h overview", "s stop", "r refresh"}
 	if len(m.launchOptions) > 0 {
 		parts = append(parts, "m menu")
 	}
@@ -568,4 +722,11 @@ func renderLegend(parts ...string) string {
 		items = append(items, runWatchKeyStyle.Render(parts[i])+" "+parts[i+1])
 	}
 	return strings.Join(items, "  •  ")
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
