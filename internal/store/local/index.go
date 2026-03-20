@@ -43,19 +43,27 @@ func (s *Store) isIndexStale() bool {
 func (s *Store) ensureIndex(ctx context.Context) error {
 	s.indexSyncMu.Lock()
 	defer s.indexSyncMu.Unlock()
+	if s.indexFresh && !s.isIndexStale() {
+		return nil
+	}
 	return s.syncIndexWithRetry(ctx)
 }
 
 func (s *Store) SyncIndex(ctx context.Context) error {
 	s.indexSyncMu.Lock()
 	defer s.indexSyncMu.Unlock()
+	s.indexFresh = false
 	return s.syncIndexWithRetry(ctx)
 }
 
 func (s *Store) syncIndexWithRetry(ctx context.Context) error {
-	return withSQLiteBusyRetry(ctx, "sync index", func() error {
+	err := withSQLiteBusyRetry(ctx, "sync index", func() error {
 		return s.syncIndexOnce(ctx)
 	})
+	if err == nil {
+		s.indexFresh = true
+	}
+	return err
 }
 
 func (s *Store) syncIndexOnce(ctx context.Context) error {

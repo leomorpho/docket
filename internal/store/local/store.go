@@ -24,6 +24,7 @@ type Store struct {
 	relIdx *RelationshipIndex
 
 	indexSyncMu sync.Mutex
+	indexFresh  bool
 
 	annotationSchemaOnce sync.Once
 	annotationSchemaErr  error

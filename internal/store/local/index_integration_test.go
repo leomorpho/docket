@@ -169,3 +169,43 @@ func TestListTicketsAutoRefreshesIndexAfterTicketFileChanges(t *testing.T) {
 		t.Fatalf("expected refreshed todo ticket after file edit, got %#v", tickets)
 	}
 }
+
+func TestListTicketsAfterExplicitSyncDoesNotResyncAndDuplicateRows(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("TKT-%03d", i)
+		if err := s.CreateTicket(ctx, &ticket.Ticket{
+			ID:          id,
+			Seq:         i,
+			State:       ticket.State("backlog"),
+			Priority:    i,
+			Title:       "fixture " + id,
+			Description: "fixture ticket for double-sync integration test",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "agent:test",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ok"}},
+		}); err != nil {
+			t.Fatalf("create fixture ticket %s: %v", id, err)
+		}
+	}
+
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex() error = %v", err)
+	}
+
+	tickets, err := s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.State("backlog")}})
+	if err != nil {
+		t.Fatalf("ListTickets() after explicit SyncIndex error = %v", err)
+	}
+	if len(tickets) != 3 {
+		t.Fatalf("expected 3 tickets after explicit sync, got %d: %#v", len(tickets), tickets)
+	}
+}
