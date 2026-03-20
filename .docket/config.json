@@ -1,5 +1,5 @@
 {
-  "counter": 374,
+  "counter": 382,
   "backend": "local",
   "states": {
     "archived": {
@@ -8,7 +8,14 @@
       "column": 5,
       "next": [
         "backlog"
-      ]
+      ],
+      "roles": [
+        "archived"
+      ],
+      "terminal": true,
+      "startable": false,
+      "reviewable": false,
+      "blocks_dependents": false
     },
     "backlog": {
       "label": "Backlog",
@@ -18,7 +25,14 @@
         "todo",
         "in-progress",
         "archived"
-      ]
+      ],
+      "roles": [
+        "intake"
+      ],
+      "terminal": false,
+      "startable": true,
+      "reviewable": false,
+      "blocks_dependents": true
     },
     "done": {
       "label": "Done",
@@ -27,7 +41,14 @@
       "next": [
         "archived",
         "in-progress"
-      ]
+      ],
+      "roles": [
+        "completed"
+      ],
+      "terminal": true,
+      "startable": false,
+      "reviewable": false,
+      "blocks_dependents": false
     },
     "in-progress": {
       "label": "In Progress",
@@ -37,7 +58,14 @@
         "in-review",
         "todo",
         "archived"
-      ]
+      ],
+      "roles": [
+        "active"
+      ],
+      "terminal": false,
+      "startable": false,
+      "reviewable": false,
+      "blocks_dependents": true
     },
     "in-review": {
       "label": "In Review",
@@ -47,7 +75,14 @@
         "done",
         "in-progress",
         "archived"
-      ]
+      ],
+      "roles": [
+        "review"
+      ],
+      "terminal": false,
+      "startable": false,
+      "reviewable": true,
+      "blocks_dependents": true
     },
     "stale": {
       "label": "Stale",
@@ -56,7 +91,11 @@
       "next": [
         "backlog",
         "archived"
-      ]
+      ],
+      "terminal": false,
+      "startable": false,
+      "reviewable": false,
+      "blocks_dependents": false
     },
     "todo": {
       "label": "To Do",
@@ -67,7 +106,13 @@
         "backlog",
         "archived"
       ],
-      "startable": true
+      "roles": [
+        "intake"
+      ],
+      "terminal": false,
+      "startable": true,
+      "reviewable": false,
+      "blocks_dependents": true
     }
   },
   "labels": [

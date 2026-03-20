@@ -2079,6 +2079,54 @@
       "state": "todo",
       "priority": 3,
       "parent": "TKT-310"
+    },
+    "TKT-375": {
+      "title": "Add one optional reviewer pass with a single capped fix-review loop for completed ticket runs",
+      "state": "todo",
+      "priority": 2,
+      "parent": "TKT-379"
+    },
+    "TKT-376": {
+      "title": "Implement run-next as a serial loop that selects the next runnable ticket and repeats until exhausted",
+      "state": "todo",
+      "priority": 2,
+      "parent": "TKT-379"
+    },
+    "TKT-377": {
+      "title": "Gate successful agent runs on final validation, clean repo state, and ticket transitions",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-379"
+    },
+    "TKT-378": {
+      "title": "Define the run contract, lifecycle states, and machine-readable result format for agent ticket runs",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-379"
+    },
+    "TKT-379": {
+      "title": "[Epic] Build serial Codex ticket execution with fresh sessions and a bounded review loop",
+      "state": "backlog",
+      "priority": 1,
+      "parent": "TKT-177"
+    },
+    "TKT-380": {
+      "title": "Implement a one-ticket Codex runner that creates a fresh worktree and launches a fresh session",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-379"
+    },
+    "TKT-381": {
+      "title": "Add run monitoring, RESULT parsing, and timeout handling for Codex-managed ticket runs",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-379"
+    },
+    "TKT-382": {
+      "title": "Define modular agent-run package boundaries and interfaces before orchestration implementation",
+      "state": "todo",
+      "priority": 1,
+      "parent": "TKT-379"
     }
   }
 }

@@ -479,6 +479,61 @@
       "from": "TKT-309",
       "to": "TKT-299",
       "relation": "blocks"
+    },
+    {
+      "from": "TKT-377",
+      "to": "TKT-375",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-377",
+      "to": "TKT-376",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-378",
+      "to": "TKT-380",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-378",
+      "to": "TKT-382",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-380",
+      "to": "TKT-381",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-381",
+      "to": "TKT-377",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-382",
+      "to": "TKT-375",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-382",
+      "to": "TKT-376",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-382",
+      "to": "TKT-377",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-382",
+      "to": "TKT-380",
+      "relation": "blocks"
+    },
+    {
+      "from": "TKT-382",
+      "to": "TKT-381",
+      "relation": "blocks"
     }
   ]
 }
