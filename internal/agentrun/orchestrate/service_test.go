@@ -51,6 +51,51 @@ func (a *recordingAdapter) Start(ctx context.Context, spec agentrun.RunSpec) (ag
 	return stubHandle{stdout: bytes.NewBufferString("")}, a.record, nil
 }
 
+type recordingResumableAdapter struct {
+	recordingAdapter
+	resumedSessionID string
+}
+
+func (a *recordingResumableAdapter) Resume(ctx context.Context, sessionID string, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+	a.resumedSessionID = sessionID
+	return a.Start(ctx, spec)
+}
+
+type pingResumableAdapter struct {
+	resumedSessionID string
+	prompt           string
+}
+
+func (a *pingResumableAdapter) ID() string { return "codex-session" }
+
+func (a *pingResumableAdapter) Start(ctx context.Context, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+	return stubHandle{stdout: bytes.NewBufferString("")}, agentrun.RunRecord{
+		TicketID:     spec.TicketID,
+		Role:         spec.Role,
+		Adapter:      a.ID(),
+		RepoRoot:     spec.RepoRoot,
+		WorktreePath: spec.WorktreePath,
+		Branch:       spec.Branch,
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:    "thread-ping",
+	}, nil
+}
+
+func (a *pingResumableAdapter) Resume(ctx context.Context, sessionID string, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+	a.resumedSessionID = sessionID
+	a.prompt = spec.Prompt
+	return stubHandle{stdout: bytes.NewBufferString("{\"type\":\"thread.started\",\"thread_id\":\"thread-ping\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"STATUS ticket=" + spec.TicketID + " phase=testing\\nSUMMARY ticket=" + spec.TicketID + " waiting=yes note=\\\"still running tests\\\"\"}}\n")}, agentrun.RunRecord{
+		TicketID:     spec.TicketID,
+		Role:         spec.Role,
+		Adapter:      a.ID(),
+		RepoRoot:     spec.RepoRoot,
+		WorktreePath: spec.WorktreePath,
+		Branch:       spec.Branch,
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:    sessionID,
+	}, nil
+}
+
 type fakeMonitor struct {
 	mu    sync.Mutex
 	queue []agentrun.Observation
@@ -951,6 +996,188 @@ func TestServiceResumeTicketUsesHungRuntimeStateAndCleansUpOnSuccess(t *testing.
 	}
 }
 
+func TestServiceResumeTicketUsesResumableAdapterWhenSessionIDIsKnown(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-376B",
+		Seq:         3761,
+		Title:       "Resume same session",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	flow := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	_, worktreePath, err := flow.StartTask(context.Background(), "TKT-376B", "agent:test", ticket.DefaultConfig())
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+	if err := namespace.RecordRunStart(repoRoot, "TKT-376B", "agent:test", worktreePath, "docket/TKT-376B", ""); err != nil {
+		t.Fatalf("RecordRunStart() error = %v", err)
+	}
+	runtimeStore := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-376B",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "recording",
+		RepoRoot:     repoRoot,
+		WorktreePath: worktreePath,
+		Branch:       "docket/TKT-376B",
+		StartedAt:    now.Format(time.RFC3339Nano),
+		SessionID:    "synthetic-old-session",
+	}
+	if err := runtimeStore.Init(record, "original prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := runtimeStore.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:          "TKT-376B",
+		SessionID:         "thread-actual-123",
+		Active:            false,
+		Hung:              true,
+		PlannedSteps:      2,
+		CurrentStep:       1,
+		CurrentStepTitle:  "inspect repo",
+		InactivityTimeout: "10m0s",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	adapter := &recordingResumableAdapter{}
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  flow,
+		Namespace: namespace,
+		Adapter:   adapter,
+		Monitor: &fakeMonitor{queue: []agentrun.Observation{
+			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-376B", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
+		}},
+		Validator: fakeValidator{},
+		Runtime:   runtimeStore,
+	})
+
+	summary, err := service.ResumeTicket(context.Background(), "TKT-376B")
+	if err != nil {
+		t.Fatalf("ResumeTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	if adapter.resumedSessionID != "thread-actual-123" {
+		t.Fatalf("Resume() used session %q, want thread-actual-123", adapter.resumedSessionID)
+	}
+}
+
+func TestServicePingTicketUsesSameSessionAndAppendsTranscript(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-393",
+		Seq:         393,
+		Title:       "Ping status",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	flow := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	_, worktreePath, err := flow.StartTask(context.Background(), "TKT-393", "agent:test", ticket.DefaultConfig())
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+	if err := namespace.RecordRunStart(repoRoot, "TKT-393", "agent:test", worktreePath, "docket/TKT-393", ""); err != nil {
+		t.Fatalf("RecordRunStart() error = %v", err)
+	}
+	runtimeStore := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-393",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "codex-session",
+		RepoRoot:     repoRoot,
+		WorktreePath: worktreePath,
+		Branch:       "docket/TKT-393",
+		StartedAt:    now.Format(time.RFC3339Nano),
+		SessionID:    "thread-original-393",
+	}
+	if err := runtimeStore.Init(record, "original prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := runtimeStore.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:          "TKT-393",
+		SessionID:         "thread-original-393",
+		Active:            true,
+		CurrentPhase:      "testing",
+		LastVisibleText:   "go test ./...",
+		InactivityTimeout: "10m0s",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	adapter := &pingResumableAdapter{}
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  flow,
+		Namespace: namespace,
+		Adapter:   adapter,
+		Runtime:   runtimeStore,
+	})
+
+	summary, err := service.PingTicket(context.Background(), "TKT-393")
+	if err != nil {
+		t.Fatalf("PingTicket() error = %v", err)
+	}
+	if adapter.resumedSessionID != "thread-original-393" {
+		t.Fatalf("Resume() used session %q, want thread-original-393", adapter.resumedSessionID)
+	}
+	if len(summary.Lines) != 2 || !strings.Contains(summary.Lines[1], "SUMMARY ticket=TKT-393") {
+		t.Fatalf("unexpected ping summary: %#v", summary)
+	}
+	status, ok, err := runtimeStore.LoadStatus("TKT-393")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.CurrentPhase != "testing" || !strings.Contains(status.LastVisibleText, "SUMMARY ticket=TKT-393") {
+		t.Fatalf("unexpected status after ping: %#v", status)
+	}
+	transcript, err := runtimeStore.LoadTranscript("TKT-393")
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) < 2 {
+		t.Fatalf("expected ping transcript entries, got %#v", transcript)
+	}
+}
+
 func TestServiceRunTicketFullLifecycleWithStreamedCodexOutput(t *testing.T) {
 	t.Parallel()
 
@@ -1172,7 +1399,7 @@ func TestServiceRunTicketStopsAfterAutoResumeLimit(t *testing.T) {
 	if summary.Status != agentrun.StatusFailed {
 		t.Fatalf("unexpected summary: %#v", summary)
 	}
-	if !strings.Contains(summary.Reason, "run hung after 2 attempts") {
+	if !strings.Contains(summary.Reason, "remained inactive after 2 health checks") {
 		t.Fatalf("unexpected retry-cap reason: %#v", summary)
 	}
 	status, ok, err := runtimeStore.LoadStatus("TKT-392")

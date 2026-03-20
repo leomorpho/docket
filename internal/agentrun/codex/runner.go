@@ -14,41 +14,78 @@ import (
 type commandFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
 type Runner struct {
-	command string
-	newCmd  commandFactory
-	now     func() time.Time
+	command   string
+	newCmd    commandFactory
+	now       func() time.Time
+	ephemeral bool
+	adapterID string
 }
 
 func NewRunner() *Runner {
 	return &Runner{
-		command: "codex",
-		newCmd:  exec.CommandContext,
-		now:     time.Now,
+		command:   "codex",
+		newCmd:    exec.CommandContext,
+		now:       time.Now,
+		ephemeral: true,
+		adapterID: "codex",
+	}
+}
+
+func NewSessionRunner() *Runner {
+	return &Runner{
+		command:   "codex",
+		newCmd:    exec.CommandContext,
+		now:       time.Now,
+		ephemeral: false,
+		adapterID: "codex-session",
 	}
 }
 
 func (r *Runner) ID() string {
-	return "codex"
+	return r.adapterID
 }
 
 func (r *Runner) Start(ctx context.Context, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+	return r.start(ctx, spec, "")
+}
+
+func (r *Runner) Resume(ctx context.Context, sessionID string, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+	if r.ephemeral {
+		return nil, agentrun.RunRecord{}, fmt.Errorf("runner %s does not support resume", r.ID())
+	}
+	if sessionID == "" {
+		return nil, agentrun.RunRecord{}, fmt.Errorf("session id is required")
+	}
+	return r.start(ctx, spec, sessionID)
+}
+
+func (r *Runner) start(ctx context.Context, spec agentrun.RunSpec, resumeSessionID string) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
 	if err := spec.Validate(); err != nil {
 		return nil, agentrun.RunRecord{}, err
 	}
 
 	sessionID := fmt.Sprintf("%s-%d", spec.TicketID, r.now().UTC().UnixNano())
-	cmd := r.newCmd(
-		ctx,
-		r.command,
-		"exec",
-		"--json",
-		"--skip-git-repo-check",
-		"--ephemeral",
-		"--dangerously-bypass-approvals-and-sandbox",
+	args := []string{
 		"-C",
 		spec.WorktreePath,
-		"-",
+		"exec",
+	}
+	if resumeSessionID != "" {
+		args = append(args, "resume")
+	}
+	args = append(args,
+		"--json",
+		"--skip-git-repo-check",
+		"--dangerously-bypass-approvals-and-sandbox",
 	)
+	if r.ephemeral {
+		args = append(args, "--ephemeral")
+	}
+	if resumeSessionID != "" {
+		args = append(args, resumeSessionID)
+	}
+	args = append(args, "-")
+	cmd := r.newCmd(ctx, r.command, args...)
 	cmd.Env = append(os.Environ(),
 		"DOCKET_SESSION_ID="+sessionID,
 		"DOCKET_TICKET_ID="+spec.TicketID,
@@ -90,6 +127,9 @@ func (r *Runner) Start(ctx context.Context, spec agentrun.RunSpec) (agentrun.Pro
 		Branch:       spec.Branch,
 		StartedAt:    r.now().UTC().Format(time.RFC3339Nano),
 		SessionID:    sessionID,
+	}
+	if resumeSessionID != "" {
+		record.SessionID = resumeSessionID
 	}
 	return processHandle{cmd: cmd, stdout: stdout, stderr: stderr}, record, nil
 }

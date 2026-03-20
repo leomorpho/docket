@@ -30,23 +30,29 @@ type TranscriptEntry struct {
 }
 
 type StatusSnapshot struct {
-	TicketID          string `json:"ticket_id"`
-	SessionID         string `json:"session_id,omitempty"`
-	Role              string `json:"role,omitempty"`
-	PID               int    `json:"pid,omitempty"`
-	Active            bool   `json:"active"`
-	Hung              bool   `json:"hung,omitempty"`
-	LastEventAt       string `json:"last_event_at,omitempty"`
-	LastVisibleAt     string `json:"last_visible_at,omitempty"`
-	InactivityTimeout string `json:"inactivity_timeout,omitempty"`
-	PlannedSteps      int    `json:"planned_steps,omitempty"`
-	CurrentStep       int    `json:"current_step,omitempty"`
-	CurrentStepTitle  string `json:"current_step_title,omitempty"`
-	CurrentPhase      string `json:"current_phase,omitempty"`
-	LastMarker        string `json:"last_marker,omitempty"`
-	LastVisibleText   string `json:"last_visible_text,omitempty"`
-	LastResultStatus  string `json:"last_result_status,omitempty"`
-	Warning           string `json:"warning,omitempty"`
+	TicketID              string `json:"ticket_id"`
+	SessionID             string `json:"session_id,omitempty"`
+	Role                  string `json:"role,omitempty"`
+	PID                   int    `json:"pid,omitempty"`
+	Active                bool   `json:"active"`
+	Hung                  bool   `json:"hung,omitempty"`
+	LastEventAt           string `json:"last_event_at,omitempty"`
+	LastVisibleAt         string `json:"last_visible_at,omitempty"`
+	InactivityTimeout     string `json:"inactivity_timeout,omitempty"`
+	PlannedSteps          int    `json:"planned_steps,omitempty"`
+	CurrentStep           int    `json:"current_step,omitempty"`
+	CurrentStepTitle      string `json:"current_step_title,omitempty"`
+	CurrentPhase          string `json:"current_phase,omitempty"`
+	LastMarker            string `json:"last_marker,omitempty"`
+	LastVisibleText       string `json:"last_visible_text,omitempty"`
+	LastResultStatus      string `json:"last_result_status,omitempty"`
+	HealthCheckCount      int    `json:"health_check_count,omitempty"`
+	LastHealthCheckAt     string `json:"last_health_check_at,omitempty"`
+	LastHealthCheck       string `json:"last_health_check,omitempty"`
+	LastIntervention      string `json:"last_intervention,omitempty"`
+	LastInterventionAt    string `json:"last_intervention_at,omitempty"`
+	ConsecutiveNoProgress int    `json:"consecutive_no_progress,omitempty"`
+	Warning               string `json:"warning,omitempty"`
 }
 
 type CycleState struct {
@@ -135,6 +141,25 @@ func (s *Store) LoadTranscript(ticketID string) ([]TranscriptEntry, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+func (s *Store) LoadStdoutLines(ticketID string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(s.RunDir(ticketID), stdoutFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return lines, nil
 }
 
 func (s *Store) WriteStatus(status StatusSnapshot) error {

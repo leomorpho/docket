@@ -80,6 +80,13 @@ func TestStoreInitAppendSnapshotAndCleanup(t *testing.T) {
 	if !strings.Contains(string(raw), "turn.started") {
 		t.Fatalf("stdout missing data: %s", string(raw))
 	}
+	stdoutLines, err := store.LoadStdoutLines(record.TicketID)
+	if err != nil {
+		t.Fatalf("LoadStdoutLines() error = %v", err)
+	}
+	if len(stdoutLines) != 1 || !strings.Contains(stdoutLines[0], "turn.started") {
+		t.Fatalf("unexpected stdout lines: %#v", stdoutLines)
+	}
 
 	if err := store.Cleanup(record.TicketID); err != nil {
 		t.Fatalf("Cleanup() error = %v", err)

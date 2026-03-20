@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -37,13 +38,14 @@ type RunWatchLaunchOption struct {
 }
 
 type runWatchSnapshot struct {
-	cycle      runruntime.CycleState
-	cycleOK    bool
-	ticketID   string
-	status     runruntime.StatusSnapshot
-	statusOK   bool
-	transcript []runruntime.TranscriptEntry
-	warnings   []string
+	cycle        runruntime.CycleState
+	cycleOK      bool
+	ticketID     string
+	status       runruntime.StatusSnapshot
+	statusOK     bool
+	transcript   []runruntime.TranscriptEntry
+	conversation []string
+	warnings     []string
 }
 
 type runWatchLoadedMsg struct {
@@ -302,6 +304,11 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.snapshot.status.LastResultStatus = "stopped"
 			m.snapshot.status.LastVisibleText = "Operator requested hard stop"
 			return m, nil
+		case "p":
+			if m.launchMode != launchModeWatch {
+				return m, nil
+			}
+			return m.startLaunchOptionByID("ping")
 		case "r":
 			return m, m.loadCmd()
 		case "m", "esc":
@@ -358,6 +365,13 @@ func (m RunWatchModel) renderSummaryBody() string {
 	if m.snapshot.status.LastEventAt != "" {
 		body = append(body, "Last event: "+formatRuntimeTimestampWithRelative(m.snapshot.status.LastEventAt))
 	}
+	if m.snapshot.status.LastHealthCheck != "" {
+		body = append(body, "Last health check:")
+		body = append(body, "  "+m.snapshot.status.LastHealthCheck)
+	}
+	if m.snapshot.status.LastIntervention != "" {
+		body = append(body, "Last intervention: "+m.snapshot.status.LastIntervention)
+	}
 	transcript := m.snapshot.transcript
 	if len(transcript) > 5 {
 		transcript = transcript[len(transcript)-5:]
@@ -385,6 +399,16 @@ func (m RunWatchModel) renderLogBody() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m RunWatchModel) renderConversationBody() string {
+	if m.snapshot.ticketID == "" {
+		return "No active managed run detected.\n\nThe raw Codex session view will appear once a managed run starts."
+	}
+	if len(m.snapshot.conversation) == 0 {
+		return "No raw Codex conversation captured yet.\n\nThis pane populates from the persisted stdout event stream."
+	}
+	return strings.Join(m.snapshot.conversation, "\n")
+}
+
 func (m RunWatchModel) renderMenuView() string {
 	header := m.renderHeader("Managed Run Launcher", "choose a mode and start from the dashboard")
 	contentWidth := m.contentWidth()
@@ -402,6 +426,12 @@ func (m RunWatchModel) renderWatchView() string {
 	header := m.renderHeader("Managed Run Watch", m.renderHeaderMeta())
 	contentWidth := m.contentWidth()
 	sections := []string{header}
+	statusBanner := ""
+	if m.shouldRenderStatusBanner() {
+		statusBanner = m.renderStatusBanner(contentWidth)
+	}
+	footer := m.renderFooter(contentWidth)
+	bodyOuterHeight, bodyInnerHeight := m.watchBodyHeights(header, statusBanner, footer)
 	if m.showOverview {
 		mainCardStyle := runWatchActiveCardStyle.Copy().Width(contentWidth)
 		if m.snapshot.ticketID == "" {
@@ -409,22 +439,25 @@ func (m RunWatchModel) renderWatchView() string {
 		}
 		summaryCard := mainCardStyle.Render(m.renderWatchSummaryCard(contentWidth))
 		sections = append(sections, summaryCard)
+		bodyOuterHeight, bodyInnerHeight = m.watchBodyHeights(header, statusBanner, footer, summaryCard)
 	}
 	bodyTitle := "Visible Session Log"
 	bodyContent := m.renderLogBody()
 	if m.mode == watchModeLog {
-		bodyTitle = "Visible Session Log"
-		bodyContent = m.renderLogBody()
+		leftWidth := max(30, (contentWidth-2)/2)
+		rightWidth := max(30, contentWidth-leftWidth-2)
+		leftCard := runWatchCardStyle.Copy().Width(leftWidth).Height(bodyOuterHeight).Render("Visible Session Log\n\n" + m.renderScrollableBody(m.renderLogBody(), leftWidth, bodyInnerHeight))
+		rightCard := runWatchCardStyle.Copy().Width(rightWidth).Height(bodyOuterHeight).Render("Raw Codex Conversation\n\n" + m.renderScrollableBody(m.renderConversationBody(), rightWidth, bodyInnerHeight))
+		bodyTitle = ""
+		bodyContent = lipgloss.JoinHorizontal(lipgloss.Top, leftCard, "  ", rightCard)
 	} else {
 		bodyTitle = "Run Summary"
 		bodyContent = m.renderSummaryBody()
 	}
-	bodyCard := runWatchCardStyle.Copy().Width(contentWidth).Render(bodyTitle + "\n\n" + m.renderScrollableBody(bodyContent, contentWidth))
-	statusBanner := ""
-	if m.shouldRenderStatusBanner() {
-		statusBanner = m.renderStatusBanner(contentWidth)
+	bodyCard := bodyContent
+	if m.mode != watchModeLog {
+		bodyCard = runWatchCardStyle.Copy().Width(contentWidth).Height(bodyOuterHeight).Render(bodyTitle + "\n\n" + m.renderScrollableBody(bodyContent, contentWidth, bodyInnerHeight))
 	}
-	footer := m.renderFooter(contentWidth)
 
 	sections = append(sections, bodyCard)
 	if statusBanner != "" {
@@ -479,6 +512,11 @@ func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 		m.renderKeyValue("Progress", m.renderStepBar()),
 		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
 		m.renderKeyValue("Last event", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
+		m.renderKeyValue("Health", strconv.Itoa(m.snapshot.status.HealthCheckCount)),
+		m.renderKeyValue("Intervention", valueOrFallback(m.snapshot.status.LastIntervention, "none")),
+	}
+	if strings.TrimSpace(m.snapshot.status.LastHealthCheck) != "" {
+		rows = append(rows, m.renderKeyValue("Latest", m.snapshot.status.LastHealthCheck))
 	}
 	sections = append(sections, "Run Overview\n\n"+strings.Join(rows, "\n"))
 	return strings.Join(sections, "\n\n")
@@ -585,11 +623,10 @@ func (m RunWatchModel) renderKeyValue(key, value string) string {
 	)
 }
 
-func (m RunWatchModel) renderScrollableBody(content string, contentWidth int) string {
+func (m RunWatchModel) renderScrollableBody(content string, contentWidth int, viewportHeight int) string {
 	innerWidth := max(20, contentWidth-6)
 	wrapped := lipgloss.NewStyle().Width(innerWidth).Render(content)
 	lines := strings.Split(wrapped, "\n")
-	viewportHeight := m.bodyViewportHeight()
 	if viewportHeight <= 0 || len(lines) <= viewportHeight {
 		marker := "showing all lines"
 		if m.followLog {
@@ -696,6 +733,26 @@ func (m RunWatchModel) bodyViewportHeight() int {
 		return 6
 	}
 	return base
+}
+
+func (m RunWatchModel) watchBodyHeights(fixedSections ...string) (int, int) {
+	outer := m.bodyViewportHeight()
+	if m.height > 0 {
+		target := max(12, m.height-2)
+		fixedHeight := 0
+		visibleSections := 0
+		for _, section := range fixedSections {
+			if strings.TrimSpace(section) == "" {
+				continue
+			}
+			fixedHeight += lipgloss.Height(section)
+			visibleSections++
+		}
+		separatorLines := visibleSections
+		outer = max(8, target-fixedHeight-separatorLines)
+	}
+	inner := max(3, outer-6)
+	return outer, inner
 }
 
 func valueOrFallback(value, fallback string) string {
@@ -827,6 +884,22 @@ func (m RunWatchModel) startSelectedOption() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	option := m.launchOptions[m.selectedOption]
+	return m.startLaunchOption(option)
+}
+
+func (m RunWatchModel) startLaunchOptionByID(id string) (tea.Model, tea.Cmd) {
+	for _, option := range m.launchOptions {
+		if option.ID == id {
+			return m.startLaunchOption(option)
+		}
+	}
+	if strings.TrimSpace(id) == "ping" {
+		m.statusMessage = "ping is unavailable in this watch mode"
+	}
+	return m, nil
+}
+
+func (m RunWatchModel) startLaunchOption(option RunWatchLaunchOption) (tea.Model, tea.Cmd) {
 	if option.Start == nil {
 		m.launchMode = launchModeWatch
 		m.statusMessage = "watching managed run"
@@ -873,8 +946,96 @@ func loadRunWatchSnapshot(store *runruntime.Store, focusTicketID string) (runWat
 		} else {
 			snapshot.transcript = transcript
 		}
+		stdoutLines, err := store.LoadStdoutLines(ticketID)
+		if err != nil {
+			snapshot.warnings = append(snapshot.warnings, "raw stdout unavailable for "+ticketID+": "+err.Error())
+		} else {
+			snapshot.conversation = parseCodexConversation(stdoutLines)
+		}
 	}
 	return snapshot, nil
+}
+
+func parseCodexConversation(lines []string) []string {
+	var out []string
+	for _, line := range lines {
+		for _, item := range codexConversationLines(line) {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func codexConversationLines(line string) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	var event map[string]any
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return []string{"raw: " + line}
+	}
+	eventType, _ := event["type"].(string)
+	switch eventType {
+	case "thread.started":
+		if threadID, _ := event["thread_id"].(string); strings.TrimSpace(threadID) != "" {
+			return []string{"session: thread started " + threadID}
+		}
+		return []string{"session: thread started"}
+	case "turn.started":
+		return []string{"session: turn started"}
+	}
+	item, _ := event["item"].(map[string]any)
+	if len(item) == 0 {
+		return nil
+	}
+	itemType, _ := item["type"].(string)
+	prefix := "assistant"
+	switch itemType {
+	case "user_message":
+		prefix = "user"
+	case "tool_result", "tool_call", "tool_message":
+		prefix = "tool"
+	}
+	if text, _ := item["text"].(string); strings.TrimSpace(text) != "" {
+		return prefixedLines(prefix, text)
+	}
+	if content, ok := item["content"].([]any); ok {
+		return collectConversationContent(prefix, content)
+	}
+	return nil
+}
+
+func collectConversationContent(prefix string, items []any) []string {
+	var out []string
+	for _, item := range items {
+		typed, _ := item.(map[string]any)
+		if len(typed) == 0 {
+			continue
+		}
+		text, _ := typed["text"].(string)
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		out = append(out, prefixedLines(prefix, text)...)
+	}
+	return out
+}
+
+func prefixedLines(prefix, text string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, prefix+": "+line)
+	}
+	return out
 }
 
 func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle runruntime.CycleState) (string, runruntime.StatusSnapshot, bool, []string) {
@@ -931,11 +1092,11 @@ func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle ru
 }
 
 func RunWatchKeys() []string {
-	return slices.Clone([]string{"j", "k", "enter", "l", "tab", "s", "x", "r", "m", "?", "q"})
+	return slices.Clone([]string{"j", "k", "enter", "l", "tab", "p", "s", "x", "r", "m", "?", "q"})
 }
 
 func (m RunWatchModel) runWatchKeyLegend() string {
-	parts := []string{"l/tab toggle", "j/k scroll", "g top", "G follow", "h overview", "s stop-after", "x hard-stop", "r refresh", "? help"}
+	parts := []string{"l/tab toggle", "j/k scroll", "g top", "G follow", "h overview", "p ping", "s stop-after", "x hard-stop", "r refresh", "? help"}
 	if len(m.launchOptions) > 0 {
 		parts = append(parts, "m menu")
 	}

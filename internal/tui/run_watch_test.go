@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -206,6 +207,9 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 		CurrentStepTitle: "inspect repo",
 		LastEventAt:      now,
 		LastVisibleText:  "PLAN ticket=TKT-700 steps=3",
+		HealthCheckCount: 2,
+		LastHealthCheck:  "SUMMARY ticket=TKT-700 summary=\"still working\"",
+		LastIntervention: "ping",
 	}); err != nil {
 		t.Fatalf("WriteStatus() error = %v", err)
 	}
@@ -214,6 +218,12 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 		Text: "PLAN ticket=TKT-700 steps=3",
 	}); err != nil {
 		t.Fatalf("AppendTranscript() error = %v", err)
+	}
+	if err := store.AppendStdout("TKT-700", []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-700\"}\n")); err != nil {
+		t.Fatalf("AppendStdout() error = %v", err)
+	}
+	if err := store.AppendStdout("TKT-700", []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"assistant_message\",\"content\":[{\"type\":\"output_text\",\"text\":\"I checked the repo\"},{\"type\":\"output_text\",\"text\":\"STATUS ticket=TKT-700 phase=analysis\"}]}}\n")); err != nil {
+		t.Fatalf("AppendStdout() error = %v", err)
 	}
 
 	model := NewRunWatchModel(repoRoot, "TKT-700", nil, false, nil)
@@ -237,6 +247,35 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(view, "PROGRESS") || !strings.Contains(view, "33%") {
 		t.Fatalf("view missing progress bar content: %q", view)
+	}
+	if !strings.Contains(view, "still working") || !strings.Contains(view, "ping") {
+		t.Fatalf("view missing health/intervention content: %q", view)
+	}
+	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "Raw Codex Conversation") {
+		t.Fatalf("view missing dual-pane titles: %q", view)
+	}
+	if !strings.Contains(view, "assistant: I checked the repo") || !strings.Contains(view, "session: thread started thread-700") {
+		t.Fatalf("view missing parsed conversation content: %q", view)
+	}
+}
+
+func TestParseCodexConversationFormatsSessionAndAssistantLines(t *testing.T) {
+	t.Parallel()
+
+	got := parseCodexConversation([]string{
+		`{"type":"thread.started","thread_id":"thread-123"}`,
+		`{"type":"item.completed","item":{"id":"item_1","type":"assistant_message","content":[{"type":"output_text","text":"I checked the repo"},{"type":"output_text","text":"STATUS ticket=TKT-123 phase=analysis"}]}}`,
+		`plain raw line`,
+	})
+
+	want := []string{
+		"session: thread started thread-123",
+		"assistant: I checked the repo",
+		"assistant: STATUS ticket=TKT-123 phase=analysis",
+		"raw: plain raw line",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("unexpected parsed conversation:\nwant=%#v\ngot=%#v", want, got)
 	}
 }
 
@@ -517,6 +556,55 @@ func TestRunWatchModelMenuCleanupActionStaysInMenu(t *testing.T) {
 	}
 }
 
+func TestRunWatchModelPingHotkeyInvokesPingAction(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{ID: "ping", Label: "Ping Active Session", StayInMenu: true, Start: func() error {
+			called = true
+			return nil
+		}},
+	})
+	model.launchMode = launchModeWatch
+
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	if cmd == nil {
+		t.Fatalf("expected ping hotkey to return command")
+	}
+	msg := cmd()
+	if !called {
+		t.Fatalf("expected ping action to be invoked")
+	}
+	result, ok := msg.(runWatchLaunchResultMsg)
+	if !ok {
+		t.Fatalf("expected launch result message, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("unexpected ping error: %v", result.err)
+	}
+	updated, _ := gotModel.Update(msg)
+	next := updated.(RunWatchModel)
+	if next.launchMode != launchModeMenu {
+		t.Fatalf("expected ping action to return to menu, got %s", next.launchMode)
+	}
+}
+
+func TestRunWatchModelPingHotkeyWithoutActionShowsStatus(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, nil)
+	model.launchMode = launchModeWatch
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	if cmd != nil {
+		t.Fatalf("expected no command when ping action is unavailable")
+	}
+	updated := gotModel.(RunWatchModel)
+	if !strings.Contains(updated.statusMessage, "ping is unavailable") {
+		t.Fatalf("unexpected status message: %q", updated.statusMessage)
+	}
+}
+
 func TestRunWatchProgramQuitsOnQ(t *testing.T) {
 	t.Parallel()
 
@@ -587,7 +675,7 @@ func TestRunWatchModelViewWrapsLongVisibleLines(t *testing.T) {
 	if strings.Contains(view, strings.Repeat("wrapped visible transcript line ", 4)) {
 		t.Fatalf("expected long transcript text to wrap, got:\n%s", view)
 	}
-	if !strings.Contains(view, "wrapped visible transcript line") {
+	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "wrapped visible") {
 		t.Fatalf("expected visible transcript content in view, got:\n%s", view)
 	}
 }

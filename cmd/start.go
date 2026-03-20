@@ -357,6 +357,7 @@ func init() {
 	startCmd.Flags().BoolVar(&startRun, "run", false, "run the next workable ticket through the Codex flow instead of printing a prompt")
 	startCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	startCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
-	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the managed run hung after this much time without new Codex output")
+	startCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	rootCmd.AddCommand(startCmd)
 }

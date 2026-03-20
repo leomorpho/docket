@@ -1,9 +1,12 @@
 package orchestrate
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -357,7 +360,7 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 		return agentrun.TicketRunSummary{}, fmt.Errorf("no active worktree recorded for %s", ticketID)
 	}
 	resumePrompt := buildResumePrompt(prompt, tkt, transcript, status)
-	started, err := s.startFollowup(ctx, ticketID, worktreePath, branch, agentrun.RoleImplementer, resumePrompt, s.adapter)
+	started, err := s.startImplementerContinuation(ctx, ticketID, worktreePath, branch, status.SessionID, resumePrompt)
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
@@ -386,6 +389,83 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 		return failedOrRawSummary(ticketID, obs.Result.Status, "run hung again; inspect with `docket run-status`", validation), nil
 	}
 	return failedOrRawSummary(ticketID, obs.Result.Status, obs.Result.Reason, validation), nil
+}
+
+func (s *Service) PingTicket(ctx context.Context, ticketID string) (agentrun.PingSummary, error) {
+	if s.runtime == nil {
+		return agentrun.PingSummary{}, fmt.Errorf("runtime store is required")
+	}
+	status, ok, err := s.runtime.LoadStatus(ticketID)
+	if err != nil {
+		return agentrun.PingSummary{}, err
+	}
+	if !ok {
+		return agentrun.PingSummary{}, fmt.Errorf("ticket %s does not have runtime state", ticketID)
+	}
+	resumable, ok := s.adapter.(agentrun.ResumableAdapter)
+	if !ok {
+		return agentrun.PingSummary{}, fmt.Errorf("adapter %s does not support session ping", s.adapter.ID())
+	}
+	if strings.TrimSpace(status.SessionID) == "" {
+		return agentrun.PingSummary{}, fmt.Errorf("ticket %s does not have a persisted codex session", ticketID)
+	}
+	worktreePath := ""
+	branch := "docket/" + ticketID
+	if manifest, ok, err := s.namespace.GetRunManifest(s.repoRoot, ticketID); err == nil && ok {
+		worktreePath = manifest.WorktreePath
+		if manifest.Branch != "" {
+			branch = manifest.Branch
+		}
+	}
+	if strings.TrimSpace(worktreePath) == "" {
+		return agentrun.PingSummary{}, fmt.Errorf("no active worktree recorded for %s", ticketID)
+	}
+	spec := agentrun.RunSpec{
+		TicketID:     ticketID,
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     s.repoRoot,
+		WorktreePath: worktreePath,
+		Branch:       branch,
+		Prompt:       buildPingPrompt(ticketID, status),
+	}
+	handle, _, err := resumable.Resume(ctx, status.SessionID, spec)
+	if err != nil {
+		return agentrun.PingSummary{}, err
+	}
+	lines, threadID, err := observePing(handle)
+	if err != nil {
+		return agentrun.PingSummary{}, err
+	}
+	if threadID != "" {
+		status.SessionID = threadID
+	}
+	if len(lines) > 0 {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		status.HealthCheckCount++
+		status.LastHealthCheckAt = now
+		status.LastIntervention = "ping"
+		status.LastInterventionAt = now
+		status.ConsecutiveNoProgress++
+		for _, line := range lines {
+			_ = s.runtime.AppendTranscript(ticketID, runruntime.TranscriptEntry{At: now, Text: line})
+			status.LastVisibleAt = now
+			status.LastVisibleText = line
+			if marker, err := agentrun.ParseStatusLine(line); err == nil {
+				status.CurrentPhase = marker.Phase
+				status.LastMarker = "STATUS"
+			}
+			if strings.HasPrefix(line, "SUMMARY ") {
+				status.LastHealthCheck = line
+			}
+		}
+		status.LastEventAt = now
+		_ = s.runtime.WriteStatus(status)
+	}
+	return agentrun.PingSummary{
+		TicketID:  ticketID,
+		SessionID: status.SessionID,
+		Lines:     lines,
+	}, nil
 }
 
 func (s *Service) startFollowup(ctx context.Context, ticketID, worktreePath, branch string, role agentrun.Role, prompt string, adapter agentrun.Adapter) (StartedRun, error) {
@@ -530,6 +610,9 @@ func (s *Service) resumeTimedOutImplementer(ctx context.Context, ticketID, workt
 		TimedOut: true,
 	}
 	for attempt <= s.autoResumeLimit() {
+		if _, err := s.healthCheckTimedOutImplementer(ctx, ticketID); err != nil {
+			return agentrun.Observation{}, err
+		}
 		started, err := s.startAutoResumeAttempt(ctx, ticketID, worktreePath, branch, attempt)
 		if err != nil {
 			return agentrun.Observation{}, err
@@ -552,10 +635,17 @@ func (s *Service) resumeTimedOutImplementer(ctx context.Context, ticketID, workt
 		Status:   agentrun.StatusFailed,
 		TicketID: ticketID,
 		Role:     agentrun.RoleImplementer,
-		Reason:   fmt.Sprintf("run hung after %d attempts; inspect with `docket run-status` and continue with `docket run-resume`", s.autoResumeLimit()+1),
+		Reason:   fmt.Sprintf("run remained inactive after %d health checks; inspect with `docket run-status` and continue with `docket run-resume`", s.autoResumeLimit()+1),
 	}
 	lastObservation.TimedOut = true
 	return lastObservation, nil
+}
+
+func (s *Service) healthCheckTimedOutImplementer(ctx context.Context, ticketID string) (agentrun.PingSummary, error) {
+	if _, ok := s.adapter.(agentrun.ResumableAdapter); !ok {
+		return agentrun.PingSummary{}, nil
+	}
+	return s.PingTicket(ctx, ticketID)
 }
 
 func (s *Service) startAutoResumeAttempt(ctx context.Context, ticketID, worktreePath, branch string, attempt int) (StartedRun, error) {
@@ -582,18 +672,63 @@ func (s *Service) startAutoResumeAttempt(ctx context.Context, ticketID, worktree
 		return StartedRun{}, err
 	}
 	resumePrompt := buildResumePrompt(prompt, tkt, transcript, status)
-	started, err := s.startFollowup(ctx, ticketID, worktreePath, branch, agentrun.RoleImplementer, resumePrompt, s.adapter)
+	started, err := s.startImplementerContinuation(ctx, ticketID, worktreePath, branch, status.SessionID, resumePrompt)
 	if err != nil {
 		return StartedRun{}, err
 	}
 	if s.runtime != nil {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
+		status.LastIntervention = "continue_same_thread"
+		status.LastInterventionAt = now
 		_ = s.runtime.AppendTranscript(ticketID, runruntime.TranscriptEntry{
 			At:   now,
 			Text: fmt.Sprintf("STATUS ticket=%s phase=healthcheck detail=\"auto-resume attempt %d/%d after inactivity timeout\"", ticketID, attempt, s.autoResumeLimit()),
 		})
+		_ = s.runtime.WriteStatus(status)
 	}
 	return started, nil
+}
+
+func (s *Service) startImplementerContinuation(ctx context.Context, ticketID, worktreePath, branch, sessionID, prompt string) (StartedRun, error) {
+	if resumable, ok := s.adapter.(agentrun.ResumableAdapter); ok && strings.TrimSpace(sessionID) != "" {
+		return s.startResumedFollowup(ctx, ticketID, worktreePath, branch, sessionID, agentrun.RoleImplementer, prompt, resumable)
+	}
+	return s.startFollowup(ctx, ticketID, worktreePath, branch, agentrun.RoleImplementer, prompt, s.adapter)
+}
+
+func (s *Service) startResumedFollowup(ctx context.Context, ticketID, worktreePath, branch, sessionID string, role agentrun.Role, prompt string, adapter agentrun.ResumableAdapter) (StartedRun, error) {
+	if adapter == nil {
+		return StartedRun{}, fmt.Errorf("adapter is required")
+	}
+	if err := s.namespace.RecordRunStart(s.repoRoot, ticketID, s.actor, worktreePath, branch, ""); err != nil {
+		return StartedRun{}, err
+	}
+	spec := agentrun.RunSpec{
+		TicketID:     ticketID,
+		Role:         role,
+		RepoRoot:     s.repoRoot,
+		WorktreePath: worktreePath,
+		Branch:       branch,
+		Prompt:       prompt,
+	}
+	handle, record, err := adapter.Resume(ctx, sessionID, spec)
+	if err != nil {
+		return StartedRun{}, err
+	}
+	if err := agentrun.WriteRunRecord(s.repoRoot, record); err != nil {
+		return StartedRun{}, err
+	}
+	if s.runtime != nil {
+		if err := s.runtime.Init(record, spec.Prompt, s.monitorTimeout()); err != nil {
+			return StartedRun{}, err
+		}
+	}
+	return StartedRun{
+		Handle:       handle,
+		Record:       record,
+		WorktreePath: worktreePath,
+		Branch:       branch,
+	}, nil
 }
 
 func (s *Service) cleanupRuntime(ticketID string) error {
@@ -628,4 +763,133 @@ func buildResumePrompt(originalPrompt string, tkt *ticket.Ticket, transcript []r
 		step = fmt.Sprintf("%d/%d %s", status.CurrentStep, status.PlannedSteps, status.CurrentStepTitle)
 	}
 	return strings.TrimSpace(originalPrompt) + "\n\nPrevious run hung before completion.\nContinue from the current worktree state instead of restarting.\nTicket: " + ticketID + "\nTitle: " + title + "\nLast known progress: " + step + "\nRecent visible transcript:\n" + strings.Join(lines, "\n")
+}
+
+func buildPingPrompt(ticketID string, status runruntime.StatusSnapshot) string {
+	current := strings.TrimSpace(status.CurrentPhase)
+	if current == "" {
+		current = "unknown"
+	}
+	last := strings.TrimSpace(status.LastVisibleText)
+	if last == "" {
+		last = "none"
+	}
+	return strings.TrimSpace(fmt.Sprintf(
+		"Do not run tools or edit files. Return exactly two lines and then stop.\nLine 1 must be: STATUS ticket=%s phase=<single_word_phase>\nLine 2 must be: SUMMARY ticket=%s waiting=<yes|no> note=\"<brief reason>\"\nCurrent phase hint: %s\nLast visible line: %s",
+		ticketID,
+		ticketID,
+		current,
+		last,
+	))
+}
+
+func observePing(handle agentrun.ProcessHandle) ([]string, string, error) {
+	if handle == nil {
+		return nil, "", fmt.Errorf("process handle is required")
+	}
+	linesCh := make(chan pingEvent, 64)
+	waitCh := make(chan error, 1)
+	go scanPingStream(handle.Stdout(), "stdout", linesCh)
+	go scanPingStream(handle.Stderr(), "stderr", linesCh)
+	go func() {
+		waitCh <- handle.Wait()
+	}()
+	var visible []string
+	threadID := ""
+	stdoutClosed := false
+	stderrClosed := false
+	waited := false
+	var waitErr error
+	for {
+		if waited && stdoutClosed && stderrClosed {
+			if waitErr != nil {
+				return visible, threadID, waitErr
+			}
+			return visible, threadID, nil
+		}
+		select {
+		case event := <-linesCh:
+			if event.done {
+				if event.stream == "stdout" {
+					stdoutClosed = true
+				} else {
+					stderrClosed = true
+				}
+				continue
+			}
+			if event.stream != "stdout" {
+				continue
+			}
+			if id := pingThreadIDFromLine(event.line); id != "" {
+				threadID = id
+			}
+			visible = append(visible, pingVisibleTextsFromLine(event.line)...)
+		case err := <-waitCh:
+			waited = true
+			waitErr = err
+		}
+	}
+}
+
+type pingEvent struct {
+	stream string
+	line   string
+	done   bool
+}
+
+func scanPingStream(r io.Reader, stream string, lines chan<- pingEvent) {
+	if r == nil {
+		lines <- pingEvent{stream: stream, done: true}
+		return
+	}
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		lines <- pingEvent{stream: stream, line: scanner.Text()}
+	}
+	lines <- pingEvent{stream: stream, done: true}
+}
+
+func pingVisibleTextsFromLine(line string) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	switch {
+	case strings.HasPrefix(line, "STATUS "), strings.HasPrefix(line, "SUMMARY "):
+		return []string{line}
+	}
+	var event struct {
+		Type string `json:"type"`
+		Item struct {
+			Text string `json:"text"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return nil
+	}
+	if event.Item.Text == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(event.Item.Text, "\n") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "STATUS ") || strings.HasPrefix(part, "SUMMARY ") {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func pingThreadIDFromLine(line string) string {
+	var event struct {
+		Type     string `json:"type"`
+		ThreadID string `json:"thread_id"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &event); err != nil {
+		return ""
+	}
+	if event.Type != "thread.started" {
+		return ""
+	}
+	return strings.TrimSpace(event.ThreadID)
 }

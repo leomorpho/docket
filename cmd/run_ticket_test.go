@@ -18,6 +18,7 @@ type stubRunOrchestrator struct {
 	runTicket func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error)
 	runNext   func(ctx context.Context) (agentrun.CycleSummary, error)
 	resume    func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error)
+	ping      func(ctx context.Context, ticketID string) (agentrun.PingSummary, error)
 }
 
 func (s stubRunOrchestrator) RunTicket(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
@@ -39,6 +40,13 @@ func (s stubRunOrchestrator) ResumeTicket(ctx context.Context, ticketID string) 
 		return agentrun.TicketRunSummary{}, nil
 	}
 	return s.resume(ctx, ticketID)
+}
+
+func (s stubRunOrchestrator) PingTicket(ctx context.Context, ticketID string) (agentrun.PingSummary, error) {
+	if s.ping == nil {
+		return agentrun.PingSummary{}, nil
+	}
+	return s.ping(ctx, ticketID)
 }
 
 func TestRunTicketCmdRendersJSONSummary(t *testing.T) {
@@ -294,6 +302,8 @@ func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 		CurrentPhase:     "testing",
 		LastVisibleText:  "STEP ticket=TKT-376 index=3 status=in_progress title=\"write failing test\"",
 		LastEventAt:      time.Now().UTC().Format(time.RFC3339Nano),
+		HealthCheckCount: 2,
+		LastIntervention: "ping",
 	}); err != nil {
 		t.Fatalf("WriteStatus() error = %v", err)
 	}
@@ -310,6 +320,9 @@ func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 	got := out.String()
 	if !bytes.Contains([]byte(got), []byte("hung=true")) || !bytes.Contains([]byte(got), []byte("write failing test")) {
 		t.Fatalf("unexpected output: %s", got)
+	}
+	if !bytes.Contains([]byte(got), []byte("Health checks: 2")) || !bytes.Contains([]byte(got), []byte("Last intervention: ping")) {
+		t.Fatalf("expected health check summary in output, got: %s", got)
 	}
 }
 
@@ -370,6 +383,41 @@ func TestTuiRunLogCmdFailsCleanlyOnCorruptTranscript(t *testing.T) {
 	}
 }
 
+func TestRunPingCmdRendersHumanSummary(t *testing.T) {
+	prev := newRunOrchestrator
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+	})
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			ping: func(ctx context.Context, ticketID string) (agentrun.PingSummary, error) {
+				return agentrun.PingSummary{
+					TicketID:  ticketID,
+					SessionID: "thread-376",
+					Lines: []string{
+						"STATUS ticket=TKT-376 phase=testing",
+						`SUMMARY ticket=TKT-376 waiting=yes note="still running tests"`,
+					},
+				}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	repo = t.TempDir()
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-ping", "TKT-376"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-ping failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !bytes.Contains([]byte(got), []byte("TKT-376 session=thread-376")) || !bytes.Contains([]byte(got), []byte("SUMMARY ticket=TKT-376")) {
+		t.Fatalf("unexpected output: %s", got)
+	}
+}
+
 func TestRunWatchLaunchOptionsIncludesCleanupAction(t *testing.T) {
 	repoRoot := t.TempDir()
 	store := runruntime.New(repoRoot)
@@ -399,6 +447,16 @@ func TestRunWatchLaunchOptionsIncludesCleanupAction(t *testing.T) {
 	if _, ok, err := store.LoadStatus("TKT-411"); err != nil || ok {
 		t.Fatalf("expected cleanup action to remove stale run, ok=%v err=%v", ok, err)
 	}
+}
+
+func TestRunWatchLaunchOptionsIncludesPingAction(t *testing.T) {
+	options := runWatchLaunchOptions(t.TempDir())
+	for _, option := range options {
+		if option.ID == "ping" {
+			return
+		}
+	}
+	t.Fatalf("expected ping launch option")
 }
 
 func TestFormatManagedRunTitle(t *testing.T) {

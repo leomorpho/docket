@@ -154,6 +154,51 @@ func TestObserverCapturesNestedVisibleJSONMessages(t *testing.T) {
 	}
 }
 
+func TestObserverResetsNoProgressCounterWhenFreshVisibleOutputArrives(t *testing.T) {
+	t.Parallel()
+
+	handle := &fakeHandle{
+		stdout: bytes.NewBufferString("STATUS ticket=TKT-381 phase=analysis\nRESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\n"),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	handle.waitCh <- nil
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer, SessionID: "session-progress"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:              "TKT-381",
+		SessionID:             "session-progress",
+		Active:                true,
+		HealthCheckCount:      2,
+		ConsecutiveNoProgress: 2,
+		LastIntervention:      "ping",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	status, ok, err := store.LoadStatus("TKT-381")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.ConsecutiveNoProgress != 0 {
+		t.Fatalf("expected no-progress counter reset, got %#v", status)
+	}
+}
+
 func TestObserverParsesStructuredReviewFromCodexJSONEvent(t *testing.T) {
 	t.Parallel()
 
@@ -308,7 +353,7 @@ func TestObserverPersistsVisibleTranscriptAndStatusForActiveRun(t *testing.T) {
 
 	store := runruntime.New(t.TempDir())
 	handle := &fakeHandle{
-		stdout: bytes.NewBufferString("{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"PLAN ticket=TKT-381 steps=3\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"STEP ticket=TKT-381 index=1 status=in_progress title=\\\"inspect repo\\\"\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"RESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\"}}\n"),
+		stdout: bytes.NewBufferString("{\"type\":\"thread.started\",\"thread_id\":\"thread-381\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"PLAN ticket=TKT-381 steps=3\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"STEP ticket=TKT-381 index=1 status=in_progress title=\\\"inspect repo\\\"\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"RESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\"}}\n"),
 		stderr: bytes.NewReader(nil),
 		waitCh: make(chan error, 1),
 	}
@@ -334,7 +379,7 @@ func TestObserverPersistsVisibleTranscriptAndStatusForActiveRun(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
 	}
-	if status.PlannedSteps != 3 || status.CurrentStep != 1 || status.LastMarker != "RESULT" {
+	if status.SessionID != "thread-381" || status.PlannedSteps != 3 || status.CurrentStep != 1 || status.LastMarker != "RESULT" {
 		t.Fatalf("unexpected status snapshot: %#v", status)
 	}
 	transcript, err := store.LoadTranscript("TKT-381")

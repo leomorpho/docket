@@ -31,13 +31,19 @@ const DefaultRunInactivityTimeout = 2 * time.Minute
 var (
 	runDisableReview   bool
 	runInactivityLimit time.Duration
+	runManagedAdapter  string
 	runWatch           bool
 )
 
 var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+	return newRunOrchestratorWithMode(repoRoot, enableReview, managedRunAdapterMode())
+}
+
+func newRunOrchestratorWithMode(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
 	store := local.New(repoRoot)
 	wf := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), newRuntimeDeps(repoRoot).claimer)
 	runtimeStore := runruntime.New(repoRoot)
+	adapter := managedRunAdapter(mode)
 	validator := runvalidate.New(runvalidate.Dependencies{
 		RepoRoot: repoRoot,
 		Store:    store,
@@ -49,7 +55,7 @@ var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orche
 		Store:     store,
 		Workflow:  wf,
 		Namespace: security.NewRepoNamespaceStore(docketHome),
-		Adapter:   codex.NewRunner(),
+		Adapter:   adapter,
 		Monitor:   monitor.New(monitor.Dependencies{Runtime: runtimeStore}),
 		Validator: validator,
 		Selector:  selector.New(selector.Dependencies{Store: store, LoadConfig: ticket.LoadConfig}),
@@ -57,9 +63,26 @@ var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orche
 		Timeout:   runInactivityLimitOrDefault(),
 	}
 	if enableReview {
-		deps.Reviewer = codex.NewRunner()
+		deps.Reviewer = adapter
 	}
 	return orchestrate.New(deps)
+}
+
+func managedRunAdapterMode() string {
+	mode := strings.TrimSpace(runManagedAdapter)
+	if mode == "" {
+		return "session"
+	}
+	return mode
+}
+
+func managedRunAdapter(mode string) agentrun.Adapter {
+	switch strings.TrimSpace(mode) {
+	case "session":
+		return codex.NewSessionRunner()
+	default:
+		return codex.NewRunner()
+	}
 }
 
 type liveRunLogStreamer struct {
@@ -302,6 +325,12 @@ var runStatusCmd = &cobra.Command{
 		if status.LastEventAt != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "\nLast event: %s", status.LastEventAt)
 		}
+		if status.HealthCheckCount > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nHealth checks: %d", status.HealthCheckCount)
+		}
+		if status.LastIntervention != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nLast intervention: %s", status.LastIntervention)
+		}
 		fmt.Fprintln(cmd.OutOrStdout())
 		return nil
 	},
@@ -320,6 +349,20 @@ var runResumeCmd = &cobra.Command{
 			return err
 		}
 		return renderTicketRunSummary(cmd, summary)
+	},
+}
+
+var runPingCmd = &cobra.Command{
+	Use:   "run-ping <TKT-NNN>",
+	Short: "Send a structured status ping into a persisted managed-run session",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		svc := newRunOrchestrator(repo, runReviewEnabled())
+		summary, err := svc.PingTicket(context.Background(), args[0])
+		if err != nil {
+			return err
+		}
+		return renderPingSummary(cmd, summary)
 	},
 }
 
@@ -425,6 +468,26 @@ func renderCycleSummary(cmd *cobra.Command, summary agentrun.CycleSummary) error
 	return nil
 }
 
+func renderPingSummary(cmd *cobra.Command, summary agentrun.PingSummary) error {
+	if format == "json" {
+		printJSON(cmd, summary)
+		return nil
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s", summary.TicketID)
+	if strings.TrimSpace(summary.SessionID) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), " session=%s", summary.SessionID)
+	}
+	fmt.Fprintln(cmd.OutOrStdout())
+	if len(summary.Lines) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "No structured ping response.")
+		return nil
+	}
+	for _, line := range summary.Lines {
+		fmt.Fprintln(cmd.OutOrStdout(), line)
+	}
+	return nil
+}
+
 func executeTicketRun(cmd *cobra.Command, ticketID string, run func(context.Context) (agentrun.TicketRunSummary, error)) (agentrun.TicketRunSummary, error) {
 	healManagedRuntime(repo)
 	if !runWatch {
@@ -501,6 +564,14 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 			},
 		},
 		{
+			ID:          "single-session",
+			Label:       "Start Next Ticket (Session)",
+			Description: "Pick the next runnable ticket and run it in a persisted Codex session that can be resumed later.",
+			Start: func() error {
+				return launchManagedSingleRunWithMode(repoRoot, "session")
+			},
+		},
+		{
 			ID:          "auto",
 			Label:       "Start Auto Cycle",
 			Description: "Keep running the next runnable ticket until blocked, exhausted, or asked to stop.",
@@ -509,10 +580,36 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 			},
 		},
 		{
+			ID:          "auto-session",
+			Label:       "Start Auto Cycle (Session)",
+			Description: "Keep running tickets using persisted Codex sessions so follow-up resumes stay on the same thread.",
+			Start: func() error {
+				return launchManagedAutoCycleWithMode(repoRoot, "session")
+			},
+		},
+		{
 			ID:          "attach",
 			Label:       "Attach To Active Run",
 			Description: "Watch the current managed run without starting a new one.",
 			Start:       nil,
+		},
+		{
+			ID:          "ping",
+			Label:       "Ping Active Session",
+			Description: "Send a same-thread structured status prompt into the active persisted Codex session.",
+			StayInMenu:  true,
+			Start: func() error {
+				ticketID, err := currentManagedRunTicketID(repoRoot)
+				if err != nil {
+					return err
+				}
+				if ticketID == "" {
+					return fmt.Errorf("no active managed run to ping")
+				}
+				svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), "session")
+				_, err = svc.PingTicket(context.Background(), ticketID)
+				return err
+			},
 		},
 		{
 			ID:          "clean",
@@ -532,6 +629,10 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 }
 
 func launchManagedSingleRun(repoRoot string) error {
+	return launchManagedSingleRunWithMode(repoRoot, managedRunAdapterMode())
+}
+
+func launchManagedSingleRunWithMode(repoRoot, mode string) error {
 	ctx := context.Background()
 	healManagedRuntime(repoRoot)
 	store := local.New(repoRoot)
@@ -549,14 +650,18 @@ func launchManagedSingleRun(repoRoot string) error {
 	if next == nil {
 		return fmt.Errorf("no runnable tickets remain")
 	}
-	svc := newRunOrchestrator(repoRoot, runReviewEnabled())
+	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
 	_, err = svc.RunTicket(ctx, next.ID)
 	return err
 }
 
 func launchManagedAutoCycle(repoRoot string) error {
+	return launchManagedAutoCycleWithMode(repoRoot, managedRunAdapterMode())
+}
+
+func launchManagedAutoCycleWithMode(repoRoot, mode string) error {
 	healManagedRuntime(repoRoot)
-	svc := newRunOrchestrator(repoRoot, runReviewEnabled())
+	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
 	_, err := svc.RunNext(context.Background())
 	return err
 }
@@ -566,20 +671,49 @@ func healManagedRuntime(repoRoot string) {
 	_, _ = store.HealRuntimeState(time.Now())
 }
 
+func currentManagedRunTicketID(repoRoot string) (string, error) {
+	store := runruntime.New(repoRoot)
+	if cycle, ok, err := store.LoadCycleState(); err != nil {
+		return "", err
+	} else if ok && strings.TrimSpace(cycle.CurrentTicketID) != "" {
+		return cycle.CurrentTicketID, nil
+	}
+	ticketIDs, err := store.ListRunTicketIDs()
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(ticketIDs)
+	for _, ticketID := range ticketIDs {
+		status, ok, err := store.LoadStatus(ticketID)
+		if err != nil || !ok {
+			continue
+		}
+		if status.Active || status.Hung {
+			return ticketID, nil
+		}
+	}
+	return "", nil
+}
+
 func init() {
 	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runTicketCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
+	runTicketCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
 	runNextCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
-	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the run hung after this much time without new Codex output")
-	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the run hung after this much time without new Codex output")
+	runNextCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
+	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runResumeCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
-	runResumeCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the resumed run hung after this much time without new Codex output")
+	runResumeCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
+	runResumeCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
+	runPingCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
 	rootCmd.AddCommand(runTicketCmd)
 	rootCmd.AddCommand(runNextCmd)
 	rootCmd.AddCommand(runStatusCmd)
 	rootCmd.AddCommand(runResumeCmd)
+	rootCmd.AddCommand(runPingCmd)
 	rootCmd.AddCommand(runWatchCmd)
 	tuiCmd.AddCommand(tuiWatchCmd)
 	tuiCmd.AddCommand(tuiRunLogCmd)

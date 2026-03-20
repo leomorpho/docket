@@ -139,6 +139,9 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.StatusSnapshot) {
 	now := o.now().UTC()
 	status.LastEventAt = now.Format(time.RFC3339Nano)
+	if threadID := codexThreadIDFromLine(line); threadID != "" {
+		status.SessionID = threadID
+	}
 	if stream == "stdout" {
 		if o.runtime != nil {
 			_ = o.runtime.AppendStdout(ticketID, []byte(line+"\n"))
@@ -227,24 +230,29 @@ func (o *Observer) finalizeObservation(input agentrun.ObservationInput, status r
 func (o *Observer) updateProgressStatus(status *runruntime.StatusSnapshot, visible string) {
 	switch {
 	case strings.HasPrefix(visible, "PLAN "):
+		status.ConsecutiveNoProgress = 0
 		if plan, err := agentrun.ParsePlanLine(visible); err == nil {
 			status.PlannedSteps = plan.Steps
 			status.LastMarker = "PLAN"
 		}
 	case strings.HasPrefix(visible, "STEP "):
+		status.ConsecutiveNoProgress = 0
 		if step, err := agentrun.ParseStepLine(visible); err == nil {
 			status.CurrentStep = step.Index
 			status.CurrentStepTitle = step.Title
 			status.LastMarker = "STEP"
 		}
 	case strings.HasPrefix(visible, "STATUS "):
+		status.ConsecutiveNoProgress = 0
 		if marker, err := agentrun.ParseStatusLine(visible); err == nil {
 			status.CurrentPhase = marker.Phase
 			status.LastMarker = "STATUS"
 		}
 	case strings.HasPrefix(visible, "RESULT "):
+		status.ConsecutiveNoProgress = 0
 		status.LastMarker = "RESULT"
 	case strings.HasPrefix(visible, "REVIEW "):
+		status.ConsecutiveNoProgress = 0
 		status.LastMarker = "REVIEW"
 	}
 }
@@ -343,8 +351,9 @@ type codexJSONItem struct {
 }
 
 type codexJSONEvent struct {
-	Type string        `json:"type"`
-	Item codexJSONItem `json:"item"`
+	Type     string        `json:"type"`
+	ThreadID string        `json:"thread_id"`
+	Item     codexJSONItem `json:"item"`
 }
 
 func visibleTextsFromLine(stream, line string) []string {
@@ -373,6 +382,17 @@ func visibleTextsFromLine(stream, line string) []string {
 		return nil
 	}
 	return collectVisibleTexts(raw)
+}
+
+func codexThreadIDFromLine(line string) string {
+	var event codexJSONEvent
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &event); err != nil {
+		return ""
+	}
+	if event.Type != "thread.started" {
+		return ""
+	}
+	return strings.TrimSpace(event.ThreadID)
 }
 
 func collectVisibleTexts(value any) []string {

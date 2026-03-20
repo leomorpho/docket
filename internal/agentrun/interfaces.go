@@ -19,6 +19,11 @@ type Adapter interface {
 	Start(ctx context.Context, spec RunSpec) (ProcessHandle, RunRecord, error)
 }
 
+type ResumableAdapter interface {
+	Adapter
+	Resume(ctx context.Context, sessionID string, spec RunSpec) (ProcessHandle, RunRecord, error)
+}
+
 type Monitor interface {
 	Observe(ctx context.Context, input ObservationInput) (Observation, error)
 }
@@ -36,6 +41,7 @@ type Orchestrator interface {
 	RunTicket(ctx context.Context, ticketID string) (TicketRunSummary, error)
 	RunNext(ctx context.Context) (CycleSummary, error)
 	ResumeTicket(ctx context.Context, ticketID string) (TicketRunSummary, error)
+	PingTicket(ctx context.Context, ticketID string) (PingSummary, error)
 }
 
 type Observation struct {
@@ -78,4 +84,10 @@ type TicketRunSummary struct {
 type CycleSummary struct {
 	Runs       []TicketRunSummary `json:"runs,omitempty"`
 	StopReason string             `json:"stop_reason,omitempty"`
+}
+
+type PingSummary struct {
+	TicketID  string   `json:"ticket_id"`
+	SessionID string   `json:"session_id,omitempty"`
+	Lines     []string `json:"lines,omitempty"`
 }
