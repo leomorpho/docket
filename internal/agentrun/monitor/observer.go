@@ -59,7 +59,7 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 
 	timeout := input.Timeout
 	if timeout <= 0 {
-		timeout = 10 * time.Minute
+		timeout = 2 * time.Minute
 	}
 	if err := o.writeInitialStatus(input, timeout); err != nil {
 		return agentrun.Observation{}, err

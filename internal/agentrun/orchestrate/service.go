@@ -16,35 +16,37 @@ import (
 )
 
 type Dependencies struct {
-	RepoRoot   string
-	Actor      string
-	Store      *local.Store
-	Workflow   *workflow.WorkflowManager
-	Namespace  *security.RepoNamespaceStore
-	Adapter    agentrun.Adapter
-	Reviewer   agentrun.Adapter
-	Monitor    agentrun.Monitor
-	Validator  agentrun.Validator
-	Selector   agentrun.Selector
-	Runtime    *runruntime.Store
-	Timeout    time.Duration
-	LoadConfig func(repoRoot string) (*ticket.Config, error)
+	RepoRoot       string
+	Actor          string
+	Store          *local.Store
+	Workflow       *workflow.WorkflowManager
+	Namespace      *security.RepoNamespaceStore
+	Adapter        agentrun.Adapter
+	Reviewer       agentrun.Adapter
+	Monitor        agentrun.Monitor
+	Validator      agentrun.Validator
+	Selector       agentrun.Selector
+	Runtime        *runruntime.Store
+	Timeout        time.Duration
+	MaxAutoResumes int
+	LoadConfig     func(repoRoot string) (*ticket.Config, error)
 }
 
 type Service struct {
-	repoRoot   string
-	actor      string
-	store      *local.Store
-	workflow   *workflow.WorkflowManager
-	namespace  *security.RepoNamespaceStore
-	adapter    agentrun.Adapter
-	reviewer   agentrun.Adapter
-	monitor    agentrun.Monitor
-	validator  agentrun.Validator
-	selector   agentrun.Selector
-	runtime    *runruntime.Store
-	timeout    time.Duration
-	loadConfig func(repoRoot string) (*ticket.Config, error)
+	repoRoot       string
+	actor          string
+	store          *local.Store
+	workflow       *workflow.WorkflowManager
+	namespace      *security.RepoNamespaceStore
+	adapter        agentrun.Adapter
+	reviewer       agentrun.Adapter
+	monitor        agentrun.Monitor
+	validator      agentrun.Validator
+	selector       agentrun.Selector
+	runtime        *runruntime.Store
+	timeout        time.Duration
+	maxAutoResumes int
+	loadConfig     func(repoRoot string) (*ticket.Config, error)
 }
 
 type StartedRun struct {
@@ -58,6 +60,11 @@ type reviewerContractError struct {
 	reason string
 }
 
+const (
+	defaultMonitorTimeout = 2 * time.Minute
+	defaultMaxAutoResumes = 2
+)
+
 func (e reviewerContractError) Error() string {
 	return e.reason
 }
@@ -68,19 +75,20 @@ func New(deps Dependencies) *Service {
 		loadConfig = ticket.LoadConfig
 	}
 	return &Service{
-		repoRoot:   deps.RepoRoot,
-		actor:      deps.Actor,
-		store:      deps.Store,
-		workflow:   deps.Workflow,
-		namespace:  deps.Namespace,
-		adapter:    deps.Adapter,
-		reviewer:   deps.Reviewer,
-		monitor:    deps.Monitor,
-		validator:  deps.Validator,
-		selector:   deps.Selector,
-		runtime:    deps.Runtime,
-		timeout:    deps.Timeout,
-		loadConfig: loadConfig,
+		repoRoot:       deps.RepoRoot,
+		actor:          deps.Actor,
+		store:          deps.Store,
+		workflow:       deps.Workflow,
+		namespace:      deps.Namespace,
+		adapter:        deps.Adapter,
+		reviewer:       deps.Reviewer,
+		monitor:        deps.Monitor,
+		validator:      deps.Validator,
+		selector:       deps.Selector,
+		runtime:        deps.Runtime,
+		timeout:        deps.Timeout,
+		maxAutoResumes: deps.MaxAutoResumes,
+		loadConfig:     loadConfig,
 	}
 }
 
@@ -154,6 +162,9 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 		Record:  started.Record,
 		Timeout: s.monitorTimeout(),
 	})
+	if err == nil && obs.TimedOut && s.runtime != nil {
+		obs, err = s.resumeTimedOutImplementer(ctx, ticketID, started.WorktreePath, started.Branch, 1)
+	}
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
@@ -173,7 +184,11 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 			_ = s.cleanupRuntime(ticketID)
 		}
 		if obs.TimedOut {
-			return failedOrRawSummary(ticketID, obs.Result.Status, "run hung; inspect with `docket run-status` and continue with `docket run-resume`", validation), nil
+			reason := strings.TrimSpace(obs.Result.Reason)
+			if reason == "" {
+				reason = "run hung; inspect with `docket run-status` and continue with `docket run-resume`"
+			}
+			return failedOrRawSummary(ticketID, obs.Result.Status, reason, validation), nil
 		}
 		return failedOrRawSummary(ticketID, obs.Result.Status, obs.Result.Reason, validation), nil
 	}
@@ -494,7 +509,91 @@ func (s *Service) monitorTimeout() time.Duration {
 	if s.timeout > 0 {
 		return s.timeout
 	}
-	return 10 * time.Minute
+	return defaultMonitorTimeout
+}
+
+func (s *Service) autoResumeLimit() int {
+	if s.maxAutoResumes > 0 {
+		return s.maxAutoResumes
+	}
+	return defaultMaxAutoResumes
+}
+
+func (s *Service) resumeTimedOutImplementer(ctx context.Context, ticketID, worktreePath, branch string, attempt int) (agentrun.Observation, error) {
+	lastObservation := agentrun.Observation{
+		Result: agentrun.Result{
+			Status:   agentrun.StatusFailed,
+			TicketID: ticketID,
+			Role:     agentrun.RoleImplementer,
+			Reason:   "timed out waiting for additional Codex output",
+		},
+		TimedOut: true,
+	}
+	for attempt <= s.autoResumeLimit() {
+		started, err := s.startAutoResumeAttempt(ctx, ticketID, worktreePath, branch, attempt)
+		if err != nil {
+			return agentrun.Observation{}, err
+		}
+		obs, err := s.monitor.Observe(ctx, agentrun.ObservationInput{
+			Handle:  started.Handle,
+			Record:  started.Record,
+			Timeout: s.monitorTimeout(),
+		})
+		if err != nil {
+			return agentrun.Observation{}, err
+		}
+		lastObservation = obs
+		if !obs.TimedOut {
+			return obs, nil
+		}
+		attempt++
+	}
+	lastObservation.Result = agentrun.Result{
+		Status:   agentrun.StatusFailed,
+		TicketID: ticketID,
+		Role:     agentrun.RoleImplementer,
+		Reason:   fmt.Sprintf("run hung after %d attempts; inspect with `docket run-status` and continue with `docket run-resume`", s.autoResumeLimit()+1),
+	}
+	lastObservation.TimedOut = true
+	return lastObservation, nil
+}
+
+func (s *Service) startAutoResumeAttempt(ctx context.Context, ticketID, worktreePath, branch string, attempt int) (StartedRun, error) {
+	if s.runtime == nil {
+		return StartedRun{}, fmt.Errorf("runtime store is required")
+	}
+	status, ok, err := s.runtime.LoadStatus(ticketID)
+	if err != nil {
+		return StartedRun{}, err
+	}
+	if !ok {
+		return StartedRun{}, fmt.Errorf("ticket %s does not have runtime state", ticketID)
+	}
+	prompt, err := s.runtime.LoadPrompt(ticketID)
+	if err != nil {
+		return StartedRun{}, err
+	}
+	transcript, err := s.runtime.LoadTranscript(ticketID)
+	if err != nil {
+		return StartedRun{}, err
+	}
+	tkt, err := s.store.GetTicket(ctx, ticketID)
+	if err != nil {
+		return StartedRun{}, err
+	}
+	resumePrompt := buildResumePrompt(prompt, tkt, transcript, status)
+	started, err := s.startFollowup(ctx, ticketID, worktreePath, branch, agentrun.RoleImplementer, resumePrompt, s.adapter)
+	if err != nil {
+		return StartedRun{}, err
+	}
+	if s.runtime != nil {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		_ = s.runtime.AppendTranscript(ticketID, runruntime.TranscriptEntry{
+			At:   now,
+			Text: fmt.Sprintf("STATUS ticket=%s phase=healthcheck detail=\"auto-resume attempt %d/%d after inactivity timeout\"", ticketID, attempt, s.autoResumeLimit()),
+		})
+	}
+	return started, nil
 }
 
 func (s *Service) cleanupRuntime(ticketID string) error {

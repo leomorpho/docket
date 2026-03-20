@@ -1033,7 +1033,7 @@ func TestServiceRunTicketFullLifecycleWithStreamedCodexOutput(t *testing.T) {
 	}
 }
 
-func TestServiceRunTicketHungThenResumeFullLifecycle(t *testing.T) {
+func TestServiceRunTicketAutoResumesHungImplementer(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := buildGitRepoForOrchestrationTest(t)
@@ -1087,25 +1087,10 @@ func TestServiceRunTicketHungThenResumeFullLifecycle(t *testing.T) {
 
 	first, err := service.RunTicket(context.Background(), "TKT-391")
 	if err != nil {
-		t.Fatalf("first RunTicket() error = %v", err)
+		t.Fatalf("RunTicket() error = %v", err)
 	}
-	if first.Status != agentrun.StatusFailed || !strings.Contains(first.Reason, "timed out waiting for additional Codex output") {
-		t.Fatalf("unexpected first summary: %#v", first)
-	}
-	status, ok, err := runtimeStore.LoadStatus("TKT-391")
-	if err != nil || !ok || !status.Hung {
-		t.Fatalf("expected hung runtime state, ok=%v status=%#v err=%v", ok, status, err)
-	}
-	if status.PlannedSteps == 0 || status.CurrentStep == 0 {
-		t.Fatalf("expected tracked progress before hang: %#v", status)
-	}
-
-	resumed, err := service.ResumeTicket(context.Background(), "TKT-391")
-	if err != nil {
-		t.Fatalf("ResumeTicket() error = %v", err)
-	}
-	if resumed.Status != agentrun.StatusDone {
-		t.Fatalf("unexpected resumed summary: %#v", resumed)
+	if first.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected summary: %#v", first)
 	}
 	if _, ok, err := runtimeStore.LoadStatus("TKT-391"); err != nil || ok {
 		t.Fatalf("expected runtime cleanup after resume success, ok=%v err=%v", ok, err)
@@ -1123,6 +1108,75 @@ func TestServiceRunTicketHungThenResumeFullLifecycle(t *testing.T) {
 		t.Fatalf("expected two adapter runs, got %#v", adapter.specs)
 	}
 	if !strings.Contains(adapter.specs[1].Prompt, "Previous run hung before completion.") {
-		t.Fatalf("resume prompt missing hung context: %q", adapter.specs[1].Prompt)
+		t.Fatalf("auto-resume prompt missing hung context: %q", adapter.specs[1].Prompt)
+	}
+}
+
+func TestServiceRunTicketStopsAfterAutoResumeLimit(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	cfg := ticket.DefaultConfig()
+	if err := ticket.SaveConfig(repoRoot, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-392",
+		Seq:         392,
+		Title:       "Retry cap",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Retry once, then stop.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "feature.txt exists", Run: "test -f feature.txt"},
+		},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	runtimeStore := runruntime.New(repoRoot)
+	adapter := &streamingAdapter{behaviors: []streamBehavior{
+		hangingStreamBehavior("TKT-392"),
+		hangingStreamBehavior("TKT-392"),
+	}}
+	validator := runvalidate.New(runvalidate.Dependencies{
+		RepoRoot: repoRoot,
+		Store:    store,
+		Workflow: workflowSvc,
+	})
+	service := New(Dependencies{
+		RepoRoot:       repoRoot,
+		Actor:          "agent:test",
+		Store:          store,
+		Workflow:       workflowSvc,
+		Namespace:      namespace,
+		Adapter:        adapter,
+		Monitor:        monitor.New(monitor.Dependencies{Runtime: runtimeStore}),
+		Validator:      validator,
+		Runtime:        runtimeStore,
+		Timeout:        100 * time.Millisecond,
+		MaxAutoResumes: 1,
+	})
+
+	summary, err := service.RunTicket(context.Background(), "TKT-392")
+	if err != nil {
+		t.Fatalf("RunTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusFailed {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	if !strings.Contains(summary.Reason, "run hung after 2 attempts") {
+		t.Fatalf("unexpected retry-cap reason: %#v", summary)
+	}
+	status, ok, err := runtimeStore.LoadStatus("TKT-392")
+	if err != nil || !ok || !status.Hung {
+		t.Fatalf("expected hung runtime state after retry cap, ok=%v status=%#v err=%v", ok, status, err)
 	}
 }

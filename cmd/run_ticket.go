@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const DefaultRunInactivityTimeout = 10 * time.Minute
+const DefaultRunInactivityTimeout = 2 * time.Minute
 
 var (
 	runDisableReview   bool
