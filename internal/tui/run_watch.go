@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -32,6 +33,7 @@ type RunWatchLaunchOption struct {
 	Label       string
 	Description string
 	Start       func() error
+	StayInMenu  bool
 }
 
 type runWatchSnapshot struct {
@@ -41,6 +43,7 @@ type runWatchSnapshot struct {
 	status     runruntime.StatusSnapshot
 	statusOK   bool
 	transcript []runruntime.TranscriptEntry
+	warnings   []string
 }
 
 type runWatchLoadedMsg struct {
@@ -51,7 +54,8 @@ type runWatchLoadedMsg struct {
 type runWatchDoneMsg struct{}
 type runWatchTickMsg struct{}
 type runWatchLaunchResultMsg struct {
-	err error
+	err        error
+	stayInMenu bool
 }
 
 type RunWatchModel struct {
@@ -73,6 +77,8 @@ type RunWatchModel struct {
 	doneCh         <-chan struct{}
 	quitOnDone     bool
 	showDoneNotice bool
+	showHelp       bool
+	confirmHardStop bool
 }
 
 var (
@@ -153,14 +159,17 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.snapshot = msg.snapshot
+		if len(msg.snapshot.warnings) > 0 {
+			m.statusMessage = strings.Join(msg.snapshot.warnings, " | ")
+		}
 		if m.followLog && len(m.snapshot.transcript) >= prevTranscriptLen {
 			m.scrollOffset = max(0, len(m.snapshot.transcript)-m.bodyViewportHeight())
 		}
-		if m.snapshot.ticketID == "" {
+		if len(msg.snapshot.warnings) == 0 && m.snapshot.ticketID == "" {
 			m.statusMessage = "waiting for managed run"
-		} else if m.snapshot.cycle.StopAfterCurrent {
+		} else if len(msg.snapshot.warnings) == 0 && m.snapshot.cycle.StopAfterCurrent {
 			m.statusMessage = "stop requested after current ticket"
-		} else {
+		} else if len(msg.snapshot.warnings) == 0 {
 			m.statusMessage = "watching managed run"
 		}
 		return m, nil
@@ -185,8 +194,13 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.launchMode = launchModeMenu
 			return m, nil
 		}
-		m.launchMode = launchModeWatch
-		m.statusMessage = "watching managed run"
+		if msg.stayInMenu {
+			m.launchMode = launchModeMenu
+			m.statusMessage = "action completed"
+		} else {
+			m.launchMode = launchModeWatch
+			m.statusMessage = "watching managed run"
+		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -230,6 +244,11 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scrollOffset = 0
 			m.followLog = true
 			return m, nil
+		case "?":
+			if m.launchMode == launchModeWatch {
+				m.showHelp = !m.showHelp
+			}
+			return m, nil
 		case "g":
 			if m.launchMode == launchModeWatch {
 				m.followLog = false
@@ -251,6 +270,7 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.launchMode != launchModeWatch {
 				return m, nil
 			}
+			m.confirmHardStop = false
 			if err := m.store.RequestStopAfterCurrent(time.Now()); err != nil {
 				m.statusMessage = "failed to request stop: " + err.Error()
 				return m, nil
@@ -258,12 +278,33 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "stop requested after current ticket"
 			m.snapshot.cycle.StopAfterCurrent = true
 			return m, nil
+		case "x":
+			if m.launchMode != launchModeWatch || m.snapshot.ticketID == "" || !m.snapshot.status.Active {
+				return m, nil
+			}
+			if !m.confirmHardStop {
+				m.confirmHardStop = true
+				m.statusMessage = "press x again to hard stop the current run"
+				return m, nil
+			}
+			m.confirmHardStop = false
+			if err := m.store.HardStopRun(m.snapshot.ticketID, time.Now()); err != nil {
+				m.statusMessage = "failed to hard stop run: " + err.Error()
+				return m, nil
+			}
+			m.statusMessage = "hard stop requested for current run"
+			m.snapshot.status.Active = false
+			m.snapshot.status.Hung = false
+			m.snapshot.status.LastResultStatus = "stopped"
+			m.snapshot.status.LastVisibleText = "Operator requested hard stop"
+			return m, nil
 		case "r":
 			return m, m.loadCmd()
 		case "m", "esc":
 			if len(m.launchOptions) > 0 && !m.launching {
 				m.launchMode = launchModeMenu
 				m.statusMessage = "choose a managed run mode"
+				m.confirmHardStop = false
 			}
 			return m, nil
 		}
@@ -303,7 +344,7 @@ func (m RunWatchModel) renderMenuBody() string {
 
 func (m RunWatchModel) renderSummaryBody() string {
 	if m.snapshot.ticketID == "" {
-		return "No active managed run detected."
+		return "No active managed run detected.\n\nPress m to open the launcher menu and start or attach."
 	}
 	body := []string{}
 	if m.snapshot.status.LastVisibleText != "" {
@@ -311,7 +352,7 @@ func (m RunWatchModel) renderSummaryBody() string {
 		body = append(body, "  "+m.snapshot.status.LastVisibleText)
 	}
 	if m.snapshot.status.LastEventAt != "" {
-		body = append(body, "Last event: "+formatRuntimeTimestamp(m.snapshot.status.LastEventAt))
+		body = append(body, "Last event: "+formatRuntimeTimestampWithRelative(m.snapshot.status.LastEventAt))
 	}
 	transcript := m.snapshot.transcript
 	if len(transcript) > 5 {
@@ -327,8 +368,11 @@ func (m RunWatchModel) renderSummaryBody() string {
 }
 
 func (m RunWatchModel) renderLogBody() string {
+	if m.snapshot.ticketID == "" {
+		return "No active managed run detected.\n\nOpen the launcher menu with m to start the next ticket, start an auto cycle, or clean stale runs."
+	}
 	if len(m.snapshot.transcript) == 0 {
-		return "No visible transcript yet."
+		return "No visible transcript yet.\n\nThe run has started, but no user-visible messages have been captured so far."
 	}
 	lines := make([]string, 0, len(m.snapshot.transcript))
 	for _, entry := range m.snapshot.transcript {
@@ -384,7 +428,7 @@ func (m RunWatchModel) renderWatchView() string {
 	}
 	sections = append(sections, footer)
 	content := strings.Join(sections, "\n\n")
-	return runWatchShellStyle.Render(m.padToHeight(content))
+	return terminalTitle(m.terminalTitle()) + runWatchShellStyle.Render(m.padToHeight(content))
 }
 
 func (m RunWatchModel) renderHeader(title, subtitle string) string {
@@ -415,25 +459,48 @@ func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 		m.renderKeyValue("Run state", m.renderRunState()),
 		m.renderKeyValue("Step", m.renderStepProgress()),
 		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
-		m.renderKeyValue("Last event", formattedRuntimeTimestampOrFallback(m.snapshot.status.LastEventAt, "none yet")),
+		m.renderKeyValue("Last event", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
 	}
 	return "Run Overview\n\n" + strings.Join(rows, "\n")
 }
 
 func (m RunWatchModel) renderRunState() string {
+	switch m.rawRunState() {
+	case "hung":
+		return runWatchStatusErrStyle.Render("hung")
+	case "active":
+		return runWatchStatusOKStyle.Render("active")
+	case "stopped":
+		return runWatchStatusWarnStyle.Render("stopped")
+	case "finished":
+		return runWatchStatusOKStyle.Render("finished")
+	case "failed":
+		return runWatchStatusErrStyle.Render("failed")
+	default:
+		return runWatchSubtleStyle.Render("inactive")
+	}
+}
+
+func (m RunWatchModel) rawRunState() string {
 	if !m.snapshot.statusOK {
 		if m.snapshot.ticketID == "" {
-			return runWatchSubtleStyle.Render("idle")
+			return "idle"
 		}
-		return runWatchStatusWarnStyle.Render("awaiting status")
+		return "awaiting status"
 	}
 	switch {
 	case m.snapshot.status.Hung:
-		return runWatchStatusErrStyle.Render("hung")
+		return "hung"
 	case m.snapshot.status.Active:
-		return runWatchStatusOKStyle.Render("active")
+		return "active"
+	case m.snapshot.status.LastResultStatus == "stopped":
+		return "stopped"
+	case m.snapshot.status.LastResultStatus == string("done"):
+		return "finished"
+	case m.snapshot.status.LastResultStatus == string("failed"):
+		return "failed"
 	default:
-		return runWatchSubtleStyle.Render("inactive")
+		return "inactive"
 	}
 }
 
@@ -518,14 +585,24 @@ func (m RunWatchModel) renderFooter(contentWidth int) string {
 	if status == "" {
 		status = runWatchSubtleStyle.Render(" ")
 	}
-	if contentWidth < lipgloss.Width(help)+lipgloss.Width(status)+2 {
-		return help + "\n" + lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Right).Render(status)
+	if m.confirmHardStop {
+		status = runWatchStatusErrStyle.Render("hard stop armed: press x again to confirm")
 	}
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		help,
-		lipgloss.NewStyle().Width(max(0, contentWidth-lipgloss.Width(help))).Align(lipgloss.Right).Render(status),
-	)
+	footer := ""
+	if contentWidth < lipgloss.Width(help)+lipgloss.Width(status)+2 {
+		footer = help + "\n" + lipgloss.NewStyle().Width(contentWidth).Align(lipgloss.Right).Render(status)
+	} else {
+		footer = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			help,
+			lipgloss.NewStyle().Width(max(0, contentWidth-lipgloss.Width(help))).Align(lipgloss.Right).Render(status),
+		)
+	}
+	if m.showHelp {
+		helpCard := runWatchMutedCardStyle.Copy().Width(contentWidth).Render(m.renderHelpBody())
+		return helpCard + "\n\n" + footer
+	}
+	return footer
 }
 
 func (m RunWatchModel) shouldRenderStatusBanner() bool {
@@ -590,6 +667,13 @@ func formattedRuntimeTimestampOrFallback(value, fallback string) string {
 	return formatRuntimeTimestamp(value)
 }
 
+func formattedRuntimeTimestampWithRelativeOrFallback(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return formatRuntimeTimestampWithRelative(value)
+}
+
 func formatRuntimeTimestamp(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -600,6 +684,80 @@ func formatRuntimeTimestamp(value string) string {
 		return value
 	}
 	return parsed.In(time.Local).Format("Jan 2, 2006 3:04:05 PM MST")
+}
+
+func formatRuntimeTimestampWithRelative(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value
+	}
+	local := parsed.In(time.Local)
+	return local.Format("Jan 2, 2006 3:04:05 PM MST") + " (" + relativeTime(local, time.Now().In(time.Local)) + ")"
+}
+
+func relativeTime(then, now time.Time) string {
+	if now.Before(then) {
+		then, now = now, then
+	}
+	d := now.Sub(then)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+func (m RunWatchModel) renderHelpBody() string {
+	lines := []string{
+		"Help",
+		"",
+		"l/tab  toggle summary and visible log",
+		"j/k    scroll log",
+		"g/G    jump top / jump bottom and follow",
+		"h      hide or show overview",
+		"s      stop after current ticket",
+		"x      hard stop current run (press twice to confirm)",
+		"r      refresh",
+		"?      toggle help",
+	}
+	if len(m.launchOptions) > 0 {
+		lines = append(lines, "m      open launcher menu")
+	}
+	lines = append(lines, "q      quit dashboard")
+	return strings.Join(lines, "\n")
+}
+
+func (m RunWatchModel) terminalTitle() string {
+	parts := []string{filepath.Base(m.repoRoot)}
+	if m.snapshot.ticketID != "" {
+		parts = append(parts, m.snapshot.ticketID)
+	}
+	if m.snapshot.status.CurrentPhase != "" {
+		parts = append(parts, m.snapshot.status.CurrentPhase)
+	} else {
+		parts = append(parts, m.rawRunState())
+	}
+	if m.snapshot.status.PlannedSteps > 0 && m.snapshot.status.CurrentStep > 0 {
+		parts = append(parts, fmt.Sprintf("%d/%d", m.snapshot.status.CurrentStep, m.snapshot.status.PlannedSteps))
+	}
+	return strings.Join(parts, " • ")
+}
+
+func terminalTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return ""
+	}
+	return "\x1b]0;" + title + "\x07"
 }
 
 func (m RunWatchModel) reloadTick() tea.Cmd {
@@ -630,13 +788,15 @@ func (m RunWatchModel) startSelectedOption() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.launching = true
-	m.launchMode = launchModeWatch
+	if !option.StayInMenu {
+		m.launchMode = launchModeWatch
+	}
 	m.showDoneNotice = false
 	doneCh := make(chan struct{})
 	m.doneCh = doneCh
 	return m, func() tea.Msg {
 		defer close(doneCh)
-		return runWatchLaunchResultMsg{err: option.Start()}
+		return runWatchLaunchResultMsg{err: option.Start(), stayInMenu: option.StayInMenu}
 	}
 }
 
@@ -645,46 +805,53 @@ func loadRunWatchSnapshot(store *runruntime.Store, focusTicketID string) (runWat
 	if store == nil {
 		return snapshot, nil
 	}
+	if warnings, err := store.HealRuntimeState(time.Now()); err == nil {
+		snapshot.warnings = append(snapshot.warnings, warnings...)
+	} else {
+		snapshot.warnings = append(snapshot.warnings, "runtime health check failed: "+err.Error())
+	}
 	cycle, ok, err := store.LoadCycleState()
 	if err != nil {
-		return snapshot, err
+		snapshot.warnings = append(snapshot.warnings, "cycle state unavailable: "+err.Error())
 	}
 	snapshot.cycle = cycle
 	snapshot.cycleOK = ok
-	ticketID, status, statusOK, err := selectWatchedTicket(store, focusTicketID, cycle)
-	if err != nil {
-		return snapshot, err
-	}
+	ticketID, status, statusOK, warnings := selectWatchedTicket(store, focusTicketID, cycle)
+	snapshot.warnings = append(snapshot.warnings, warnings...)
 	snapshot.ticketID = ticketID
 	snapshot.status = status
 	snapshot.statusOK = statusOK
 	if ticketID != "" {
 		transcript, err := store.LoadTranscript(ticketID)
 		if err != nil {
-			return snapshot, err
+			snapshot.warnings = append(snapshot.warnings, "transcript unavailable for "+ticketID+": "+err.Error())
+		} else {
+			snapshot.transcript = transcript
 		}
-		snapshot.transcript = transcript
 	}
 	return snapshot, nil
 }
 
-func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle runruntime.CycleState) (string, runruntime.StatusSnapshot, bool, error) {
+func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle runruntime.CycleState) (string, runruntime.StatusSnapshot, bool, []string) {
+	var warnings []string
 	if focusTicketID != "" {
 		status, ok, err := store.LoadStatus(focusTicketID)
-		return focusTicketID, status, ok, err
+		if err != nil {
+			return "", runruntime.StatusSnapshot{}, false, []string{"status unavailable for " + focusTicketID + ": " + err.Error()}
+		}
+		return focusTicketID, status, ok, warnings
 	}
 	if cycle.CurrentTicketID != "" {
 		status, ok, err := store.LoadStatus(cycle.CurrentTicketID)
 		if err != nil {
-			return "", runruntime.StatusSnapshot{}, false, err
-		}
-		if ok {
-			return cycle.CurrentTicketID, status, ok, nil
+			warnings = append(warnings, "cycle ticket status unavailable: "+err.Error())
+		} else if ok {
+			return cycle.CurrentTicketID, status, ok, warnings
 		}
 	}
 	ticketIDs, err := store.ListRunTicketIDs()
 	if err != nil {
-		return "", runruntime.StatusSnapshot{}, false, err
+		return "", runruntime.StatusSnapshot{}, false, []string{"runtime runs unavailable: " + err.Error()}
 	}
 	type candidate struct {
 		ticketID string
@@ -694,7 +861,8 @@ func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle ru
 	for _, ticketID := range ticketIDs {
 		status, ok, err := store.LoadStatus(ticketID)
 		if err != nil {
-			return "", runruntime.StatusSnapshot{}, false, err
+			warnings = append(warnings, "status unavailable for "+ticketID+": "+err.Error())
+			continue
 		}
 		if !ok {
 			continue
@@ -705,7 +873,7 @@ func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle ru
 		candidates = append(candidates, candidate{ticketID: ticketID, status: status})
 	}
 	if len(candidates) == 0 {
-		return "", runruntime.StatusSnapshot{}, false, nil
+		return "", runruntime.StatusSnapshot{}, false, warnings
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].status.Active != candidates[j].status.Active {
@@ -714,15 +882,15 @@ func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle ru
 		return candidates[i].status.LastEventAt > candidates[j].status.LastEventAt
 	})
 	best := candidates[0]
-	return best.ticketID, best.status, true, nil
+	return best.ticketID, best.status, true, warnings
 }
 
 func RunWatchKeys() []string {
-	return slices.Clone([]string{"j", "k", "enter", "l", "tab", "s", "r", "m", "q"})
+	return slices.Clone([]string{"j", "k", "enter", "l", "tab", "s", "x", "r", "m", "?", "q"})
 }
 
 func (m RunWatchModel) runWatchKeyLegend() string {
-	parts := []string{"l/tab toggle", "j/k scroll", "g top", "G follow", "h overview", "s stop", "r refresh"}
+	parts := []string{"l/tab toggle", "j/k scroll", "g top", "G follow", "h overview", "s stop-after", "x hard-stop", "r refresh", "? help"}
 	if len(m.launchOptions) > 0 {
 		parts = append(parts, "m menu")
 	}

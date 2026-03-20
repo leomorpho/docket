@@ -222,3 +222,120 @@ func TestLoadStatusReconcilesDeadActiveProcessToHung(t *testing.T) {
 		t.Fatalf("expected dead process to reconcile to hung failed state, got %#v", status)
 	}
 }
+
+func TestStoreHealRuntimeStateClearsStaleCycle(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-402",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: filepath.Join(repoRoot, "wt"),
+		Branch:       "docket/TKT-402",
+		SessionID:    "session-402",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{
+		TicketID:         record.TicketID,
+		SessionID:        record.SessionID,
+		Active:           false,
+		Hung:             true,
+		LastResultStatus: string(agentrun.StatusFailed),
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+	if err := store.BeginCycle(time.Now()); err != nil {
+		t.Fatalf("BeginCycle() error = %v", err)
+	}
+	if err := store.UpdateCycleCurrent(record.TicketID, time.Now()); err != nil {
+		t.Fatalf("UpdateCycleCurrent() error = %v", err)
+	}
+
+	warnings, err := store.HealRuntimeState(time.Now())
+	if err != nil {
+		t.Fatalf("HealRuntimeState() error = %v", err)
+	}
+	if len(warnings) == 0 {
+		t.Fatalf("expected stale cycle warning")
+	}
+	if _, ok, err := store.LoadCycleState(); err != nil || ok {
+		t.Fatalf("expected cycle to be cleared, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestStoreCleanupStaleRunsRemovesOnlyInactiveRuns(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	active := agentrun.RunRecord{TicketID: "TKT-403", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-403", SessionID: "session-403"}
+	stale := agentrun.RunRecord{TicketID: "TKT-404", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-404", SessionID: "session-404"}
+	if err := store.Init(active, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(active) error = %v", err)
+	}
+	if err := store.Init(stale, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(stale) error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{TicketID: active.TicketID, SessionID: active.SessionID, PID: os.Getpid(), Active: true}); err != nil {
+		t.Fatalf("WriteStatus(active) error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{TicketID: stale.TicketID, SessionID: stale.SessionID, Active: false, Hung: true, LastResultStatus: "stopped"}); err != nil {
+		t.Fatalf("WriteStatus(stale) error = %v", err)
+	}
+
+	removed, err := store.CleanupStaleRuns()
+	if err != nil {
+		t.Fatalf("CleanupStaleRuns() error = %v", err)
+	}
+	if len(removed) != 1 || removed[0] != stale.TicketID {
+		t.Fatalf("unexpected removed set: %#v", removed)
+	}
+	if _, ok, err := store.LoadStatus(active.TicketID); err != nil || !ok {
+		t.Fatalf("expected active run to remain, ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := store.LoadStatus(stale.TicketID); err != nil || ok {
+		t.Fatalf("expected stale run to be removed, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestStoreHardStopRunMarksStoppedAndRequestsCycleStop(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-405", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-405", SessionID: "session-405"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{TicketID: record.TicketID, SessionID: record.SessionID, PID: 999999, Active: true}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+	if err := store.BeginCycle(time.Now()); err != nil {
+		t.Fatalf("BeginCycle() error = %v", err)
+	}
+	if err := store.UpdateCycleCurrent(record.TicketID, time.Now()); err != nil {
+		t.Fatalf("UpdateCycleCurrent() error = %v", err)
+	}
+
+	if err := store.HardStopRun(record.TicketID, time.Now()); err != nil {
+		t.Fatalf("HardStopRun() error = %v", err)
+	}
+	status, ok, err := store.LoadStatus(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.Active || status.Hung || status.LastResultStatus != "stopped" {
+		t.Fatalf("unexpected status after hard stop: %#v", status)
+	}
+	stopRequested, err := store.StopAfterCurrentRequested()
+	if err != nil {
+		t.Fatalf("StopAfterCurrentRequested() error = %v", err)
+	}
+	if !stopRequested {
+		t.Fatalf("expected cycle stop to be requested")
+	}
+}

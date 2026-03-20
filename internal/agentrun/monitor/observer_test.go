@@ -119,6 +119,41 @@ func TestObserverCapturesPlainStdoutVisibleText(t *testing.T) {
 	}
 }
 
+func TestObserverCapturesNestedVisibleJSONMessages(t *testing.T) {
+	t.Parallel()
+
+	handle := &fakeHandle{
+		stdout: bytes.NewBufferString("{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"assistant_message\",\"content\":[{\"type\":\"output_text\",\"text\":\"I checked the repo\"},{\"type\":\"output_text\",\"text\":\"STATUS ticket=TKT-381 phase=analysis\"}]}}\nRESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\n"),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	handle.waitCh <- nil
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer, SessionID: "session-nested"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	transcript, err := store.LoadTranscript("TKT-381")
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) < 2 || transcript[0].Text != "I checked the repo" || transcript[1].Text != "STATUS ticket=TKT-381 phase=analysis" {
+		t.Fatalf("unexpected transcript: %#v", transcript)
+	}
+}
+
 func TestObserverParsesStructuredReviewFromCodexJSONEvent(t *testing.T) {
 	t.Parallel()
 
@@ -364,10 +399,10 @@ func TestObserverReplaysRealCodexGoldenStreamIncrementally(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTranscript() error = %v", err)
 	}
-	if len(transcript) != 4 {
+	if len(transcript) < 4 {
 		t.Fatalf("unexpected transcript length from golden stream: %#v", transcript)
 	}
-	if transcript[0].Text != "PLAN ticket=TKT-GOLDEN steps=2" || transcript[3].Text != "RESULT status=done ticket=TKT-GOLDEN role=implementer commit=deadbeef tests=passed" {
+	if transcript[len(transcript)-4].Text != "PLAN ticket=TKT-GOLDEN steps=2" || transcript[len(transcript)-1].Text != "RESULT status=done ticket=TKT-GOLDEN role=implementer commit=deadbeef tests=passed" {
 		t.Fatalf("unexpected transcript contents: %#v", transcript)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -147,6 +148,7 @@ func (s *liveRunLogStreamer) flushTicket(ticketID string) {
 			s.announced[ticketID] = true
 			fmt.Fprintf(s.cmd.OutOrStdout(), "[%s] session=%s active=%t\n", ticketID, status.SessionID, status.Active)
 		}
+		writeTerminalTitle(s.cmd, formatManagedRunTitle(filepathBase(repo), ticketID, status.CurrentPhase, status.CurrentStep, status.PlannedSteps, status.Active))
 		s.mu.Unlock()
 	}
 	transcript, err := s.store.LoadTranscript(ticketID)
@@ -163,6 +165,56 @@ func (s *liveRunLogStreamer) flushTicket(ticketID string) {
 	}
 	s.seen[ticketID] = len(transcript)
 	s.mu.Unlock()
+}
+
+func filepathBase(path string) string {
+	if path == "" {
+		return ""
+	}
+	parts := strings.Split(strings.TrimRight(path, "/"), "/")
+	return parts[len(parts)-1]
+}
+
+func writeTerminalTitle(cmd *cobra.Command, title string) {
+	if format == "json" || strings.TrimSpace(title) == "" {
+		return
+	}
+	if cmd.OutOrStdout() != os.Stdout {
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "\x1b]0;%s\x07", title)
+}
+
+func formatManagedRunTitle(repoName, ticketID, phase string, step, total int, active bool) string {
+	parts := []string{}
+	if repoName != "" {
+		parts = append(parts, repoName)
+	}
+	if ticketID != "" {
+		parts = append(parts, ticketID)
+	}
+	if phase != "" {
+		parts = append(parts, phase)
+	} else if active {
+		parts = append(parts, "running")
+	}
+	if total > 0 && step > 0 {
+		parts = append(parts, fmt.Sprintf("%d/%d", step, total))
+	}
+	return strings.Join(parts, " • ")
+}
+
+func formatTranscriptTimestampLocal(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value
+	}
+	local := parsed.In(time.Local)
+	return local.Format("Jan 2, 2006 3:04:05 PM MST")
 }
 
 func runActor() string {
@@ -287,6 +339,61 @@ var runWatchCmd = &cobra.Command{
 	},
 }
 
+var tuiCmd = &cobra.Command{
+	Use:   "tui",
+	Short: "Interactive terminal surfaces for Docket",
+}
+
+var tuiWatchCmd = &cobra.Command{
+	Use:   "watch [TKT-NNN]",
+	Short: "Open the managed-run dashboard and launcher",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ticketID := ""
+		if len(args) == 1 {
+			ticketID = args[0]
+		}
+		if ticketID != "" {
+			return runWatchDashboard(repo, ticketID, nil, false, nil)
+		}
+		return runWatchDashboard(repo, "", nil, false, runWatchLaunchOptions(repo))
+	},
+}
+
+var tuiRunLogCmd = &cobra.Command{
+	Use:   "run-log <TKT-NNN>",
+	Short: "Show the visible managed-run transcript for a ticket",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		store := runruntime.New(repo)
+		if warnings, err := store.HealRuntimeState(time.Now()); err == nil && len(warnings) > 0 && format != "json" {
+			for _, warning := range warnings {
+				fmt.Fprintf(cmd.OutOrStdout(), "warning: %s\n", warning)
+			}
+		}
+		transcript, err := store.LoadTranscript(args[0])
+		if err != nil {
+			return fmt.Errorf("load transcript: %w", err)
+		}
+		if format == "json" {
+			printJSON(cmd, map[string]any{
+				"ticket_id":   args[0],
+				"transcript":  transcript,
+				"entry_count": len(transcript),
+			})
+			return nil
+		}
+		if len(transcript) == 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: no visible managed-run transcript\n", args[0])
+			return nil
+		}
+		for _, entry := range transcript {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s  %s\n", formatTranscriptTimestampLocal(entry.At), entry.Text)
+		}
+		return nil
+	},
+}
+
 func renderTicketRunSummary(cmd *cobra.Command, summary agentrun.TicketRunSummary) error {
 	if format == "json" {
 		printJSON(cmd, summary)
@@ -319,6 +426,7 @@ func renderCycleSummary(cmd *cobra.Command, summary agentrun.CycleSummary) error
 }
 
 func executeTicketRun(cmd *cobra.Command, ticketID string, run func(context.Context) (agentrun.TicketRunSummary, error)) (agentrun.TicketRunSummary, error) {
+	healManagedRuntime(repo)
 	if !runWatch {
 		stopLogs := startLiveRunLogs(cmd, repo)
 		defer stopLogs()
@@ -328,6 +436,7 @@ func executeTicketRun(cmd *cobra.Command, ticketID string, run func(context.Cont
 }
 
 func executeCycleRun(cmd *cobra.Command, run func(context.Context) (agentrun.CycleSummary, error)) (agentrun.CycleSummary, error) {
+	healManagedRuntime(repo)
 	if !runWatch {
 		stopLogs := startLiveRunLogs(cmd, repo)
 		defer stopLogs()
@@ -405,11 +514,26 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 			Description: "Watch the current managed run without starting a new one.",
 			Start:       nil,
 		},
+		{
+			ID:          "clean",
+			Label:       "Clean Stale Runs",
+			Description: "Remove inactive stale runtime records and clear invalid cycle state.",
+			StayInMenu:  true,
+			Start: func() error {
+				store := runruntime.New(repoRoot)
+				if _, err := store.HealRuntimeState(time.Now()); err != nil {
+					return err
+				}
+				_, err := store.CleanupStaleRuns()
+				return err
+			},
+		},
 	}
 }
 
 func launchManagedSingleRun(repoRoot string) error {
 	ctx := context.Background()
+	healManagedRuntime(repoRoot)
 	store := local.New(repoRoot)
 	if err := store.SyncIndex(ctx); err != nil {
 		return fmt.Errorf("syncing index: %w", err)
@@ -431,9 +555,15 @@ func launchManagedSingleRun(repoRoot string) error {
 }
 
 func launchManagedAutoCycle(repoRoot string) error {
+	healManagedRuntime(repoRoot)
 	svc := newRunOrchestrator(repoRoot, runReviewEnabled())
 	_, err := svc.RunNext(context.Background())
 	return err
+}
+
+func healManagedRuntime(repoRoot string) {
+	store := runruntime.New(repoRoot)
+	_, _ = store.HealRuntimeState(time.Now())
 }
 
 func init() {
@@ -451,4 +581,7 @@ func init() {
 	rootCmd.AddCommand(runStatusCmd)
 	rootCmd.AddCommand(runResumeCmd)
 	rootCmd.AddCommand(runWatchCmd)
+	tuiCmd.AddCommand(tuiWatchCmd)
+	tuiCmd.AddCommand(tuiRunLogCmd)
+	rootCmd.AddCommand(tuiCmd)
 }

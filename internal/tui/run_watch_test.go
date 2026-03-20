@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,41 @@ func TestLoadRunWatchSnapshotIgnoresStaleInactiveRunsWithoutCycle(t *testing.T) 
 	}
 	if snapshot.ticketID != "" || snapshot.statusOK {
 		t.Fatalf("expected no active watched ticket, got %#v", snapshot)
+	}
+}
+
+func TestLoadRunWatchSnapshotPrefersActiveRunWhenCycleIsStale(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	stale := agentrun.RunRecord{TicketID: "TKT-603", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-603", SessionID: "session-603"}
+	active := agentrun.RunRecord{TicketID: "TKT-604", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-604", SessionID: "session-604"}
+	if err := store.Init(stale, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(stale) error = %v", err)
+	}
+	if err := store.Init(active, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(active) error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: stale.TicketID, SessionID: stale.SessionID, Active: false, Hung: true, LastResultStatus: string(agentrun.StatusFailed)}); err != nil {
+		t.Fatalf("WriteStatus(stale) error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: active.TicketID, SessionID: active.SessionID, PID: os.Getpid(), Active: true, LastEventAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+		t.Fatalf("WriteStatus(active) error = %v", err)
+	}
+	if err := store.BeginCycle(time.Now()); err != nil {
+		t.Fatalf("BeginCycle() error = %v", err)
+	}
+	if err := store.UpdateCycleCurrent(stale.TicketID, time.Now()); err != nil {
+		t.Fatalf("UpdateCycleCurrent() error = %v", err)
+	}
+
+	snapshot, err := loadRunWatchSnapshot(store, "")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	if snapshot.ticketID != active.TicketID || !snapshot.status.Active {
+		t.Fatalf("expected active ticket to win after stale cycle heal, got %#v", snapshot)
 	}
 }
 
@@ -381,6 +417,70 @@ func TestRunWatchModelFollowAndOverviewControls(t *testing.T) {
 	top := gotModel.(RunWatchModel)
 	if top.followLog || top.scrollOffset != 0 {
 		t.Fatalf("expected g to jump to top and disable follow, got %#v", top)
+	}
+
+	gotModel, _ = top.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	help := gotModel.(RunWatchModel)
+	if !help.showHelp {
+		t.Fatalf("expected ? to toggle help")
+	}
+}
+
+func TestRunWatchModelHardStopRequiresConfirmation(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-889", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-889", SessionID: "session-889"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: record.TicketID, SessionID: record.SessionID, PID: 999999, Active: true}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+	model := NewRunWatchModel(repoRoot, "TKT-889", nil, false, nil)
+	model.store = store
+	model.snapshot.ticketID = "TKT-889"
+	model.snapshot.status = runruntime.StatusSnapshot{TicketID: "TKT-889", SessionID: "session-889", PID: 999999, Active: true}
+	model.snapshot.statusOK = true
+
+	gotModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	confirm := gotModel.(RunWatchModel)
+	if !confirm.confirmHardStop {
+		t.Fatalf("expected first x to arm confirmation")
+	}
+	if !strings.Contains(confirm.View(), "hard stop armed") {
+		t.Fatalf("expected view to show armed hard-stop state")
+	}
+	gotModel, _ = confirm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	stopped := gotModel.(RunWatchModel)
+	if stopped.confirmHardStop {
+		t.Fatalf("expected confirmation to clear after hard stop")
+	}
+	status, ok, err := store.LoadStatus("TKT-889")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.Active || status.LastResultStatus != "stopped" {
+		t.Fatalf("expected stopped runtime status, got %#v", status)
+	}
+}
+
+func TestRunWatchModelMenuCleanupActionStaysInMenu(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{ID: "clean", Label: "Clean Stale Runs", StayInMenu: true, Start: func() error { return nil }},
+	})
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected cleanup action to return command")
+	}
+	msg := cmd()
+	updated, _ := gotModel.Update(msg)
+	back := updated.(RunWatchModel)
+	if back.launchMode != launchModeMenu {
+		t.Fatalf("expected cleanup action to remain in menu, got %s", back.launchMode)
 	}
 }
 

@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
+	"github.com/spf13/cobra"
 )
 
 type stubRunOrchestrator struct {
@@ -307,5 +310,109 @@ func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 	got := out.String()
 	if !bytes.Contains([]byte(got), []byte("hung=true")) || !bytes.Contains([]byte(got), []byte("write failing test")) {
 		t.Fatalf("unexpected output: %s", got)
+	}
+}
+
+func TestTuiRunLogCmdRendersVisibleTranscript(t *testing.T) {
+	originalLocal := time.Local
+	time.Local = time.FixedZone("PDT", -7*60*60)
+	defer func() { time.Local = originalLocal }()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-410", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-410", SessionID: "session-410"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.AppendTranscript("TKT-410", runruntime.TranscriptEntry{At: "2026-03-20T15:48:15Z", Text: "PLAN ticket=TKT-410 steps=2"}); err != nil {
+		t.Fatalf("AppendTranscript() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"tui", "run-log", "TKT-410"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tui run-log failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if !bytes.Contains([]byte(got), []byte("PLAN ticket=TKT-410 steps=2")) {
+		t.Fatalf("unexpected output: %s", got)
+	}
+	if !bytes.Contains([]byte(got), []byte("Mar 20, 2026 8:48:15 AM PDT")) {
+		t.Fatalf("expected localized timestamp in output, got: %s", got)
+	}
+}
+
+func TestTuiRunLogCmdFailsCleanlyOnCorruptTranscript(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-412", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-412", SessionID: "session-412"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	transcriptPath := filepath.Join(store.RunDir("TKT-412"), "transcript.json")
+	if err := os.WriteFile(transcriptPath, []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("write corrupt transcript: %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"tui", "run-log", "TKT-412"})
+	err := rootCmd.Execute()
+	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("load transcript")) {
+		t.Fatalf("expected load transcript error, got err=%v output=%s", err, out.String())
+	}
+}
+
+func TestRunWatchLaunchOptionsIncludesCleanupAction(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-411", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-411", SessionID: "session-411"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: "TKT-411", SessionID: "session-411", Active: false, Hung: true, LastResultStatus: "failed"}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	options := runWatchLaunchOptions(repoRoot)
+	found := false
+	for _, option := range options {
+		if option.ID != "clean" {
+			continue
+		}
+		found = true
+		if err := option.Start(); err != nil {
+			t.Fatalf("cleanup action failed: %v", err)
+		}
+		break
+	}
+	if !found {
+		t.Fatalf("expected cleanup launch option")
+	}
+	if _, ok, err := store.LoadStatus("TKT-411"); err != nil || ok {
+		t.Fatalf("expected cleanup action to remove stale run, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestFormatManagedRunTitle(t *testing.T) {
+	if got := formatManagedRunTitle("goship", "TKT-287", "testing", 2, 5, true); got != "goship • TKT-287 • testing • 2/5" {
+		t.Fatalf("unexpected title: %q", got)
+	}
+}
+
+func TestWriteTerminalTitleSkipsNonStdout(t *testing.T) {
+	cmd := &cobra.Command{}
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	writeTerminalTitle(cmd, "ignored")
+	if out.Len() != 0 {
+		t.Fatalf("expected no title write to custom output, got %q", out.String())
 	}
 }

@@ -364,18 +364,47 @@ func visibleTextsFromLine(stream, line string) []string {
 		}
 		return nil
 	}
-	text := strings.TrimSpace(event.Item.Text)
-	if text == "" {
+	out := splitNonEmptyLines(event.Item.Text)
+	if len(out) > 0 {
+		return out
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		return nil
 	}
-	out := make([]string, 0)
-	for _, part := range strings.Split(text, "\n") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
+	return collectVisibleTexts(raw)
+}
+
+func collectVisibleTexts(value any) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	var walk func(any)
+	walk = func(v any) {
+		switch typed := v.(type) {
+		case map[string]any:
+			for key, item := range typed {
+				switch key {
+				case "text", "delta", "message":
+					if str, ok := item.(string); ok {
+						for _, line := range splitNonEmptyLines(str) {
+							if _, exists := seen[line]; exists {
+								continue
+							}
+							seen[line] = struct{}{}
+							out = append(out, line)
+						}
+						continue
+					}
+				}
+				walk(item)
+			}
+		case []any:
+			for _, item := range typed {
+				walk(item)
+			}
 		}
-		out = append(out, part)
 	}
+	walk(value)
 	return out
 }
 

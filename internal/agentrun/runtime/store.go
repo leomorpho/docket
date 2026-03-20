@@ -3,8 +3,11 @@ package runtime
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,6 +46,7 @@ type StatusSnapshot struct {
 	LastMarker        string `json:"last_marker,omitempty"`
 	LastVisibleText   string `json:"last_visible_text,omitempty"`
 	LastResultStatus  string `json:"last_result_status,omitempty"`
+	Warning           string `json:"warning,omitempty"`
 }
 
 type CycleState struct {
@@ -164,6 +168,44 @@ func (s *Store) Cleanup(ticketID string) error {
 	return os.RemoveAll(s.RunDir(ticketID))
 }
 
+func (s *Store) CleanupStaleRuns() ([]string, error) {
+	ticketIDs, err := s.ListRunTicketIDs()
+	if err != nil {
+		return nil, err
+	}
+	var removed []string
+	for _, ticketID := range ticketIDs {
+		status, ok, err := s.LoadStatus(ticketID)
+		if err != nil {
+			if removeErr := s.Cleanup(ticketID); removeErr != nil {
+				return removed, removeErr
+			}
+			removed = append(removed, ticketID)
+			continue
+		}
+		if !ok || !status.Active {
+			if err := s.Cleanup(ticketID); err != nil {
+				return removed, err
+			}
+			removed = append(removed, ticketID)
+		}
+	}
+	sort.Strings(removed)
+	if len(removed) == 0 {
+		return removed, nil
+	}
+	cycle, ok, err := s.LoadCycleState()
+	if err != nil {
+		return removed, err
+	}
+	if ok && cycle.CurrentTicketID != "" && containsString(removed, cycle.CurrentTicketID) {
+		if err := s.EndCycle(); err != nil && !os.IsNotExist(err) {
+			return removed, err
+		}
+	}
+	return removed, nil
+}
+
 func (s *Store) BeginCycle(now time.Time) error {
 	return s.WriteCycleState(CycleState{
 		Active:    true,
@@ -225,6 +267,70 @@ func (s *Store) LoadCycleState() (CycleState, bool, error) {
 
 func (s *Store) EndCycle() error {
 	return os.Remove(filepath.Join(s.RuntimeRootDir(), cycleFile))
+}
+
+func (s *Store) HealRuntimeState(now time.Time) ([]string, error) {
+	var warnings []string
+	cycle, ok, err := s.LoadCycleState()
+	if err != nil {
+		if removeErr := s.EndCycle(); removeErr != nil && !os.IsNotExist(removeErr) {
+			return warnings, removeErr
+		}
+		return append(warnings, "cycle state was unreadable and has been cleared"), nil
+	}
+	if !ok {
+		return warnings, nil
+	}
+	if strings.TrimSpace(cycle.CurrentTicketID) == "" {
+		return warnings, nil
+	}
+	status, statusOK, err := s.LoadStatus(cycle.CurrentTicketID)
+	if err != nil {
+		if endErr := s.EndCycle(); endErr != nil && !os.IsNotExist(endErr) {
+			return warnings, endErr
+		}
+		return append(warnings, fmt.Sprintf("cleared stale cycle for %s after status read error", cycle.CurrentTicketID)), nil
+	}
+	if !statusOK || !status.Active {
+		if endErr := s.EndCycle(); endErr != nil && !os.IsNotExist(endErr) {
+			return warnings, endErr
+		}
+		return append(warnings, fmt.Sprintf("cleared stale cycle for %s", cycle.CurrentTicketID)), nil
+	}
+	return warnings, nil
+}
+
+func (s *Store) HardStopRun(ticketID string, now time.Time) error {
+	status, ok, err := s.LoadStatus(ticketID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("ticket %s does not have runtime state", ticketID)
+	}
+	if status.PID > 0 && processAlive(status.PID) {
+		_ = syscall.Kill(status.PID, syscall.SIGTERM)
+		time.Sleep(150 * time.Millisecond)
+		if processAlive(status.PID) {
+			_ = syscall.Kill(status.PID, syscall.SIGKILL)
+		}
+	}
+	status.Active = false
+	status.Hung = false
+	status.LastEventAt = now.UTC().Format(time.RFC3339Nano)
+	status.LastVisibleAt = status.LastEventAt
+	status.LastVisibleText = "Operator requested hard stop"
+	status.LastResultStatus = "stopped"
+	status.Warning = ""
+	if err := s.WriteStatus(status); err != nil {
+		return err
+	}
+	if cycle, ok, err := s.LoadCycleState(); err == nil && ok {
+		cycle.StopAfterCurrent = true
+		cycle.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
+		_ = s.WriteCycleState(cycle)
+	}
+	return nil
 }
 
 func (s *Store) ListRunTicketIDs() ([]string, error) {
@@ -289,4 +395,13 @@ func writeJSON(path string, payload any) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
