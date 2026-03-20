@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,6 +72,47 @@ type RunWatchModel struct {
 	showDoneNotice bool
 }
 
+var (
+	runWatchShellStyle = lipgloss.NewStyle().
+				Padding(1, 2)
+	runWatchHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("230")).
+				Background(lipgloss.Color("24")).
+				Padding(0, 1)
+	runWatchSubtleStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("244"))
+	runWatchCardStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("62")).
+				Padding(1, 2)
+	runWatchActiveCardStyle = runWatchCardStyle.Copy().
+				BorderForeground(lipgloss.Color("36"))
+	runWatchMutedCardStyle = runWatchCardStyle.Copy().
+				BorderForeground(lipgloss.Color("240"))
+	runWatchKeyStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("229"))
+	runWatchHelpStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("252")).
+				Background(lipgloss.Color("236")).
+				Padding(0, 1)
+	runWatchStatusOKStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("42"))
+	runWatchStatusWarnStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("214"))
+	runWatchStatusErrStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("203"))
+	runWatchSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("230")).
+				Background(lipgloss.Color("31")).
+				Padding(0, 1)
+)
+
 func NewRunWatchModel(repoRoot string, focusTicketID string, doneCh <-chan struct{}, quitOnDone bool, launchOptions []RunWatchLaunchOption) RunWatchModel {
 	model := RunWatchModel{
 		repoRoot:      repoRoot,
@@ -91,11 +132,7 @@ func NewRunWatchModel(repoRoot string, focusTicketID string, doneCh <-chan struc
 }
 
 func (m RunWatchModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{
-		m.loadCmd(),
-		m.tickCmd(),
-	}
-	return tea.Batch(cmds...)
+	return tea.Batch(m.loadCmd(), m.reloadTick())
 }
 
 func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -107,7 +144,7 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runWatchLoadedMsg:
 		if msg.err != nil {
 			m.statusMessage = "watch refresh failed: " + msg.err.Error()
-			return m, m.reloadTick()
+			return m, nil
 		}
 		m.snapshot = msg.snapshot
 		if m.snapshot.ticketID == "" {
@@ -117,9 +154,21 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = "watching managed run"
 		}
-		return m, m.tickCmd()
+		return m, nil
 	case runWatchTickMsg:
-		return m, tea.Batch(m.loadCmd(), m.tickCmd())
+		if m.doneCh != nil {
+			select {
+			case <-m.doneCh:
+				m.launching = false
+				m.showDoneNotice = true
+				if m.quitOnDone {
+					return m, tea.Quit
+				}
+				return m, nil
+			default:
+			}
+		}
+		return m, tea.Batch(m.loadCmd(), m.reloadTick())
 	case runWatchLaunchResultMsg:
 		m.launching = false
 		if msg.err != nil {
@@ -129,19 +178,6 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.launchMode = launchModeWatch
 		m.statusMessage = "watching managed run"
-		return m, nil
-	case runWatchDoneMsg:
-		if m.doneCh != nil {
-			select {
-			case <-m.doneCh:
-				m.launching = false
-				m.showDoneNotice = true
-				if m.quitOnDone {
-					return m, tea.Quit
-				}
-			default:
-			}
-		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -202,69 +238,31 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m RunWatchModel) View() string {
-	header := lipgloss.NewStyle().Bold(true).Render("Managed Run")
-	repoLine := fmt.Sprintf("repo: %s", filepath.Base(m.repoRoot))
 	if m.launchMode == launchModeMenu {
-		lines := []string{header, repoLine, "", m.renderMenuBody(), "", "keys: " + menuKeyLegend()}
-		if m.statusMessage != "" {
-			lines = append(lines[:len(lines)-1], m.statusMessage, lines[len(lines)-1])
-		}
-		return strings.Join(lines, "\n")
+		return m.renderMenuView()
 	}
-	modeLine := fmt.Sprintf("mode: %s", m.mode)
-	stopLine := "stop: running"
-	if m.snapshot.cycle.StopAfterCurrent {
-		stopLine = "stop: after current ticket"
-	}
-	current := "ticket: (none)"
-	if m.snapshot.ticketID != "" {
-		current = fmt.Sprintf("ticket: %s", m.snapshot.ticketID)
-	}
-	lines := []string{header, repoLine + " | " + current + " | " + modeLine + " | " + stopLine}
-	if m.snapshot.statusOK {
-		statusLine := fmt.Sprintf("active=%t hung=%t", m.snapshot.status.Active, m.snapshot.status.Hung)
-		if m.snapshot.status.CurrentStepTitle != "" {
-			statusLine += fmt.Sprintf(" | step %d/%d %s", m.snapshot.status.CurrentStep, m.snapshot.status.PlannedSteps, m.snapshot.status.CurrentStepTitle)
-		}
-		if m.snapshot.status.CurrentPhase != "" {
-			statusLine += fmt.Sprintf(" | phase=%s", m.snapshot.status.CurrentPhase)
-		}
-		lines = append(lines, statusLine)
-	}
-	lines = append(lines, "")
-	if m.mode == watchModeSummary {
-		lines = append(lines, m.renderSummaryBody())
-	} else {
-		lines = append(lines, m.renderLogBody())
-	}
-	lines = append(lines, "")
-	if m.showDoneNotice {
-		lines = append(lines, "run finished")
-	}
-	if m.statusMessage != "" {
-		lines = append(lines, m.statusMessage)
-	}
-	lines = append(lines, "keys: "+m.runWatchKeyLegend())
-	return strings.Join(lines, "\n")
+	return m.renderWatchView()
 }
 
 func (m RunWatchModel) renderMenuBody() string {
 	if len(m.launchOptions) == 0 {
 		return "No launcher actions are configured."
 	}
-	lines := []string{"Select mode:"}
+	lines := []string{"Select mode"}
 	for i, option := range m.launchOptions {
-		cursor := "  "
+		label := option.Label
 		if i == m.selectedOption {
-			cursor = "> "
+			label = runWatchSelectedStyle.Render("› " + label)
+		} else {
+			label = "  " + label
 		}
-		lines = append(lines, fmt.Sprintf("%s%s", cursor, option.Label))
+		lines = append(lines, label)
 		if option.Description != "" {
-			lines = append(lines, "    "+option.Description)
+			lines = append(lines, runWatchSubtleStyle.Render("    "+option.Description))
 		}
 	}
 	if m.launching {
-		lines = append(lines, "", "Launching selected mode...")
+		lines = append(lines, "", runWatchStatusWarnStyle.Render("Launching selected mode..."))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -305,6 +303,132 @@ func (m RunWatchModel) renderLogBody() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m RunWatchModel) renderMenuView() string {
+	header := m.renderHeader("Managed Run Launcher", "choose a mode and start from the dashboard")
+	menu := runWatchActiveCardStyle.Render(m.renderMenuBody())
+	help := runWatchHelpStyle.Render("keys: " + menuKeyLegend())
+	sections := []string{header, menu}
+	if m.statusMessage != "" {
+		sections = append(sections, m.renderStatusBanner())
+	}
+	sections = append(sections, help)
+	return runWatchShellStyle.Render(strings.Join(sections, "\n\n"))
+}
+
+func (m RunWatchModel) renderWatchView() string {
+	header := m.renderHeader("Managed Run Watch", m.renderHeaderMeta())
+	mainCardStyle := runWatchActiveCardStyle
+	if m.snapshot.ticketID == "" {
+		mainCardStyle = runWatchMutedCardStyle
+	}
+	summaryCard := mainCardStyle.Render(m.renderWatchSummaryCard())
+	bodyTitle := "Summary"
+	bodyContent := m.renderSummaryBody()
+	if m.mode == watchModeLog {
+		bodyTitle = "Transcript"
+		bodyContent = m.renderLogBody()
+	}
+	bodyCard := runWatchCardStyle.Render(bodyTitle + "\n\n" + bodyContent)
+	sections := []string{header, summaryCard, bodyCard}
+	if m.showDoneNotice || m.statusMessage != "" {
+		sections = append(sections, m.renderStatusBanner())
+	}
+	sections = append(sections, runWatchHelpStyle.Render("keys: "+m.runWatchKeyLegend()))
+	return runWatchShellStyle.Render(strings.Join(sections, "\n\n"))
+}
+
+func (m RunWatchModel) renderHeader(title, subtitle string) string {
+	titleLine := runWatchHeaderStyle.Render(title)
+	repoLine := runWatchSubtleStyle.Render("repo  " + filepath.Base(m.repoRoot))
+	if subtitle == "" {
+		return lipgloss.JoinVertical(lipgloss.Left, titleLine, repoLine)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, titleLine, repoLine, runWatchSubtleStyle.Render(subtitle))
+}
+
+func (m RunWatchModel) renderHeaderMeta() string {
+	parts := []string{
+		"ticket " + valueOrFallback(m.snapshot.ticketID, "(none)"),
+		"mode " + string(m.mode),
+	}
+	if m.snapshot.cycle.StopAfterCurrent {
+		parts = append(parts, "stop after current")
+	} else {
+		parts = append(parts, "continuous")
+	}
+	return strings.Join(parts, "  •  ")
+}
+
+func (m RunWatchModel) renderWatchSummaryCard() string {
+	rows := []string{
+		m.renderKeyValue("Ticket", valueOrFallback(m.snapshot.ticketID, "(none)")),
+		m.renderKeyValue("Run state", m.renderRunState()),
+		m.renderKeyValue("Step", m.renderStepProgress()),
+		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
+		m.renderKeyValue("Last event", valueOrFallback(m.snapshot.status.LastEventAt, "none yet")),
+	}
+	return "Run Overview\n\n" + strings.Join(rows, "\n")
+}
+
+func (m RunWatchModel) renderRunState() string {
+	if !m.snapshot.statusOK {
+		if m.snapshot.ticketID == "" {
+			return runWatchSubtleStyle.Render("idle")
+		}
+		return runWatchStatusWarnStyle.Render("awaiting status")
+	}
+	switch {
+	case m.snapshot.status.Hung:
+		return runWatchStatusErrStyle.Render("hung")
+	case m.snapshot.status.Active:
+		return runWatchStatusOKStyle.Render("active")
+	default:
+		return runWatchSubtleStyle.Render("inactive")
+	}
+}
+
+func (m RunWatchModel) renderStepProgress() string {
+	if !m.snapshot.statusOK || m.snapshot.status.CurrentStepTitle == "" {
+		return runWatchSubtleStyle.Render("waiting")
+	}
+	prefix := strconv.Itoa(m.snapshot.status.CurrentStep)
+	if m.snapshot.status.PlannedSteps > 0 {
+		prefix += "/" + strconv.Itoa(m.snapshot.status.PlannedSteps)
+	}
+	return prefix + "  " + m.snapshot.status.CurrentStepTitle
+}
+
+func (m RunWatchModel) renderStatusBanner() string {
+	lines := make([]string, 0, 2)
+	if m.showDoneNotice {
+		lines = append(lines, runWatchStatusOKStyle.Render("Run finished"))
+	}
+	if m.statusMessage != "" {
+		lines = append(lines, m.statusMessage)
+	}
+	style := runWatchMutedCardStyle
+	if m.snapshot.status.Hung {
+		style = runWatchCardStyle.Copy().BorderForeground(lipgloss.Color("203"))
+	} else if m.snapshot.cycle.StopAfterCurrent || m.launching {
+		style = runWatchCardStyle.Copy().BorderForeground(lipgloss.Color("214"))
+	}
+	return style.Render(strings.Join(lines, "\n"))
+}
+
+func (m RunWatchModel) renderKeyValue(key, value string) string {
+	return lipgloss.JoinHorizontal(lipgloss.Left,
+		runWatchSubtleStyle.Width(12).Render(strings.ToUpper(key)),
+		value,
+	)
+}
+
+func valueOrFallback(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
 func (m RunWatchModel) reloadTick() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
 		return runWatchTickMsg{}
@@ -312,11 +436,7 @@ func (m RunWatchModel) reloadTick() tea.Cmd {
 }
 
 func (m RunWatchModel) tickCmd() tea.Cmd {
-	cmds := []tea.Cmd{m.reloadTick()}
-	if m.doneCh != nil {
-		cmds = append(cmds, m.doneTickCmd())
-	}
-	return tea.Batch(cmds...)
+	return m.reloadTick()
 }
 
 func (m RunWatchModel) loadCmd() tea.Cmd {
@@ -324,12 +444,6 @@ func (m RunWatchModel) loadCmd() tea.Cmd {
 		snapshot, err := loadRunWatchSnapshot(m.store, m.focusTicketID)
 		return runWatchLoadedMsg{snapshot: snapshot, err: err}
 	}
-}
-
-func (m RunWatchModel) doneTickCmd() tea.Cmd {
-	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
-		return runWatchDoneMsg{}
-	})
 }
 
 func (m RunWatchModel) startSelectedOption() (tea.Model, tea.Cmd) {
@@ -441,5 +555,17 @@ func (m RunWatchModel) runWatchKeyLegend() string {
 }
 
 func menuKeyLegend() string {
-	return "j/k move | enter launch | q quit"
+	return renderLegend(
+		"j/k", "move",
+		"enter", "launch",
+		"q", "quit",
+	)
+}
+
+func renderLegend(parts ...string) string {
+	items := make([]string, 0, len(parts)/2)
+	for i := 0; i+1 < len(parts); i += 2 {
+		items = append(items, runWatchKeyStyle.Render(parts[i])+" "+parts[i+1])
+	}
+	return strings.Join(items, "  •  ")
 }

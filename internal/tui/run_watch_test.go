@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -146,7 +148,7 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	if strings.Contains(view, "m menu") {
 		t.Fatalf("view should not advertise menu key without launcher options: %q", view)
 	}
-	if !strings.Contains(view, "ticket: TKT-700") || !strings.Contains(view, "inspect repo") {
+	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "inspect repo") {
 		t.Fatalf("view missing summary content: %q", view)
 	}
 }
@@ -171,7 +173,7 @@ func TestRunWatchModelMenuLaunchesAttachMode(t *testing.T) {
 		{ID: "attach", Label: "Attach To Active Run"},
 	})
 	view := model.View()
-	if !strings.Contains(view, "Select mode:") || !strings.Contains(view, "Attach To Active Run") {
+	if !strings.Contains(view, "Select mode") || !strings.Contains(view, "Attach To Active Run") {
 		t.Fatalf("menu view missing launcher content: %q", view)
 	}
 
@@ -242,5 +244,30 @@ func TestRunWatchModelMenuNavigationAndReturn(t *testing.T) {
 	backToMenu := gotModel.(RunWatchModel)
 	if backToMenu.launchMode != launchModeMenu {
 		t.Fatalf("expected menu mode after m, got %s", backToMenu.launchMode)
+	}
+}
+
+func TestRunWatchProgramQuitsOnQ(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{ID: "attach", Label: "Attach To Active Run"},
+	})
+	var input bytes.Buffer
+	input.WriteString("q")
+	var output bytes.Buffer
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	program := tea.NewProgram(
+		model,
+		tea.WithContext(ctx),
+		tea.WithInput(&input),
+		tea.WithOutput(&output),
+		tea.WithoutRenderer(),
+	)
+	if _, err := program.Run(); err != nil {
+		t.Fatalf("program.Run() error = %v", err)
 	}
 }
