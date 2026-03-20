@@ -528,6 +528,8 @@ func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 		m.renderKeyValue("Step", m.renderStepProgress()),
 		m.renderKeyValue("Progress", m.renderStepBar()),
 		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
+		m.renderKeyValue("Started", formattedRuntimeTimestampOrFallback(m.snapshot.status.StartedAt, "unknown")),
+		m.renderKeyValue("Length", formatRuntimeDurationOrFallback(m.snapshot.status.StartedAt, "unknown")),
 		m.renderKeyValue("Last event", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
 		m.renderKeyValue("Messages", strconv.Itoa(m.snapshot.status.SessionMessageCount)),
 		m.renderKeyValue("Health", strconv.Itoa(m.snapshot.status.HealthCheckCount)),
@@ -636,7 +638,8 @@ func (m RunWatchModel) renderStatusBanner(contentWidth int) string {
 
 func (m RunWatchModel) renderKeyValue(key, value string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Left,
-		runWatchSubtleStyle.Width(12).Render(strings.ToUpper(key)),
+		runWatchSubtleStyle.Width(14).Render(strings.ToUpper(key)),
+		"  ",
 		value,
 	)
 }
@@ -792,6 +795,34 @@ func formattedRuntimeTimestampWithRelativeOrFallback(value, fallback string) str
 		return fallback
 	}
 	return formatRuntimeTimestampWithRelative(value)
+}
+
+func formatRuntimeDurationOrFallback(startedAt, fallback string) string {
+	startedAt = strings.TrimSpace(startedAt)
+	if startedAt == "" {
+		return fallback
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, startedAt)
+	if err != nil {
+		return fallback
+	}
+	d := time.Since(parsed)
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return "under 1m"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) % 60
+		if minutes == 0 {
+			return fmt.Sprintf("%dh", hours)
+		}
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
 }
 
 func formatRuntimeTimestamp(value string) string {

@@ -33,6 +33,7 @@ type StatusSnapshot struct {
 	TicketID              string `json:"ticket_id"`
 	SessionID             string `json:"session_id,omitempty"`
 	Role                  string `json:"role,omitempty"`
+	StartedAt             string `json:"started_at,omitempty"`
 	PID                   int    `json:"pid,omitempty"`
 	Active                bool   `json:"active"`
 	Hung                  bool   `json:"hung,omitempty"`
@@ -106,6 +107,7 @@ func (s *Store) Init(record agentrun.RunRecord, prompt string, inactivity time.D
 		TicketID:          record.TicketID,
 		SessionID:         record.SessionID,
 		Role:              string(record.Role),
+		StartedAt:         record.StartedAt,
 		Active:            true,
 		InactivityTimeout: inactivity.String(),
 	})
@@ -164,6 +166,14 @@ func (s *Store) LoadStdoutLines(ticketID string) ([]string, error) {
 }
 
 func (s *Store) WriteStatus(status StatusSnapshot) error {
+	if strings.TrimSpace(status.TicketID) == "" {
+		return writeJSON(filepath.Join(s.RunDir(status.TicketID), statusFile), status)
+	}
+	if existing, ok, err := s.LoadStatus(status.TicketID); err == nil && ok {
+		if strings.TrimSpace(status.StartedAt) == "" {
+			status.StartedAt = existing.StartedAt
+		}
+	}
 	return writeJSON(filepath.Join(s.RunDir(status.TicketID), statusFile), status)
 }
 

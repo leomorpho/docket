@@ -224,6 +224,7 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 		TicketID:            "TKT-700",
 		SessionID:           "session-700",
 		Active:              true,
+		StartedAt:           "2026-03-20T15:40:00Z",
 		PlannedSteps:        3,
 		CurrentStep:         1,
 		CurrentStepTitle:    "inspect repo",
@@ -273,6 +274,9 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(view, "still working") || !strings.Contains(view, "ping") {
 		t.Fatalf("view missing health/intervention content: %q", view)
+	}
+	if !strings.Contains(view, "STARTED") || !strings.Contains(view, "LENGTH") {
+		t.Fatalf("view missing started/length content: %q", view)
 	}
 	if !strings.Contains(view, "4") || !strings.Contains(view, "MESSAGES") {
 		t.Fatalf("view missing session message count: %q", view)

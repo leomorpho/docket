@@ -172,6 +172,7 @@ func (o *Observer) writeInitialStatus(input agentrun.ObservationInput, timeout t
 		TicketID:          input.Record.TicketID,
 		SessionID:         input.Record.SessionID,
 		Role:              string(input.Record.Role),
+		StartedAt:         input.Record.StartedAt,
 		PID:               input.Handle.PID(),
 		Active:            true,
 		InactivityTimeout: timeout.String(),

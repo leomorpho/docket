@@ -58,6 +58,9 @@ func TestStoreInitAppendSnapshotAndCleanup(t *testing.T) {
 	if status.LastMarker != "PLAN" {
 		t.Fatalf("unexpected status: %#v", status)
 	}
+	if status.StartedAt == "" {
+		t.Fatalf("expected started_at to be persisted: %#v", status)
+	}
 	transcript, err := store.LoadTranscript(record.TicketID)
 	if err != nil {
 		t.Fatalf("LoadTranscript() error = %v", err)
