@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leomorpho/docket/internal/agentrun"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -433,6 +434,140 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	}
 	if run.WorktreePath == "" || run.WorktreePath == tmpRepo {
 		t.Fatalf("expected dedicated worktree path, got %q", run.WorktreePath)
+	}
+}
+
+func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
+	prev := newRunOrchestrator
+	prevStartRun := startRun
+	prevStartAuto := startAuto
+	prevRunWithReview := runWithReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		startRun = prevStartRun
+		startAuto = prevStartAuto
+		runWithReview = prevRunWithReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	tmpRepo := t.TempDir()
+	repo = tmpRepo
+	format = "human"
+	startRun = false
+	startAuto = false
+	runWithReview = false
+
+	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(tmpRepo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-501",
+		Seq:         501,
+		Title:       "Managed start run",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	var gotTicket string
+	var gotReview bool
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		gotReview = enableReview
+		return stubRunOrchestrator{
+			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
+				gotTicket = ticketID
+				return agentrun.TicketRunSummary{TicketID: ticketID, Status: agentrun.StatusDone, Reason: "validated and advanced"}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"start", "--run"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start --run failed: %v\n%s", err, out.String())
+	}
+
+	if gotTicket != "TKT-501" {
+		t.Fatalf("expected start --run to choose TKT-501, got %q", gotTicket)
+	}
+	if gotReview {
+		t.Fatalf("expected review disabled by default")
+	}
+	if got := out.String(); !strings.Contains(got, "TKT-501: done") {
+		t.Fatalf("unexpected output: %s", got)
+	}
+}
+
+func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
+	prev := newRunOrchestrator
+	prevStartRun := startRun
+	prevStartAuto := startAuto
+	prevRunWithReview := runWithReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		startRun = prevStartRun
+		startAuto = prevStartAuto
+		runWithReview = prevRunWithReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repo = t.TempDir()
+	format = "human"
+	startRun = false
+	startAuto = false
+	runWithReview = false
+	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	var runNextCalled bool
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		if !enableReview {
+			// keep branch explicit; review not needed for this test
+		}
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				runNextCalled = true
+				return agentrun.CycleSummary{
+					Runs: []agentrun.TicketRunSummary{
+						{TicketID: "TKT-601", Status: agentrun.StatusDone},
+						{TicketID: "TKT-602", Status: agentrun.StatusFailed, Reason: "blocked"},
+					},
+					StopReason: "blocked",
+				}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"start", "--run", "--auto"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start --run --auto failed: %v\n%s", err, out.String())
+	}
+
+	if !runNextCalled {
+		t.Fatalf("expected start --run --auto to delegate to RunNext")
+	}
+	if got := out.String(); !strings.Contains(got, "TKT-601: done") || !strings.Contains(got, "Stopped: blocked") {
+		t.Fatalf("unexpected output: %s", got)
 	}
 }
 

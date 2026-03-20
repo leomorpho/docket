@@ -19,6 +19,7 @@ import (
 var (
 	startAuto bool
 	startYolo bool
+	startRun  bool
 )
 
 var startCmd = &cobra.Command{
@@ -36,6 +37,9 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
+		}
+		if startRun {
+			return runStartManaged(cmd, ctx, s, cfg)
 		}
 		ns := security.NewRepoNamespaceStore(docketHome)
 		activeWorkflowHash, active, err := ns.GetActiveWorkflowHash(repo)
@@ -220,6 +224,40 @@ In --yolo mode, it prints a multi-ticket autonomous execution prompt for LLM age
 	},
 }
 
+func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cfg *ticket.Config) error {
+	svc := newRunOrchestrator(repo, runWithReview)
+	if startAuto {
+		summary, err := svc.RunNext(ctx)
+		if err != nil {
+			return err
+		}
+		return renderCycleSummary(cmd, summary)
+	}
+
+	t, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		if format == "json" {
+			printJSON(cmd, map[string]interface{}{
+				"ticket":             nil,
+				"no_workable_ticket": true,
+				"message":            fmt.Sprintf("No workable tickets found. Startable states in current config: %s.", startableStatesSummary(cfg)),
+			})
+			return nil
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "No workable tickets found. Startable states in current config: %s.\n", startableStatesSummary(cfg))
+		return nil
+	}
+
+	summary, err := svc.RunTicket(ctx, t.ID)
+	if err != nil {
+		return err
+	}
+	return renderTicketRunSummary(cmd, summary)
+}
+
 func renderStartNoTicketIntro(cmd *cobra.Command, cfg *ticket.Config, runtimePolicyMode, runtimePolicyMessage string, capabilityDigest startCapabilityDigest, quickPath llmQuickPath, agentQuickstart startAgentQuickstart) {
 	fmt.Fprintf(cmd.OutOrStdout(), "No workable tickets found. Startable states in current config: %s.\n", startableStatesSummary(cfg))
 	fmt.Fprintf(cmd.OutOrStdout(), "\n=== Docket Intro ===\n")
@@ -309,5 +347,8 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 func init() {
 	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion")
 	startCmd.Flags().BoolVar(&startYolo, "yolo", false, "print a multi-ticket autonomous prompt for LLM agents")
+	startCmd.Flags().BoolVar(&startRun, "run", false, "run the next workable ticket through the Codex flow instead of printing a prompt")
+	startCmd.Flags().BoolVar(&runWithReview, "review", false, "run one optional reviewer pass with a single capped fix-review loop")
+	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "mark the managed run hung after this much time without new Codex output")
 	rootCmd.AddCommand(startCmd)
 }

@@ -81,16 +81,7 @@ var runTicketCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if format == "json" {
-			printJSON(cmd, summary)
-			return nil
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s: %s", summary.TicketID, summary.Status)
-		if summary.Reason != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), " (%s)", summary.Reason)
-		}
-		fmt.Fprintln(cmd.OutOrStdout())
-		return nil
+		return renderTicketRunSummary(cmd, summary)
 	},
 }
 
@@ -103,21 +94,7 @@ var runNextCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if format == "json" {
-			printJSON(cmd, summary)
-			return nil
-		}
-		for _, run := range summary.Runs {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s", run.TicketID, run.Status)
-			if run.Reason != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), " (%s)", run.Reason)
-			}
-			fmt.Fprintln(cmd.OutOrStdout())
-		}
-		if summary.StopReason != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Stopped: %s\n", summary.StopReason)
-		}
-		return nil
+		return renderCycleSummary(cmd, summary)
 	},
 }
 
@@ -171,17 +148,39 @@ var runResumeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if format == "json" {
-			printJSON(cmd, summary)
-			return nil
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s: %s", summary.TicketID, summary.Status)
-		if summary.Reason != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), " (%s)", summary.Reason)
+		return renderTicketRunSummary(cmd, summary)
+	},
+}
+
+func renderTicketRunSummary(cmd *cobra.Command, summary agentrun.TicketRunSummary) error {
+	if format == "json" {
+		printJSON(cmd, summary)
+		return nil
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s: %s", summary.TicketID, summary.Status)
+	if summary.Reason != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), " (%s)", summary.Reason)
+	}
+	fmt.Fprintln(cmd.OutOrStdout())
+	return nil
+}
+
+func renderCycleSummary(cmd *cobra.Command, summary agentrun.CycleSummary) error {
+	if format == "json" {
+		printJSON(cmd, summary)
+		return nil
+	}
+	for _, run := range summary.Runs {
+		fmt.Fprintf(cmd.OutOrStdout(), "%s: %s", run.TicketID, run.Status)
+		if run.Reason != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), " (%s)", run.Reason)
 		}
 		fmt.Fprintln(cmd.OutOrStdout())
-		return nil
-	},
+	}
+	if summary.StopReason != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Stopped: %s\n", summary.StopReason)
+	}
+	return nil
 }
 
 func init() {
