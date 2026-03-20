@@ -20,6 +20,20 @@ const (
 	watchModeLog     watchMode = "log"
 )
 
+type launchMode string
+
+const (
+	launchModeMenu  launchMode = "menu"
+	launchModeWatch launchMode = "watch"
+)
+
+type RunWatchLaunchOption struct {
+	ID          string
+	Label       string
+	Description string
+	Start       func() error
+}
+
 type runWatchSnapshot struct {
 	cycle      runruntime.CycleState
 	cycleOK    bool
@@ -36,11 +50,18 @@ type runWatchLoadedMsg struct {
 
 type runWatchDoneMsg struct{}
 type runWatchTickMsg struct{}
+type runWatchLaunchResultMsg struct {
+	err error
+}
 
 type RunWatchModel struct {
 	repoRoot       string
 	store          *runruntime.Store
 	focusTicketID  string
+	launchMode     launchMode
+	launchOptions  []RunWatchLaunchOption
+	selectedOption int
+	launching      bool
 	mode           watchMode
 	width          int
 	height         int
@@ -51,8 +72,8 @@ type RunWatchModel struct {
 	showDoneNotice bool
 }
 
-func NewRunWatchModel(repoRoot string, focusTicketID string, doneCh <-chan struct{}, quitOnDone bool) RunWatchModel {
-	return RunWatchModel{
+func NewRunWatchModel(repoRoot string, focusTicketID string, doneCh <-chan struct{}, quitOnDone bool, launchOptions []RunWatchLaunchOption) RunWatchModel {
+	model := RunWatchModel{
 		repoRoot:      repoRoot,
 		store:         runruntime.New(repoRoot),
 		focusTicketID: focusTicketID,
@@ -60,6 +81,13 @@ func NewRunWatchModel(repoRoot string, focusTicketID string, doneCh <-chan struc
 		doneCh:        doneCh,
 		quitOnDone:    quitOnDone,
 	}
+	if len(launchOptions) > 0 {
+		model.launchMode = launchModeMenu
+		model.launchOptions = slices.Clone(launchOptions)
+	} else {
+		model.launchMode = launchModeWatch
+	}
+	return model
 }
 
 func (m RunWatchModel) Init() tea.Cmd {
@@ -92,10 +120,21 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.tickCmd()
 	case runWatchTickMsg:
 		return m, tea.Batch(m.loadCmd(), m.tickCmd())
+	case runWatchLaunchResultMsg:
+		m.launching = false
+		if msg.err != nil {
+			m.statusMessage = "launch failed: " + msg.err.Error()
+			m.launchMode = launchModeMenu
+			return m, nil
+		}
+		m.launchMode = launchModeWatch
+		m.statusMessage = "watching managed run"
+		return m, nil
 	case runWatchDoneMsg:
 		if m.doneCh != nil {
 			select {
 			case <-m.doneCh:
+				m.launching = false
 				m.showDoneNotice = true
 				if m.quitOnDone {
 					return m, tea.Quit
@@ -110,7 +149,28 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "q":
 			return m, tea.Quit
+		case "up", "k":
+			if m.launchMode == launchModeMenu && len(m.launchOptions) > 0 {
+				m.selectedOption--
+				if m.selectedOption < 0 {
+					m.selectedOption = len(m.launchOptions) - 1
+				}
+			}
+			return m, nil
+		case "down", "j":
+			if m.launchMode == launchModeMenu && len(m.launchOptions) > 0 {
+				m.selectedOption = (m.selectedOption + 1) % len(m.launchOptions)
+			}
+			return m, nil
+		case "enter":
+			if m.launchMode == launchModeMenu {
+				return m.startSelectedOption()
+			}
+			return m, nil
 		case "tab", "l":
+			if m.launchMode != launchModeWatch {
+				return m, nil
+			}
 			if m.mode == watchModeSummary {
 				m.mode = watchModeLog
 			} else {
@@ -118,6 +178,9 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "s":
+			if m.launchMode != launchModeWatch {
+				return m, nil
+			}
 			if err := m.store.RequestStopAfterCurrent(time.Now()); err != nil {
 				m.statusMessage = "failed to request stop: " + err.Error()
 				return m, nil
@@ -127,14 +190,27 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "r":
 			return m, m.loadCmd()
+		case "m", "esc":
+			if len(m.launchOptions) > 0 && !m.launching {
+				m.launchMode = launchModeMenu
+				m.statusMessage = "choose a managed run mode"
+			}
+			return m, nil
 		}
 	}
 	return m, nil
 }
 
 func (m RunWatchModel) View() string {
-	header := lipgloss.NewStyle().Bold(true).Render("Managed Run Watch")
+	header := lipgloss.NewStyle().Bold(true).Render("Managed Run")
 	repoLine := fmt.Sprintf("repo: %s", filepath.Base(m.repoRoot))
+	if m.launchMode == launchModeMenu {
+		lines := []string{header, repoLine, "", m.renderMenuBody(), "", "keys: " + menuKeyLegend()}
+		if m.statusMessage != "" {
+			lines = append(lines[:len(lines)-1], m.statusMessage, lines[len(lines)-1])
+		}
+		return strings.Join(lines, "\n")
+	}
 	modeLine := fmt.Sprintf("mode: %s", m.mode)
 	stopLine := "stop: running"
 	if m.snapshot.cycle.StopAfterCurrent {
@@ -168,7 +244,28 @@ func (m RunWatchModel) View() string {
 	if m.statusMessage != "" {
 		lines = append(lines, m.statusMessage)
 	}
-	lines = append(lines, "keys: "+runWatchKeyLegend())
+	lines = append(lines, "keys: "+m.runWatchKeyLegend())
+	return strings.Join(lines, "\n")
+}
+
+func (m RunWatchModel) renderMenuBody() string {
+	if len(m.launchOptions) == 0 {
+		return "No launcher actions are configured."
+	}
+	lines := []string{"Select mode:"}
+	for i, option := range m.launchOptions {
+		cursor := "  "
+		if i == m.selectedOption {
+			cursor = "> "
+		}
+		lines = append(lines, fmt.Sprintf("%s%s", cursor, option.Label))
+		if option.Description != "" {
+			lines = append(lines, "    "+option.Description)
+		}
+	}
+	if m.launching {
+		lines = append(lines, "", "Launching selected mode...")
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -215,13 +312,44 @@ func (m RunWatchModel) reloadTick() tea.Cmd {
 }
 
 func (m RunWatchModel) tickCmd() tea.Cmd {
-	return m.reloadTick()
+	cmds := []tea.Cmd{m.reloadTick()}
+	if m.doneCh != nil {
+		cmds = append(cmds, m.doneTickCmd())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m RunWatchModel) loadCmd() tea.Cmd {
 	return func() tea.Msg {
 		snapshot, err := loadRunWatchSnapshot(m.store, m.focusTicketID)
 		return runWatchLoadedMsg{snapshot: snapshot, err: err}
+	}
+}
+
+func (m RunWatchModel) doneTickCmd() tea.Cmd {
+	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
+		return runWatchDoneMsg{}
+	})
+}
+
+func (m RunWatchModel) startSelectedOption() (tea.Model, tea.Cmd) {
+	if len(m.launchOptions) == 0 || m.selectedOption >= len(m.launchOptions) {
+		return m, nil
+	}
+	option := m.launchOptions[m.selectedOption]
+	if option.Start == nil {
+		m.launchMode = launchModeWatch
+		m.statusMessage = "watching managed run"
+		return m, nil
+	}
+	m.launching = true
+	m.launchMode = launchModeWatch
+	m.showDoneNotice = false
+	doneCh := make(chan struct{})
+	m.doneCh = doneCh
+	return m, func() tea.Msg {
+		defer close(doneCh)
+		return runWatchLaunchResultMsg{err: option.Start()}
 	}
 }
 
@@ -300,9 +428,18 @@ func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle ru
 }
 
 func RunWatchKeys() []string {
-	return slices.Clone([]string{"l", "tab", "s", "r", "q"})
+	return slices.Clone([]string{"j", "k", "enter", "l", "tab", "s", "r", "m", "q"})
 }
 
-func runWatchKeyLegend() string {
-	return "l/tab toggle logs | s stop after current | r refresh | q quit"
+func (m RunWatchModel) runWatchKeyLegend() string {
+	parts := []string{"l/tab toggle logs", "s stop after current", "r refresh"}
+	if len(m.launchOptions) > 0 {
+		parts = append(parts, "m menu")
+	}
+	parts = append(parts, "q quit")
+	return strings.Join(parts, " | ")
+}
+
+func menuKeyLegend() string {
+	return "j/k move | enter launch | q quit"
 }

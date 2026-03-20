@@ -33,7 +33,7 @@ func TestRunWatchModelToggleAndStopRequest(t *testing.T) {
 		t.Fatalf("UpdateCycleCurrent() error = %v", err)
 	}
 
-	model := NewRunWatchModel(repoRoot, "TKT-500", nil, false)
+	model := NewRunWatchModel(repoRoot, "TKT-500", nil, false, nil)
 	gotModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	toggled := gotModel.(RunWatchModel)
 	if toggled.mode != watchModeLog {
@@ -133,17 +133,114 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 		t.Fatalf("AppendTranscript() error = %v", err)
 	}
 
-	model := NewRunWatchModel(repoRoot, "TKT-700", nil, false)
+	model := NewRunWatchModel(repoRoot, "TKT-700", nil, false, nil)
 	snapshot, err := loadRunWatchSnapshot(store, "TKT-700")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
 	model.snapshot = snapshot
 	view := model.View()
-	if !strings.Contains(view, "keys: "+runWatchKeyLegend()) {
+	if !strings.Contains(view, "keys: "+model.runWatchKeyLegend()) {
 		t.Fatalf("view missing key legend: %q", view)
+	}
+	if strings.Contains(view, "m menu") {
+		t.Fatalf("view should not advertise menu key without launcher options: %q", view)
 	}
 	if !strings.Contains(view, "ticket: TKT-700") || !strings.Contains(view, "inspect repo") {
 		t.Fatalf("view missing summary content: %q", view)
+	}
+}
+
+func TestRunWatchModelViewShowsMenuKeyWhenLauncherEnabled(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{ID: "single", Label: "Start Next Ticket"},
+	})
+	gotModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	view := gotModel.(RunWatchModel).View()
+	if !strings.Contains(view, "m menu") {
+		t.Fatalf("view missing menu key legend: %q", view)
+	}
+}
+
+func TestRunWatchModelMenuLaunchesAttachMode(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{ID: "attach", Label: "Attach To Active Run"},
+	})
+	view := model.View()
+	if !strings.Contains(view, "Select mode:") || !strings.Contains(view, "Attach To Active Run") {
+		t.Fatalf("menu view missing launcher content: %q", view)
+	}
+
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("attach option should not return an async command")
+	}
+	updated := gotModel.(RunWatchModel)
+	if updated.launchMode != launchModeWatch {
+		t.Fatalf("expected attach option to switch to watch mode, got %s", updated.launchMode)
+	}
+}
+
+func TestRunWatchModelMenuLaunchInvokesStartCallback(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{
+			ID:    "single",
+			Label: "Start Next Ticket",
+			Start: func() error {
+				called = true
+				return nil
+			},
+		},
+	})
+
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("launch option should return an async command")
+	}
+	launching := gotModel.(RunWatchModel)
+	if !launching.launching || launching.launchMode != launchModeWatch {
+		t.Fatalf("expected launching watch mode, got %#v", launching)
+	}
+	msg := cmd()
+	if !called {
+		t.Fatalf("expected launch callback to be invoked")
+	}
+	result, ok := msg.(runWatchLaunchResultMsg)
+	if !ok {
+		t.Fatalf("expected launch result message, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("unexpected launch error: %v", result.err)
+	}
+}
+
+func TestRunWatchModelMenuNavigationAndReturn(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{ID: "single", Label: "Start Next Ticket"},
+		{ID: "auto", Label: "Start Auto Cycle"},
+	})
+	gotModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	updated := gotModel.(RunWatchModel)
+	if updated.selectedOption != 1 {
+		t.Fatalf("expected second option selected, got %d", updated.selectedOption)
+	}
+	gotModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	watching := gotModel.(RunWatchModel)
+	if watching.launchMode != launchModeWatch {
+		t.Fatalf("expected watch mode after enter, got %s", watching.launchMode)
+	}
+	gotModel, _ = watching.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	backToMenu := gotModel.(RunWatchModel)
+	if backToMenu.launchMode != launchModeMenu {
+		t.Fatalf("expected menu mode after m, got %s", backToMenu.launchMode)
 	}
 }

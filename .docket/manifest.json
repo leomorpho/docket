@@ -2040,7 +2040,7 @@
     },
     "TKT-368": {
       "title": "Refactor update command lifecycle side effects to use config-defined active review and completed roles",
-      "state": "todo",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-310"
     },

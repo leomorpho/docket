@@ -273,14 +273,17 @@ var runResumeCmd = &cobra.Command{
 
 var runWatchCmd = &cobra.Command{
 	Use:   "run-watch [TKT-NNN]",
-	Short: "Open an interactive dashboard for active managed runs",
+	Short: "Open the managed-run dashboard and launcher",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ticketID := ""
 		if len(args) == 1 {
 			ticketID = args[0]
 		}
-		return runWatchDashboard(repo, ticketID, nil, false)
+		if ticketID != "" {
+			return runWatchDashboard(repo, ticketID, nil, false, nil)
+		}
+		return runWatchDashboard(repo, "", nil, false, runWatchLaunchOptions(repo))
 	},
 }
 
@@ -345,7 +348,7 @@ func runTicketWithWatch(repoRoot, ticketID string, run func(context.Context) (ag
 		summary, err := run(context.Background())
 		resultCh <- watchResult{summary: summary, err: err}
 	}()
-	if err := runWatchDashboard(repoRoot, ticketID, doneCh, true); err != nil {
+	if err := runWatchDashboard(repoRoot, ticketID, doneCh, true, nil); err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
 	res := <-resultCh
@@ -364,17 +367,72 @@ func runCycleWithWatch(repoRoot string, run func(context.Context) (agentrun.Cycl
 		summary, err := run(context.Background())
 		resultCh <- watchResult{summary: summary, err: err}
 	}()
-	if err := runWatchDashboard(repoRoot, "", doneCh, true); err != nil {
+	if err := runWatchDashboard(repoRoot, "", doneCh, true, nil); err != nil {
 		return agentrun.CycleSummary{}, err
 	}
 	res := <-resultCh
 	return res.summary, res.err
 }
 
-func runWatchDashboard(repoRoot, ticketID string, doneCh <-chan struct{}, quitOnDone bool) error {
-	model := tui.NewRunWatchModel(repoRoot, ticketID, doneCh, quitOnDone)
+func runWatchDashboard(repoRoot, ticketID string, doneCh <-chan struct{}, quitOnDone bool, launchOptions []tui.RunWatchLaunchOption) error {
+	model := tui.NewRunWatchModel(repoRoot, ticketID, doneCh, quitOnDone, launchOptions)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	_, err := program.Run()
+	return err
+}
+
+func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
+	return []tui.RunWatchLaunchOption{
+		{
+			ID:          "single",
+			Label:       "Start Next Ticket",
+			Description: "Pick the next runnable ticket and run it with review in a fresh managed session.",
+			Start: func() error {
+				return launchManagedSingleRun(repoRoot)
+			},
+		},
+		{
+			ID:          "auto",
+			Label:       "Start Auto Cycle",
+			Description: "Keep running the next runnable ticket until blocked, exhausted, or asked to stop.",
+			Start: func() error {
+				return launchManagedAutoCycle(repoRoot)
+			},
+		},
+		{
+			ID:          "attach",
+			Label:       "Attach To Active Run",
+			Description: "Watch the current managed run without starting a new one.",
+			Start:       nil,
+		},
+	}
+}
+
+func launchManagedSingleRun(repoRoot string) error {
+	ctx := context.Background()
+	store := local.New(repoRoot)
+	if err := store.SyncIndex(ctx); err != nil {
+		return fmt.Errorf("syncing index: %w", err)
+	}
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		return err
+	}
+	next, err := selectNextTicket(ctx, store, cfg)
+	if err != nil {
+		return err
+	}
+	if next == nil {
+		return fmt.Errorf("no runnable tickets remain")
+	}
+	svc := newRunOrchestrator(repoRoot, runReviewEnabled())
+	_, err = svc.RunTicket(ctx, next.ID)
+	return err
+}
+
+func launchManagedAutoCycle(repoRoot string) error {
+	svc := newRunOrchestrator(repoRoot, runReviewEnabled())
+	_, err := svc.RunNext(context.Background())
 	return err
 }
 
