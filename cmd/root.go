@@ -45,6 +45,8 @@ var rootCmd = &cobra.Command{
 		flushVersionNotice(cmd)
 		// The CLI process handles one command per invocation; reset globals for in-process tests.
 		automationMode = false
+		runWithReview = false
+		runInactivityLimit = 0
 		if f := cmd.Root().PersistentFlags().Lookup("automation"); f != nil {
 			f.Changed = false
 		}

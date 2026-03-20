@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"019d0968-2b79-7103-805d-4a127a68b6bb"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Disabled `js_repl` for this session because the configured Node runtime is unavailable or incompatible. Node runtime too old for js_repl (resolved /Users/leoaudibert/.nvm/versions/node/v22.12.0/bin/node): found v22.12.0, requires >= v22.22.0. Install/update Node or set js_repl_node_path to a newer runtime."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"PLAN ticket=TKT-GOLDEN steps=2\nSTEP ticket=TKT-GOLDEN index=1 status=in_progress title=\"report result\"\nSTEP ticket=TKT-GOLDEN index=1 status=done title=\"report result\"\nRESULT status=done ticket=TKT-GOLDEN role=implementer commit=deadbeef tests=passed"}}
+{"type":"turn.completed","usage":{"input_tokens":12928,"cached_input_tokens":7552,"output_tokens":92}}

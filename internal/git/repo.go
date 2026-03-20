@@ -87,3 +87,14 @@ func HeadSHA(repoRoot string) (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
+
+func CommitExists(repoRoot, ref string) (bool, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return false, fmt.Errorf("commit ref is required")
+	}
+	if _, err := runGit(repoRoot, "rev-parse", "--verify", ref+"^{commit}"); err != nil {
+		return false, nil
+	}
+	return true, nil
+}

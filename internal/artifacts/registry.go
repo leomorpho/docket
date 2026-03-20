@@ -52,6 +52,7 @@ const (
 
 const (
 	RepoAdapter             Key = "repo.adapter"
+	RepoAgentRunsDir        Key = "repo.runtime.agent_runs"
 	RepoConfigJSON          Key = "repo.config.json"
 	RepoConfigYAML          Key = "repo.config.yaml"
 	RepoIndexDB             Key = "repo.index.db"
@@ -94,6 +95,7 @@ type Entry struct {
 
 var registry = map[Key]Entry{
 	RepoAdapter:             {Key: RepoAdapter, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/adapter", Policy: PolicyTracked, Migration: MigrationStable},
+	RepoAgentRunsDir:        {Key: RepoAgentRunsDir, Category: CategoryRuntime, Root: RootRepo, Kind: KindDir, RelPath: ".docket/runtime/agent-runs", CanonicalRelPath: ".docket/local/runtime/agent-runs", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
 	RepoConfigJSON:          {Key: RepoConfigJSON, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/config.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoConfigYAML:          {Key: RepoConfigYAML, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/config.yaml", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoIndexDB:             {Key: RepoIndexDB, Category: CategoryIndex, Root: RootRepo, Kind: KindFile, RelPath: ".docket/index.db", CanonicalRelPath: ".docket/local/index.db", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/index.db"},
