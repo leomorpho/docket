@@ -46,6 +46,7 @@ type StatusSnapshot struct {
 	LastMarker            string `json:"last_marker,omitempty"`
 	LastVisibleText       string `json:"last_visible_text,omitempty"`
 	LastResultStatus      string `json:"last_result_status,omitempty"`
+	SessionMessageCount   int    `json:"session_message_count,omitempty"`
 	HealthCheckCount      int    `json:"health_check_count,omitempty"`
 	LastHealthCheckAt     string `json:"last_health_check_at,omitempty"`
 	LastHealthCheck       string `json:"last_health_check,omitempty"`

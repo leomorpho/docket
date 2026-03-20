@@ -441,6 +441,7 @@ func (s *Service) PingTicket(ctx context.Context, ticketID string) (agentrun.Pin
 	}
 	if len(lines) > 0 {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
+		status.SessionMessageCount++
 		status.HealthCheckCount++
 		status.LastHealthCheckAt = now
 		status.LastIntervention = "ping"

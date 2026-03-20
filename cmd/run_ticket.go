@@ -325,6 +325,9 @@ var runStatusCmd = &cobra.Command{
 		if status.LastEventAt != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "\nLast event: %s", status.LastEventAt)
 		}
+		if status.SessionMessageCount > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nSession messages: %d", status.SessionMessageCount)
+		}
 		if status.HealthCheckCount > 0 {
 			fmt.Fprintf(cmd.OutOrStdout(), "\nHealth checks: %d", status.HealthCheckCount)
 		}
@@ -548,7 +551,7 @@ func runCycleWithWatch(repoRoot string, run func(context.Context) (agentrun.Cycl
 
 func runWatchDashboard(repoRoot, ticketID string, doneCh <-chan struct{}, quitOnDone bool, launchOptions []tui.RunWatchLaunchOption) error {
 	model := tui.NewRunWatchModel(repoRoot, ticketID, doneCh, quitOnDone, launchOptions)
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := program.Run()
 	return err
 }

@@ -293,17 +293,18 @@ func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 	repoRoot := t.TempDir()
 	store := runruntime.New(repoRoot)
 	if err := store.WriteStatus(runruntime.StatusSnapshot{
-		TicketID:         "TKT-376",
-		Active:           true,
-		Hung:             true,
-		PlannedSteps:     8,
-		CurrentStep:      3,
-		CurrentStepTitle: "write failing test",
-		CurrentPhase:     "testing",
-		LastVisibleText:  "STEP ticket=TKT-376 index=3 status=in_progress title=\"write failing test\"",
-		LastEventAt:      time.Now().UTC().Format(time.RFC3339Nano),
-		HealthCheckCount: 2,
-		LastIntervention: "ping",
+		TicketID:            "TKT-376",
+		Active:              true,
+		Hung:                true,
+		PlannedSteps:        8,
+		CurrentStep:         3,
+		CurrentStepTitle:    "write failing test",
+		CurrentPhase:        "testing",
+		LastVisibleText:     "STEP ticket=TKT-376 index=3 status=in_progress title=\"write failing test\"",
+		LastEventAt:         time.Now().UTC().Format(time.RFC3339Nano),
+		SessionMessageCount: 7,
+		HealthCheckCount:    2,
+		LastIntervention:    "ping",
 	}); err != nil {
 		t.Fatalf("WriteStatus() error = %v", err)
 	}
@@ -320,6 +321,9 @@ func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 	got := out.String()
 	if !bytes.Contains([]byte(got), []byte("hung=true")) || !bytes.Contains([]byte(got), []byte("write failing test")) {
 		t.Fatalf("unexpected output: %s", got)
+	}
+	if !bytes.Contains([]byte(got), []byte("Session messages: 7")) {
+		t.Fatalf("expected session message count in output, got: %s", got)
 	}
 	if !bytes.Contains([]byte(got), []byte("Health checks: 2")) || !bytes.Contains([]byte(got), []byte("Last intervention: ping")) {
 		t.Fatalf("expected health check summary in output, got: %s", got)

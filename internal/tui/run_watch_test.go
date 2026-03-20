@@ -57,6 +57,27 @@ func TestRunWatchModelToggleAndStopRequest(t *testing.T) {
 	}
 }
 
+func TestRunWatchModelMouseWheelScrollsBody(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "TKT-500", nil, false, nil)
+	model.launchMode = launchModeWatch
+	model.followLog = true
+	model.scrollOffset = 3
+
+	gotModel, _ := model.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp})
+	scrolledUp := gotModel.(RunWatchModel)
+	if scrolledUp.scrollOffset != 2 || scrolledUp.followLog {
+		t.Fatalf("expected wheel up to scroll body up and disable follow, got %#v", scrolledUp)
+	}
+
+	gotModel, _ = scrolledUp.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	scrolledDown := gotModel.(RunWatchModel)
+	if scrolledDown.scrollOffset != 3 || scrolledDown.followLog {
+		t.Fatalf("expected wheel down to scroll body down and keep follow disabled, got %#v", scrolledDown)
+	}
+}
+
 func TestLoadRunWatchSnapshotPrefersCycleCurrentTicket(t *testing.T) {
 	t.Parallel()
 
@@ -199,17 +220,18 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 		t.Fatalf("AppendCycleCompleted() error = %v", err)
 	}
 	if err := store.WriteStatus(runruntime.StatusSnapshot{
-		TicketID:         "TKT-700",
-		SessionID:        "session-700",
-		Active:           true,
-		PlannedSteps:     3,
-		CurrentStep:      1,
-		CurrentStepTitle: "inspect repo",
-		LastEventAt:      now,
-		LastVisibleText:  "PLAN ticket=TKT-700 steps=3",
-		HealthCheckCount: 2,
-		LastHealthCheck:  "SUMMARY ticket=TKT-700 summary=\"still working\"",
-		LastIntervention: "ping",
+		TicketID:            "TKT-700",
+		SessionID:           "session-700",
+		Active:              true,
+		PlannedSteps:        3,
+		CurrentStep:         1,
+		CurrentStepTitle:    "inspect repo",
+		LastEventAt:         now,
+		LastVisibleText:     "PLAN ticket=TKT-700 steps=3",
+		SessionMessageCount: 4,
+		HealthCheckCount:    2,
+		LastHealthCheck:     "SUMMARY ticket=TKT-700 summary=\"still working\"",
+		LastIntervention:    "ping",
 	}); err != nil {
 		t.Fatalf("WriteStatus() error = %v", err)
 	}
@@ -250,6 +272,9 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	}
 	if !strings.Contains(view, "still working") || !strings.Contains(view, "ping") {
 		t.Fatalf("view missing health/intervention content: %q", view)
+	}
+	if !strings.Contains(view, "4") || !strings.Contains(view, "MESSAGES") {
+		t.Fatalf("view missing session message count: %q", view)
 	}
 	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "Raw Codex Conversation") {
 		t.Fatalf("view missing dual-pane titles: %q", view)

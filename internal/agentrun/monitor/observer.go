@@ -142,6 +142,7 @@ func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.S
 	if threadID := codexThreadIDFromLine(line); threadID != "" {
 		status.SessionID = threadID
 	}
+	status.SessionMessageCount += llmMessageCountFromLine(line)
 	if stream == "stdout" {
 		if o.runtime != nil {
 			_ = o.runtime.AppendStdout(ticketID, []byte(line+"\n"))
@@ -354,6 +355,27 @@ type codexJSONEvent struct {
 	Type     string        `json:"type"`
 	ThreadID string        `json:"thread_id"`
 	Item     codexJSONItem `json:"item"`
+}
+
+func llmMessageCountFromLine(line string) int {
+	var event struct {
+		Type string `json:"type"`
+		Item struct {
+			Type string `json:"type"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &event); err != nil {
+		return 0
+	}
+	if event.Type != "item.completed" {
+		return 0
+	}
+	switch strings.TrimSpace(event.Item.Type) {
+	case "assistant_message", "agent_message":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func visibleTextsFromLine(stream, line string) []string {

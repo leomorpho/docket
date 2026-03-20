@@ -208,6 +208,22 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "watching managed run"
 		}
 		return m, nil
+	case tea.MouseMsg:
+		if m.launchMode != launchModeWatch {
+			return m, nil
+		}
+		switch {
+		case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelUp:
+			if m.scrollOffset > 0 {
+				m.followLog = false
+				m.scrollOffset--
+			}
+			return m, nil
+		case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonWheelDown:
+			m.followLog = false
+			m.scrollOffset++
+			return m, nil
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -512,6 +528,7 @@ func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 		m.renderKeyValue("Progress", m.renderStepBar()),
 		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
 		m.renderKeyValue("Last event", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
+		m.renderKeyValue("Messages", strconv.Itoa(m.snapshot.status.SessionMessageCount)),
 		m.renderKeyValue("Health", strconv.Itoa(m.snapshot.status.HealthCheckCount)),
 		m.renderKeyValue("Intervention", valueOrFallback(m.snapshot.status.LastIntervention, "none")),
 	}

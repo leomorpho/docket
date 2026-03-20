@@ -152,6 +152,13 @@ func TestObserverCapturesNestedVisibleJSONMessages(t *testing.T) {
 	if len(transcript) < 2 || transcript[0].Text != "I checked the repo" || transcript[1].Text != "STATUS ticket=TKT-381 phase=analysis" {
 		t.Fatalf("unexpected transcript: %#v", transcript)
 	}
+	status, ok, err := store.LoadStatus("TKT-381")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.SessionMessageCount != 1 {
+		t.Fatalf("expected one assistant session message, got %#v", status)
+	}
 }
 
 func TestObserverResetsNoProgressCounterWhenFreshVisibleOutputArrives(t *testing.T) {

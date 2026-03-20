@@ -1169,6 +1169,9 @@ func TestServicePingTicketUsesSameSessionAndAppendsTranscript(t *testing.T) {
 	if status.CurrentPhase != "testing" || !strings.Contains(status.LastVisibleText, "SUMMARY ticket=TKT-393") {
 		t.Fatalf("unexpected status after ping: %#v", status)
 	}
+	if status.SessionMessageCount != 1 || status.HealthCheckCount != 1 || status.LastIntervention != "ping" {
+		t.Fatalf("expected ping to record session message and intervention metadata, got %#v", status)
+	}
 	transcript, err := runtimeStore.LoadTranscript("TKT-393")
 	if err != nil {
 		t.Fatalf("LoadTranscript() error = %v", err)
