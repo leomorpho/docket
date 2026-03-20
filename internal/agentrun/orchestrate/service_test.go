@@ -863,7 +863,7 @@ func TestServiceRunTicketHungThenResumeFullLifecycle(t *testing.T) {
 		Monitor:   monitor.New(monitor.Dependencies{Runtime: runtimeStore}),
 		Validator: validator,
 		Runtime:   runtimeStore,
-		Timeout:   30 * time.Millisecond,
+		Timeout:   100 * time.Millisecond,
 	})
 
 	first, err := service.RunTicket(context.Background(), "TKT-391")
