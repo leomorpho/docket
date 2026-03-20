@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/leomorpho/docket/internal/agentrun"
@@ -56,6 +58,110 @@ var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orche
 	return orchestrate.New(deps)
 }
 
+type liveRunLogStreamer struct {
+	cmd       *cobra.Command
+	store     *runruntime.Store
+	mu        sync.Mutex
+	seen      map[string]int
+	announced map[string]bool
+}
+
+func startLiveRunLogs(cmd *cobra.Command, repoRoot string) func() {
+	if format == "json" {
+		return func() {}
+	}
+	streamer := &liveRunLogStreamer{
+		cmd:       cmd,
+		store:     runruntime.New(repoRoot),
+		seen:      map[string]int{},
+		announced: map[string]bool{},
+	}
+	streamer.prime()
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			streamer.flush()
+			select {
+			case <-stopCh:
+				streamer.flush()
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return func() {
+		close(stopCh)
+		<-doneCh
+	}
+}
+
+func (s *liveRunLogStreamer) prime() {
+	entries, err := os.ReadDir(s.store.RunsRootDir())
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		ticketID := entry.Name()
+		transcript, err := s.store.LoadTranscript(ticketID)
+		if err == nil {
+			s.seen[ticketID] = len(transcript)
+		}
+		if _, ok, err := s.store.LoadStatus(ticketID); err == nil && ok {
+			s.announced[ticketID] = true
+		}
+	}
+}
+
+func (s *liveRunLogStreamer) flush() {
+	entries, err := os.ReadDir(s.store.RunsRootDir())
+	if err != nil {
+		return
+	}
+	ticketIDs := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			ticketIDs = append(ticketIDs, entry.Name())
+		}
+	}
+	sort.Strings(ticketIDs)
+	for _, ticketID := range ticketIDs {
+		s.flushTicket(ticketID)
+	}
+}
+
+func (s *liveRunLogStreamer) flushTicket(ticketID string) {
+	status, ok, err := s.store.LoadStatus(ticketID)
+	if err == nil && ok {
+		s.mu.Lock()
+		if !s.announced[ticketID] {
+			s.announced[ticketID] = true
+			fmt.Fprintf(s.cmd.OutOrStdout(), "[%s] session=%s active=%t\n", ticketID, status.SessionID, status.Active)
+		}
+		s.mu.Unlock()
+	}
+	transcript, err := s.store.LoadTranscript(ticketID)
+	if err != nil || len(transcript) == 0 {
+		return
+	}
+	s.mu.Lock()
+	start := s.seen[ticketID]
+	if start > len(transcript) {
+		start = 0
+	}
+	for _, entry := range transcript[start:] {
+		fmt.Fprintf(s.cmd.OutOrStdout(), "[%s] %s\n", ticketID, entry.Text)
+	}
+	s.seen[ticketID] = len(transcript)
+	s.mu.Unlock()
+}
+
 func runActor() string {
 	actor := detectActor()
 	if agentID := os.Getenv("DOCKET_AGENT_ID"); agentID != "" {
@@ -80,6 +186,8 @@ var runTicketCmd = &cobra.Command{
 	Short: "Run one ticket through the Codex implementer flow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		stopLogs := startLiveRunLogs(cmd, repo)
+		defer stopLogs()
 		svc := newRunOrchestrator(repo, runReviewEnabled())
 		summary, err := svc.RunTicket(context.Background(), args[0])
 		if err != nil {
@@ -93,6 +201,8 @@ var runNextCmd = &cobra.Command{
 	Use:   "run-next",
 	Short: "Run the next logical tickets serially until exhausted or blocked",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		stopLogs := startLiveRunLogs(cmd, repo)
+		defer stopLogs()
 		svc := newRunOrchestrator(repo, runReviewEnabled())
 		summary, err := svc.RunNext(context.Background())
 		if err != nil {
@@ -147,6 +257,8 @@ var runResumeCmd = &cobra.Command{
 	Short: "Resume a hung ticket run in a fresh Codex session",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		stopLogs := startLiveRunLogs(cmd, repo)
+		defer stopLogs()
 		svc := newRunOrchestrator(repo, runReviewEnabled())
 		summary, err := svc.ResumeTicket(context.Background(), args[0])
 		if err != nil {

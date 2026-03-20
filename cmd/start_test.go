@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/agentrun"
+	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -614,6 +615,82 @@ func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
 	}
 	if gotReview {
 		t.Fatalf("expected --no-review to disable reviewer loop")
+	}
+}
+
+func TestStartRunAutoStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
+	prev := newRunOrchestrator
+	prevStartRun := startRun
+	prevStartAuto := startAuto
+	prevNoReview := runDisableReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		startRun = prevStartRun
+		startAuto = prevStartAuto
+		runDisableReview = prevNoReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repoRoot := t.TempDir()
+	repo = repoRoot
+	format = "human"
+	startRun = false
+	startAuto = false
+	runDisableReview = false
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	store := runruntime.New(repoRoot)
+
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				record := agentrun.RunRecord{
+					TicketID:     "TKT-700",
+					Role:         agentrun.RoleImplementer,
+					RepoRoot:     repoRoot,
+					WorktreePath: repoRoot,
+					Branch:       "docket/TKT-700",
+					SessionID:    "session-700",
+				}
+				if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+					t.Fatalf("Init() error = %v", err)
+				}
+				time.Sleep(300 * time.Millisecond)
+				if err := store.AppendTranscript("TKT-700", runruntime.TranscriptEntry{At: time.Now().UTC().Format(time.RFC3339Nano), Text: "PLAN ticket=TKT-700 steps=2"}); err != nil {
+					t.Fatalf("AppendTranscript() error = %v", err)
+				}
+				time.Sleep(300 * time.Millisecond)
+				if err := store.AppendTranscript("TKT-700", runruntime.TranscriptEntry{At: time.Now().UTC().Format(time.RFC3339Nano), Text: "STEP ticket=TKT-700 index=1 status=done title=\"inspect scope\""}); err != nil {
+					t.Fatalf("AppendTranscript() error = %v", err)
+				}
+				return agentrun.CycleSummary{
+					Runs: []agentrun.TicketRunSummary{{TicketID: "TKT-700", Status: agentrun.StatusDone}},
+				}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"start", "--run", "--auto"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start --run --auto failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"[TKT-700] session=session-700 active=true",
+		"[TKT-700] PLAN ticket=TKT-700 steps=2",
+		"[TKT-700] STEP ticket=TKT-700 index=1 status=done title=\"inspect scope\"",
+		"TKT-700: done",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
 	}
 }
 

@@ -149,6 +149,135 @@ func TestRunTicketCmdNoReviewDisablesReviewerLoop(t *testing.T) {
 	}
 }
 
+func TestRunNextCmdStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
+	prev := newRunOrchestrator
+	prevNoReview := runDisableReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		runDisableReview = prevNoReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repoRoot := t.TempDir()
+	repo = repoRoot
+	format = "human"
+	runDisableReview = false
+	store := runruntime.New(repoRoot)
+
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				record := agentrun.RunRecord{
+					TicketID:     "TKT-376",
+					Role:         agentrun.RoleImplementer,
+					RepoRoot:     repoRoot,
+					WorktreePath: repoRoot,
+					Branch:       "docket/TKT-376",
+					SessionID:    "session-376",
+				}
+				if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+					t.Fatalf("Init() error = %v", err)
+				}
+				time.Sleep(300 * time.Millisecond)
+				if err := store.AppendTranscript("TKT-376", runruntime.TranscriptEntry{At: time.Now().UTC().Format(time.RFC3339Nano), Text: "PLAN ticket=TKT-376 steps=3"}); err != nil {
+					t.Fatalf("AppendTranscript() error = %v", err)
+				}
+				time.Sleep(300 * time.Millisecond)
+				if err := store.AppendTranscript("TKT-376", runruntime.TranscriptEntry{At: time.Now().UTC().Format(time.RFC3339Nano), Text: "STEP ticket=TKT-376 index=1 status=in_progress title=\"inspect repo\""}); err != nil {
+					t.Fatalf("AppendTranscript() error = %v", err)
+				}
+				return agentrun.CycleSummary{
+					Runs: []agentrun.TicketRunSummary{{TicketID: "TKT-376", Status: agentrun.StatusDone}},
+				}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-next"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-next failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"[TKT-376] session=session-376 active=true",
+		"[TKT-376] PLAN ticket=TKT-376 steps=3",
+		"[TKT-376] STEP ticket=TKT-376 index=1 status=in_progress title=\"inspect repo\"",
+		"TKT-376: done",
+	} {
+		if !bytes.Contains([]byte(got), []byte(want)) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunNextCmdIgnoresTranscriptHistoryThatPredatesTheCommand(t *testing.T) {
+	prev := newRunOrchestrator
+	prevNoReview := runDisableReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		runDisableReview = prevNoReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repoRoot := t.TempDir()
+	repo = repoRoot
+	format = "human"
+	runDisableReview = false
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-377",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-377",
+		SessionID:    "session-old",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.AppendTranscript("TKT-377", runruntime.TranscriptEntry{At: time.Now().UTC().Format(time.RFC3339Nano), Text: "PLAN ticket=TKT-377 steps=9"}); err != nil {
+		t.Fatalf("AppendTranscript() error = %v", err)
+	}
+
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				time.Sleep(300 * time.Millisecond)
+				if err := store.AppendTranscript("TKT-377", runruntime.TranscriptEntry{At: time.Now().UTC().Format(time.RFC3339Nano), Text: "STEP ticket=TKT-377 index=1 status=done title=\"fresh line\""}); err != nil {
+					t.Fatalf("AppendTranscript() error = %v", err)
+				}
+				return agentrun.CycleSummary{
+					Runs: []agentrun.TicketRunSummary{{TicketID: "TKT-377", Status: agentrun.StatusDone}},
+				}, nil
+			},
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-next"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-next failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	if bytes.Contains([]byte(got), []byte("PLAN ticket=TKT-377 steps=9")) {
+		t.Fatalf("expected stale transcript to be ignored, got:\n%s", got)
+	}
+	if !bytes.Contains([]byte(got), []byte("STEP ticket=TKT-377 index=1 status=done title=\"fresh line\"")) {
+		t.Fatalf("expected fresh transcript line in output, got:\n%s", got)
+	}
+}
+
 func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 	repoRoot := t.TempDir()
 	store := runruntime.New(repoRoot)

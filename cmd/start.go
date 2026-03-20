@@ -222,6 +222,8 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 }
 
 func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cfg *ticket.Config) error {
+	stopLogs := startLiveRunLogs(cmd, repo)
+	defer stopLogs()
 	svc := newRunOrchestrator(repo, runReviewEnabled())
 	if startAuto {
 		summary, err := svc.RunNext(ctx)

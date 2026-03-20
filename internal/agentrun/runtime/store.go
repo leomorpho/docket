@@ -50,6 +50,10 @@ func New(repoRoot string) *Store {
 	return &Store{repoRoot: repoRoot}
 }
 
+func (s *Store) RunsRootDir() string {
+	return artifacts.WriteRepoPath(s.repoRoot, artifacts.RepoAgentRunsDir)
+}
+
 func (s *Store) RunDir(ticketID string) string {
 	return artifacts.WriteRepoPath(s.repoRoot, artifacts.RepoAgentRunsDir, ticketID)
 }
@@ -162,4 +166,3 @@ func writeJSON(path string, payload any) error {
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
-
