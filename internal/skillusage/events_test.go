@@ -1,9 +1,10 @@
 package skillusage
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/leomorpho/docket/internal/artifacts"
 )
 
 func TestAppendLoadAndBuildAudit(t *testing.T) {
@@ -37,7 +38,7 @@ func TestAppendLoadAndBuildAudit(t *testing.T) {
 		}
 	}
 
-	if got, want := LogPath(repo), filepath.Join(repo, ".docket", "local", "runtime", "skill-usage.jsonl"); got != want {
+	if got, want := LogPath(repo), artifacts.WriteRepoPath(repo, artifacts.RepoSkillUsageEvents); got != want {
 		t.Fatalf("log path = %s, want %s", got, want)
 	}
 

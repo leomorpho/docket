@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,25 @@ import (
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
+
+func initGitRepoForUpdateTest(t *testing.T, repoRoot string) {
+	t.Helper()
+	cmd := exec.Command("git", "init", "-b", "main")
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+	cmd = exec.Command("git", "config", "user.name", "Docket Test")
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config user.name failed: %v\n%s", err, out)
+	}
+	cmd = exec.Command("git", "config", "user.email", "docket-test@example.com")
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config user.email failed: %v\n%s", err, out)
+	}
+}
 
 func TestUpdateCmd(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -104,6 +124,7 @@ func TestUpdateCmd(t *testing.T) {
 
 func TestUpdateCmd_Handoff(t *testing.T) {
 	tmpDir := t.TempDir()
+	initGitRepoForUpdateTest(t, tmpDir)
 	repo = tmpDir
 	format = "human"
 

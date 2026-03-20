@@ -131,7 +131,7 @@ func TestWriteAndLoadRoundTrip(t *testing.T) {
 	if path == "" {
 		t.Fatalf("expected output path")
 	}
-	if want := filepath.Join(repo, ".docket", "local", "runtime", "capabilities.json"); path != want {
+	if want := artifacts.WriteRepoPath(repo, artifacts.RepoRuntimeCapabilities); path != want {
 		t.Fatalf("expected canonical runtime contract path %q, got %q", want, path)
 	}
 	if written.Hash == "" {

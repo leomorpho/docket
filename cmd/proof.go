@@ -48,10 +48,18 @@ var proofAddCmd = &cobra.Command{
 		}()
 
 		s := local.New(repo)
+		t, err := s.GetTicket(context.Background(), args[0])
+		if err != nil {
+			return err
+		}
+		if t == nil {
+			return fmt.Errorf("ticket %s not found", args[0])
+		}
 		now := time.Now().UTC().Truncate(time.Second)
 		actor := detectActor()
-		rec, err := s.AddProof(context.Background(), proof.AddInput{
-			TicketID:   args[0],
+		proofs := proof.NewRepositoryWithSourceRoot(ticketRepoRoot(repo), repo)
+		rec, err := proofs.Add(context.Background(), proof.AddInput{
+			TicketID:   t.ID,
 			SourcePath: proofFile,
 			ProofTitle: proofTitle,
 			Note:       proofNote,
@@ -62,17 +70,17 @@ var proofAddCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		emitProofMutationEvent(cmd, "add", "proof.add", args[0], rec, actor)
+		emitProofMutationEvent(cmd, "add", "proof.add", t.ID, rec, actor)
 
 		if format == "json" {
 			printJSON(cmd, map[string]any{
-				"ticket_id": args[0],
+				"ticket_id": t.ID,
 				"proof":     rec,
 			})
 			return nil
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Added proof %s to %s.\n", rec.ID, args[0])
+		fmt.Fprintf(cmd.OutOrStdout(), "Added proof %s to %s.\n", rec.ID, t.ID)
 		return nil
 	},
 }

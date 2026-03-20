@@ -74,7 +74,7 @@ func TestProofPipelineEndToEndIntegration(t *testing.T) {
 		t.Fatalf("expected non-empty proof id in add payload: %+v", addPayload)
 	}
 
-	metadataPath := filepath.Join(worktreeRepo, ".docket", "proofs", ticketID, "metadata.json")
+	metadataPath := filepath.Join(mainRepo, ".docket", "proofs", ticketID, "metadata.json")
 	metadataRaw, err := os.ReadFile(metadataPath)
 	if err != nil {
 		t.Fatalf("read proof metadata fixture failed: %v", err)

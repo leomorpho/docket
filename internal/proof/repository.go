@@ -74,7 +74,8 @@ type Record struct {
 }
 
 type Repository struct {
-	RepoRoot string
+	RepoRoot   string
+	SourceRoot string
 }
 
 type GCSummary struct {
@@ -92,7 +93,16 @@ var allowedImageMIMEs = map[string][]string{
 
 func NewRepository(repoRoot string) *Repository {
 	absRoot, _ := filepath.Abs(repoRoot)
-	return &Repository{RepoRoot: absRoot}
+	return &Repository{RepoRoot: absRoot, SourceRoot: absRoot}
+}
+
+func NewRepositoryWithSourceRoot(repoRoot string, sourceRoot string) *Repository {
+	absRepoRoot, _ := filepath.Abs(repoRoot)
+	absSourceRoot, _ := filepath.Abs(sourceRoot)
+	if strings.TrimSpace(absSourceRoot) == "" {
+		absSourceRoot = absRepoRoot
+	}
+	return &Repository{RepoRoot: absRepoRoot, SourceRoot: absSourceRoot}
 }
 
 func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
@@ -138,8 +148,8 @@ func (r *Repository) Add(ctx context.Context, in AddInput) (*Record, error) {
 	if sourcePath == ".." || strings.HasPrefix(sourcePath, ".."+string(filepath.Separator)) {
 		return nil, fieldError("unsafe_path", "source_path", "path traversal is not allowed", "use a repository-relative path under the current repo")
 	}
-	absSourcePath := filepath.Join(r.RepoRoot, sourcePath)
-	if !withinRoot(absSourcePath, r.RepoRoot) {
+	absSourcePath := filepath.Join(r.SourceRoot, sourcePath)
+	if !withinRoot(absSourcePath, r.SourceRoot) {
 		return nil, fieldError("unsafe_path", "source_path", "source_path escapes repository root", "use a repository-relative path under the current repo")
 	}
 
