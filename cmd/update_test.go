@@ -451,6 +451,87 @@ func TestUpdateCmd_AgentDoneTransitionRedirectsToInReview(t *testing.T) {
 	}
 }
 
+func TestUpdateCmd_DoneRejectsParentWithOpenOrInvalidDescendants(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-172",
+		Seq:         172,
+		Title:       "Umbrella epic",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "This umbrella ticket should not close before its children are completed and validated cleanly.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
+		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
+	}); err != nil {
+		t.Fatalf("CreateTicket parent failed: %v", err)
+	}
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-174",
+		Seq:         174,
+		Title:       "Open child",
+		State:       ticket.State("in-progress"),
+		Parent:      "TKT-172",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "This child is still in progress and should block closing the parent umbrella ticket.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket open child failed: %v", err)
+	}
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-175",
+		Seq:         175,
+		Title:       "Invalid child",
+		State:       ticket.State("done"),
+		Parent:      "TKT-172",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "This child looks done but lacks the required handoff for completed workflow states.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket invalid child failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"secure", "unlock", "--password", "pw-1", "--ttl", "5m"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("secure unlock failed: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"update", "TKT-172", "--state", "done", "--ticket", "TKT-172", "--yes"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatalf("expected descendant closure gate to reject done transition")
+	}
+	for _, want := range []string{
+		"descendant TKT-174 is still in-progress",
+		"descendant TKT-175 failed validation: handoff: ## Handoff section is required for review and completed workflow states",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected descendant closure error %q, got %v", want, err)
+		}
+	}
+}
+
 func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	ck "github.com/leomorpho/docket/internal/check"
 	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/security"
@@ -130,6 +131,9 @@ var updateCmd = &cobra.Command{
 			}
 			if isCompletedTarget {
 				if err := enforceStructuredACClosureGate(t); err != nil {
+					return err
+				}
+				if err := enforceDescendantClosureGate(ctx, s, cfg, t); err != nil {
 					return err
 				}
 				transitionChecks = append(transitionChecks, "structured_ac_closure_gate")
@@ -568,4 +572,15 @@ func enforceStructuredACClosureGate(t *ticket.Ticket) error {
 		}
 	}
 	return nil
+}
+
+func enforceDescendantClosureGate(ctx context.Context, backend *local.Store, cfg *ticket.Config, t *ticket.Ticket) error {
+	issues, err := ck.DescendantClosureIssues(ctx, backend, cfg, t)
+	if err != nil {
+		return err
+	}
+	if len(issues) == 0 {
+		return nil
+	}
+	return fmt.Errorf("cannot close %s:\n- %s", t.ID, strings.Join(issues, "\n- "))
 }

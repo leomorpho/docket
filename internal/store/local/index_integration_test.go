@@ -265,3 +265,53 @@ func TestSyncIndexUsesCanonicalFilenameWhenFrontmatterIDDrifts(t *testing.T) {
 		t.Fatalf("expected canonical filename IDs, got %#v", tickets)
 	}
 }
+
+func TestSyncIndexIgnoresFilenameAliasesThatNormalizeToSameTicketID(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		Title:       "fixture TKT-001",
+		Description: "fixture ticket",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ok"}},
+	}); err != nil {
+		t.Fatalf("create fixture ticket: %v", err)
+	}
+
+	original := filepath.Join(tmpDir, ".docket", "tickets", "TKT-001.md")
+	data, err := os.ReadFile(original)
+	if err != nil {
+		t.Fatalf("read original ticket file: %v", err)
+	}
+	alias := filepath.Join(tmpDir, ".docket", "tickets", "TKT-1.md")
+	if err := os.WriteFile(alias, data, 0o644); err != nil {
+		t.Fatalf("write alias ticket file: %v", err)
+	}
+
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex() with alias filename should succeed, got: %v", err)
+	}
+
+	tickets, err := s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.State("backlog")}})
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 canonical ticket after alias dedupe, got %d: %#v", len(tickets), tickets)
+	}
+	if tickets[0].ID != "TKT-001" {
+		t.Fatalf("expected canonical filename ID TKT-001, got %#v", tickets[0])
+	}
+}

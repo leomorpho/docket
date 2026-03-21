@@ -140,3 +140,43 @@ func TestChecker_R001UsesConfiguredActiveRole(t *testing.T) {
 		t.Fatalf("expected R001 finding for configured active-role state, got %+v", findings)
 	}
 }
+
+func TestChecker_ReportsDescendantClosureIssues(t *testing.T) {
+	now := time.Now().UTC()
+	parent := &ticket.Ticket{ID: "TKT-172", State: ticket.State("in-review"), UpdatedAt: now}
+	childOpen := &ticket.Ticket{ID: "TKT-174", State: ticket.State("in-progress"), Parent: "TKT-172", UpdatedAt: now}
+	childInvalid := &ticket.Ticket{ID: "TKT-175", State: ticket.State("done"), Parent: "TKT-172", UpdatedAt: now}
+	childBlocked := &ticket.Ticket{ID: "TKT-176", State: ticket.State("done"), Parent: "TKT-172", BlockedBy: []string{"TKT-177"}, UpdatedAt: now}
+	blocker := &ticket.Ticket{ID: "TKT-177", State: ticket.State("in-progress"), UpdatedAt: now}
+
+	b := newFake(parent, childOpen, childInvalid, childBlocked, blocker)
+	b.validate["TKT-175"] = []store.ValidationError{{Field: "handoff", Message: "missing required subsection: AC status"}}
+
+	c := NewChecker(b, ticket.DefaultConfig())
+	c.Now = func() time.Time { return now }
+
+	findings, err := c.Run(context.Background(), []*ticket.Ticket{parent}, false)
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	var messages []string
+	for _, finding := range findings {
+		if finding.Rule == "R009" {
+			messages = append(messages, finding.Message)
+		}
+	}
+	if len(messages) != 3 {
+		t.Fatalf("expected 3 descendant-governance findings, got %+v", findings)
+	}
+	joined := strings.Join(messages, "\n")
+	for _, want := range []string{
+		"descendant TKT-174 is still in-progress",
+		"descendant TKT-175 failed validation: handoff: missing required subsection: AC status",
+		"descendant TKT-176 is still blocked by TKT-177 (in-progress)",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected descendant finding %q in %q", want, joined)
+		}
+	}
+}

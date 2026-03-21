@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,51 +74,6 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(`
-		DROP TABLE IF EXISTS labels;
-		DROP TABLE IF EXISTS blocked_by;
-		DROP TABLE IF EXISTS linked_commits;
-		DROP TABLE IF EXISTS tickets;
-
-		CREATE TABLE tickets (
-			id            TEXT PRIMARY KEY,
-			seq           INTEGER NOT NULL,
-			state         TEXT NOT NULL,
-			priority      INTEGER NOT NULL DEFAULT 10,
-			parent        TEXT,
-			title         TEXT NOT NULL,
-			created_by    TEXT NOT NULL,
-			created_at    DATETIME NOT NULL,
-			updated_at    DATETIME NOT NULL,
-			is_blocked    INTEGER NOT NULL DEFAULT 0,
-			ac_total      INTEGER NOT NULL DEFAULT 0,
-			ac_done       INTEGER NOT NULL DEFAULT 0
-		);
-
-		CREATE TABLE labels (
-			ticket_id  TEXT NOT NULL REFERENCES tickets(id),
-			label      TEXT NOT NULL
-		);
-
-		CREATE TABLE blocked_by (
-			ticket_id  TEXT NOT NULL REFERENCES tickets(id),
-			blocks_id  TEXT NOT NULL
-		);
-
-		CREATE TABLE linked_commits (
-			ticket_id  TEXT NOT NULL REFERENCES tickets(id),
-			sha        TEXT NOT NULL
-		);
-
-		CREATE INDEX idx_tickets_state ON tickets(state);
-		CREATE INDEX idx_tickets_priority ON tickets(priority);
-		CREATE INDEX idx_tickets_parent ON tickets(parent);
-		CREATE INDEX idx_labels_ticket ON labels(ticket_id);
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to create schema: %w", err)
-	}
-
 	// Re-parse all markdown files and insert
 	ticketsDir := filepath.Join(s.RepoRoot, ".docket", "tickets")
 	entries, err := os.ReadDir(ticketsDir)
@@ -180,22 +136,26 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	stmtTicket, err := tx.PrepareContext(ctx, `INSERT INTO tickets (id, seq, state, priority, parent, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err := createIndexShadowSchema(ctx, tx); err != nil {
+		return fmt.Errorf("failed to create shadow schema: %w", err)
+	}
+
+	stmtTicket, err := tx.PrepareContext(ctx, `INSERT INTO tickets_next (id, seq, state, priority, parent, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmtTicket.Close()
-	stmtLabel, err := tx.PrepareContext(ctx, `INSERT INTO labels (ticket_id, label) VALUES (?, ?)`)
+	stmtLabel, err := tx.PrepareContext(ctx, `INSERT INTO labels_next (ticket_id, label) VALUES (?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmtLabel.Close()
-	stmtBlocked, err := tx.PrepareContext(ctx, `INSERT INTO blocked_by (ticket_id, blocks_id) VALUES (?, ?)`)
+	stmtBlocked, err := tx.PrepareContext(ctx, `INSERT INTO blocked_by_next (ticket_id, blocks_id) VALUES (?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmtBlocked.Close()
-	stmtCommit, err := tx.PrepareContext(ctx, `INSERT INTO linked_commits (ticket_id, sha) VALUES (?, ?)`)
+	stmtCommit, err := tx.PrepareContext(ctx, `INSERT INTO linked_commits_next (ticket_id, sha) VALUES (?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -232,10 +192,77 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 		}
 	}
 
+	if err := swapIndexShadowTables(ctx, tx); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func createIndexShadowSchema(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+		DROP TABLE IF EXISTS labels_next;
+		DROP TABLE IF EXISTS blocked_by_next;
+		DROP TABLE IF EXISTS linked_commits_next;
+		DROP TABLE IF EXISTS tickets_next;
+
+		CREATE TABLE tickets_next (
+			id            TEXT PRIMARY KEY,
+			seq           INTEGER NOT NULL,
+			state         TEXT NOT NULL,
+			priority      INTEGER NOT NULL DEFAULT 10,
+			parent        TEXT,
+			title         TEXT NOT NULL,
+			created_by    TEXT NOT NULL,
+			created_at    DATETIME NOT NULL,
+			updated_at    DATETIME NOT NULL,
+			is_blocked    INTEGER NOT NULL DEFAULT 0,
+			ac_total      INTEGER NOT NULL DEFAULT 0,
+			ac_done       INTEGER NOT NULL DEFAULT 0
+		);
+
+		CREATE TABLE labels_next (
+			ticket_id  TEXT NOT NULL REFERENCES tickets_next(id),
+			label      TEXT NOT NULL
+		);
+
+		CREATE TABLE blocked_by_next (
+			ticket_id  TEXT NOT NULL REFERENCES tickets_next(id),
+			blocks_id  TEXT NOT NULL
+		);
+
+		CREATE TABLE linked_commits_next (
+			ticket_id  TEXT NOT NULL REFERENCES tickets_next(id),
+			sha        TEXT NOT NULL
+		);
+	`)
+	return err
+}
+
+func swapIndexShadowTables(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+		DROP TABLE IF EXISTS labels;
+		DROP TABLE IF EXISTS blocked_by;
+		DROP TABLE IF EXISTS linked_commits;
+		DROP TABLE IF EXISTS tickets;
+
+		ALTER TABLE tickets_next RENAME TO tickets;
+		ALTER TABLE labels_next RENAME TO labels;
+		ALTER TABLE blocked_by_next RENAME TO blocked_by;
+		ALTER TABLE linked_commits_next RENAME TO linked_commits;
+
+		CREATE INDEX idx_tickets_state ON tickets(state);
+		CREATE INDEX idx_tickets_priority ON tickets(priority);
+		CREATE INDEX idx_tickets_parent ON tickets(parent);
+		CREATE INDEX idx_labels_ticket ON labels(ticket_id);
+	`)
+	if err != nil {
+		return fmt.Errorf("swap shadow index tables: %w", err)
+	}
 	return nil
 }
 

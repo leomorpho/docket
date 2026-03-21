@@ -23,7 +23,7 @@ func NewChecker(backend store.Backend, cfg *ticket.Config) *Checker {
 		Backend: backend,
 		Config:  cfg,
 		Now:     func() time.Time { return time.Now().UTC() },
-		Rules:   []Rule{RuleR001, RuleR006, RuleR008},
+		Rules:   []Rule{RuleR001, RuleR006, RuleR008, RuleR009},
 	}
 }
 
