@@ -315,3 +315,74 @@ func TestSyncIndexIgnoresFilenameAliasesThatNormalizeToSameTicketID(t *testing.T
 		t.Fatalf("expected canonical filename ID TKT-001, got %#v", tickets[0])
 	}
 }
+
+func TestSyncIndexRecoversFromStaleShadowTables(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		Title:       "fixture TKT-001",
+		Description: "fixture ticket",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ok"}},
+	}); err != nil {
+		t.Fatalf("create fixture ticket: %v", err)
+	}
+
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("initial SyncIndex() error = %v", err)
+	}
+
+	db, err := s.openDB()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS tickets_next (
+			id            TEXT PRIMARY KEY,
+			seq           INTEGER NOT NULL,
+			state         TEXT NOT NULL,
+			priority      INTEGER NOT NULL DEFAULT 10,
+			parent        TEXT,
+			title         TEXT NOT NULL,
+			created_by    TEXT NOT NULL,
+			created_at    DATETIME NOT NULL,
+			updated_at    DATETIME NOT NULL,
+			is_blocked    INTEGER NOT NULL DEFAULT 0,
+			ac_total      INTEGER NOT NULL DEFAULT 0,
+			ac_done       INTEGER NOT NULL DEFAULT 0
+		);
+		INSERT OR REPLACE INTO tickets_next (id, seq, state, priority, parent, title, created_by, created_at, updated_at, is_blocked, ac_total, ac_done)
+		VALUES ('TKT-999', 999, 'backlog', 1, '', 'stale shadow row', 'agent:test', '2026-03-21T00:00:00Z', '2026-03-21T00:00:00Z', 0, 0, 0);
+	`); err != nil {
+		t.Fatalf("seed stale shadow tables: %v", err)
+	}
+
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex() should recover from stale shadow tables, got: %v", err)
+	}
+
+	tickets, err := s.ListTickets(ctx, store.Filter{States: []ticket.State{ticket.State("backlog")}})
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket after recovering from stale shadow tables, got %d: %#v", len(tickets), tickets)
+	}
+	if tickets[0].ID != "TKT-001" {
+		t.Fatalf("expected canonical indexed ticket after shadow-table recovery, got %#v", tickets[0])
+	}
+}
