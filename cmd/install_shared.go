@@ -24,6 +24,43 @@ type installManifest struct {
 	ManagedArtifacts []string `json:"managed_artifacts"`
 }
 
+func starterScaffoldLayout(repoRoot string) []string {
+	return []string{
+		artifacts.MustRelPath(artifacts.RepoInstallManifest),
+		filepath.Join(".git", "hooks", "commit-msg"),
+		filepath.Join(".git", "hooks", "pre-commit"),
+		".gitignore",
+		filepath.Base(claudePath(repoRoot)),
+	}
+}
+
+func starterScaffoldManagedArtifacts(repoRoot string) []string {
+	managed := []string{
+		claudePath(repoRoot),
+		commitMsgHookPath(repoRoot),
+		preCommitHookPath(repoRoot),
+	}
+	sort.Strings(managed)
+	return managed
+}
+
+func validateStarterScaffoldLayout(repoRoot string) error {
+	for _, rel := range starterScaffoldLayout(repoRoot) {
+		path := filepath.Join(repoRoot, rel)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("starter scaffold missing %s", rel)
+			}
+			return fmt.Errorf("read starter scaffold %s: %w", rel, err)
+		}
+		if rel == ".gitignore" && !strings.Contains(string(data), artifacts.CanonicalLocalRootRelPath()+"/") {
+			return fmt.Errorf("starter scaffold missing %s entry in %s", artifacts.CanonicalLocalRootRelPath()+"/", rel)
+		}
+	}
+	return nil
+}
+
 func preCommitHookPath(repoRoot string) string {
 	return filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
 }
@@ -217,16 +254,10 @@ func writeHook(repoRoot string) (bool, error) {
 }
 
 func writeInstallManifest(repoRoot string) error {
-	artifacts := []string{
-		preCommitHookPath(repoRoot),
-		commitMsgHookPath(repoRoot),
-		claudePath(repoRoot),
-	}
-	sort.Strings(artifacts)
 	manifest := installManifest{
 		DocketVersion:    normalizeVersion(Version),
 		InstalledAt:      time.Now().UTC().Format(time.RFC3339),
-		ManagedArtifacts: artifacts,
+		ManagedArtifacts: starterScaffoldManagedArtifacts(repoRoot),
 	}
 	path := installManifestPath(repoRoot)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

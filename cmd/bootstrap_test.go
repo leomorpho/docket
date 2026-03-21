@@ -115,11 +115,8 @@ func TestBootstrapCommandRunsTwiceNoOpSafe(t *testing.T) {
 		t.Fatalf("first bootstrap failed: %v", err)
 	}
 	first := out.String()
-	inventoryAfterFirst := []string{
-		preCommitHookPath(tmpRepo),
-		claudePath(tmpRepo),
-		installManifestPath(tmpRepo),
-	}
+	inventoryAfterFirst := append([]string{}, starterScaffoldManagedArtifacts(tmpRepo)...)
+	inventoryAfterFirst = append(inventoryAfterFirst, installManifestPath(tmpRepo))
 	if !strings.Contains(first, "core install: changed") {
 		t.Fatalf("expected changed core install step, got: %s", first)
 	}
@@ -136,11 +133,8 @@ func TestBootstrapCommandRunsTwiceNoOpSafe(t *testing.T) {
 	if !strings.Contains(second, "core install: no-change") {
 		t.Fatalf("expected no-change on second run, got: %s", second)
 	}
-	inventoryAfterSecond := []string{
-		preCommitHookPath(tmpRepo),
-		claudePath(tmpRepo),
-		installManifestPath(tmpRepo),
-	}
+	inventoryAfterSecond := append([]string{}, starterScaffoldManagedArtifacts(tmpRepo)...)
+	inventoryAfterSecond = append(inventoryAfterSecond, installManifestPath(tmpRepo))
 	gitignoreData, err := os.ReadFile(filepath.Join(tmpRepo, ".gitignore"))
 	if err != nil {
 		t.Fatalf("gitignore missing after bootstrap: %v", err)

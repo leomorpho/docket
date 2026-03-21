@@ -157,6 +157,9 @@ func runCoreInstallStep(repoRoot string) (bool, error) {
 	if err := writeInstallManifest(repoRoot); err != nil {
 		return false, err
 	}
+	if err := validateStarterScaffoldLayout(repoRoot); err != nil {
+		return false, err
+	}
 	return hookChanged || claudeChanged, nil
 }
 
