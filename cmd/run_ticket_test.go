@@ -472,6 +472,20 @@ found:
 	}
 }
 
+func TestRunWatchProgramOptionsDisableMouseByDefault(t *testing.T) {
+	t.Parallel()
+
+	withoutMouse := runWatchProgramOptions(false)
+	withMouse := runWatchProgramOptions(true)
+
+	if len(withoutMouse) != 1 {
+		t.Fatalf("expected alt-screen only when mouse is disabled, got %d options", len(withoutMouse))
+	}
+	if len(withMouse) != 2 {
+		t.Fatalf("expected alt-screen plus mouse capture when mouse is enabled, got %d options", len(withMouse))
+	}
+}
+
 func TestFormatManagedRunTitle(t *testing.T) {
 	if got := formatManagedRunTitle("goship", "TKT-287", "testing", 2, 5, true); got != "goship • TKT-287 • testing • 2/5" {
 		t.Fatalf("unexpected title: %q", got)

@@ -33,6 +33,7 @@ var (
 	runInactivityLimit time.Duration
 	runManagedAdapter  string
 	runWatch           bool
+	runWatchMouse      bool
 )
 
 var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
@@ -551,9 +552,17 @@ func runCycleWithWatch(repoRoot string, run func(context.Context) (agentrun.Cycl
 
 func runWatchDashboard(repoRoot, ticketID string, doneCh <-chan struct{}, quitOnDone bool, launchOptions []tui.RunWatchLaunchOption) error {
 	model := tui.NewRunWatchModel(repoRoot, ticketID, doneCh, quitOnDone, launchOptions)
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	program := tea.NewProgram(model, runWatchProgramOptions(runWatchMouse)...)
 	_, err := program.Run()
 	return err
+}
+
+func runWatchProgramOptions(enableMouse bool) []tea.ProgramOption {
+	options := []tea.ProgramOption{tea.WithAltScreen()}
+	if enableMouse {
+		options = append(options, tea.WithMouseCellMotion())
+	}
+	return options
 }
 
 func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
@@ -686,13 +695,16 @@ func init() {
 	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runTicketCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
+	runTicketCmd.Flags().BoolVar(&runWatchMouse, "watch-mouse", false, "enable mouse capture in the managed-run dashboard")
 	runTicketCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runNextCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
+	runNextCmd.Flags().BoolVar(&runWatchMouse, "watch-mouse", false, "enable mouse capture in the managed-run dashboard")
 	runNextCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
 	runResumeCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
+	runResumeCmd.Flags().BoolVar(&runWatchMouse, "watch-mouse", false, "enable mouse capture in the managed-run dashboard")
 	runResumeCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runResumeCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runPingCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
@@ -702,7 +714,9 @@ func init() {
 	rootCmd.AddCommand(runResumeCmd)
 	rootCmd.AddCommand(runPingCmd)
 	rootCmd.AddCommand(runWatchCmd)
+	runWatchCmd.Flags().BoolVar(&runWatchMouse, "mouse", false, "enable mouse capture in the managed-run dashboard")
 	tuiCmd.AddCommand(tuiWatchCmd)
+	tuiWatchCmd.Flags().BoolVar(&runWatchMouse, "mouse", false, "enable mouse capture in the managed-run dashboard")
 	tuiCmd.AddCommand(tuiRunLogCmd)
 	rootCmd.AddCommand(tuiCmd)
 }
