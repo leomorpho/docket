@@ -347,7 +347,7 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "PLAN ticket=TKT-700 steps=3") {
 		t.Fatalf("view missing summary content: %q", view)
 	}
-	if !strings.Contains(view, "Completed This Cycle") || !strings.Contains(view, "TKT-698") || !strings.Contains(view, "12m") {
+	if !strings.Contains(view, "done 2") || !strings.Contains(view, "Completed This Cycle (2)") || !strings.Contains(view, "TKT-698") || !strings.Contains(view, "[done]") || !strings.Contains(view, "12m") {
 		t.Fatalf("view missing cycle completion content: %q", view)
 	}
 	if !strings.Contains(view, "PROGRESS") || !strings.Contains(view, "33%") {

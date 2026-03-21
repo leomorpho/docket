@@ -499,6 +499,9 @@ func (m RunWatchModel) renderHeaderMeta() string {
 		"ticket " + valueOrFallback(m.snapshot.ticketID, "(none)"),
 		"mode " + string(m.mode),
 	}
+	if completed := len(m.snapshot.cycle.Completed); completed > 0 {
+		parts = append(parts, fmt.Sprintf("done %d", completed))
+	}
 	if m.snapshot.cycle.StopAfterCurrent {
 		parts = append(parts, "stop after current")
 	} else {
@@ -511,9 +514,12 @@ func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
 	sections := make([]string, 0, 2)
 	if len(m.snapshot.cycle.Completed) > 0 {
 		completed := make([]string, 0, len(m.snapshot.cycle.Completed)+2)
-		completed = append(completed, "Completed This Cycle", "")
+		completed = append(completed, fmt.Sprintf("Completed This Cycle (%d)", len(m.snapshot.cycle.Completed)), "")
 		for _, item := range m.snapshot.cycle.Completed {
 			line := item.TicketID
+			if strings.TrimSpace(item.Status) != "" {
+				line += "  " + runWatchSubtleStyle.Render("["+item.Status+"]")
+			}
 			if strings.TrimSpace(item.Length) != "" {
 				line += "  " + runWatchSubtleStyle.Render(item.Length)
 			}
