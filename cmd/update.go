@@ -52,6 +52,10 @@ var updateCmd = &cobra.Command{
 		id := args[0]
 		s := local.New(repo)
 		ctx := context.Background()
+		beforeComponents, err := currentComponentCount(ctx, ticketRepoRoot(repo))
+		if err != nil {
+			return fmt.Errorf("checking graph health before update: %w", err)
+		}
 
 		t, err := s.GetTicket(ctx, id)
 		if err != nil {
@@ -60,6 +64,14 @@ var updateCmd = &cobra.Command{
 		if t == nil {
 			return fmt.Errorf("ticket %s not found", id)
 		}
+		original := *t
+		original.Labels = append([]string(nil), t.Labels...)
+		original.BlockedBy = append([]string(nil), t.BlockedBy...)
+		original.Blocks = append([]string(nil), t.Blocks...)
+		original.LinkedCommits = append([]string(nil), t.LinkedCommits...)
+		original.AC = append([]ticket.AcceptanceCriterion(nil), t.AC...)
+		original.Comments = append([]ticket.Comment(nil), t.Comments...)
+		original.Plan = append([]ticket.PlanStep(nil), t.Plan...)
 		cfg, cfgErr := ticket.LoadConfig(repo)
 		if cfgErr != nil {
 			return cfgErr
@@ -329,6 +341,13 @@ var updateCmd = &cobra.Command{
 
 		if err := s.UpdateTicket(ctx, t); err != nil {
 			return fmt.Errorf("updating ticket: %w", err)
+		}
+		if err := enforceMutationConnectivity(ctx, ticketRepoRoot(repo), beforeComponents); err != nil {
+			original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+			if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
+				return fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+			}
+			return err
 		}
 		if strings.TrimSpace(updateState) == "stale" && cascadeRequested {
 			openChildren, err := openDescendants(ctx, s, cfg, t.ID)

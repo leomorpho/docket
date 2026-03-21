@@ -25,6 +25,9 @@ var (
 	noACDefaults bool
 	acTemplate   string
 	authoringSpec string
+	createParent   string
+	createBlockedBy []string
+	createBlocks    []string
 )
 
 var createCmd = &cobra.Command{
@@ -119,6 +122,9 @@ var createCmd = &cobra.Command{
 			Description: desc,
 			Priority:    priority,
 			Labels:      labelList,
+			Parent:      strings.TrimSpace(createParent),
+			BlockedBy:   append([]string(nil), createBlockedBy...),
+			Blocks:      append([]string(nil), createBlocks...),
 			State:       ticket.State(state),
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -137,6 +143,9 @@ var createCmd = &cobra.Command{
 		}
 
 		// 6. Create ticket
+		if err := enforceCreateConnectivity(ctx, s, t); err != nil {
+			return err
+		}
 		if err := s.CreateTicket(ctx, t); err != nil {
 			return fmt.Errorf("creating ticket: %w", err)
 		}
@@ -170,6 +179,9 @@ func resetCreateGlobals() {
 	noACDefaults = false
 	acTemplate = ""
 	authoringSpec = ""
+	createParent = ""
+	createBlockedBy = nil
+	createBlocks = nil
 }
 
 func readyContractHints(description string) []string {
@@ -188,7 +200,7 @@ func readyContractHints(description string) []string {
 }
 
 func resetCreateFlagChanges(cmd *cobra.Command) {
-	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template", "authoring-spec"} {
+	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template", "authoring-spec", "parent", "blocked-by", "blocks"} {
 		if f := cmd.Flags().Lookup(name); f != nil {
 			f.Changed = false
 		}
@@ -246,6 +258,9 @@ func init() {
 	createCmd.Flags().StringSliceVar(&createAC, "ac", []string{}, "add acceptance criteria inline (repeatable)")
 	createCmd.Flags().BoolVar(&noACDefaults, "no-ac-defaults", false, "skip automatic AC defaults inferred from project stack")
 	createCmd.Flags().StringVar(&acTemplate, "ac-template", "", "comma-separated AC template names to apply")
+	createCmd.Flags().StringVar(&createParent, "parent", "", "connect the new ticket under an existing parent ticket")
+	createCmd.Flags().StringSliceVar(&createBlockedBy, "blocked-by", []string{}, "connect the new ticket to existing blocker tickets (repeatable)")
+	createCmd.Flags().StringSliceVar(&createBlocks, "blocks", []string{}, "connect the new ticket to existing downstream tickets it blocks (repeatable)")
 
 	rootCmd.AddCommand(createCmd)
 }

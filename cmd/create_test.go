@@ -61,7 +61,7 @@ func TestCreateCmd(t *testing.T) {
 
 	b.Reset()
 	errBuf.Reset()
-	rootCmd.SetArgs([]string{"create", "--title", "Second Ticket", "--labels", "feat,llm", "--desc", "This second ticket also provides enough context for autonomous execution by another agent."})
+	rootCmd.SetArgs([]string{"create", "--title", "Second Ticket", "--labels", "feat,llm", "--parent", "TKT-001", "--desc", "This second ticket also provides enough context for autonomous execution by another agent."})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("second create failed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestCreateCmd(t *testing.T) {
 	// 4. JSON output
 	format = "json"
 	b.Reset()
-	rootCmd.SetArgs([]string{"create", "--title", "JSON Ticket", "--desc", "JSON output ticket with detailed context for autonomous execution and validation coverage."})
+	rootCmd.SetArgs([]string{"create", "--title", "JSON Ticket", "--parent", "TKT-002", "--desc", "JSON output ticket with detailed context for autonomous execution and validation coverage."})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("JSON create failed: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestCreateCmd_ReadyContractHints(t *testing.T) {
 	}
 
 	errOut.Reset()
-	rootCmd.SetArgs([]string{"create", "--title", "Has guidance", "--desc", "Likely paths: cmd/create.go.\nVerify commands: go test ./cmd/...\nOut of scope: scheduler behavior.\nAdditional implementation context to satisfy authoring expectations."})
+	rootCmd.SetArgs([]string{"create", "--title", "Has guidance", "--parent", "TKT-001", "--desc", "Likely paths: cmd/create.go.\nVerify commands: go test ./cmd/...\nOut of scope: scheduler behavior.\nAdditional implementation context to satisfy authoring expectations."})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("create failed with guidance sections: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestCreateCmd_NoACDefaultsFlagAndUnknownStack(t *testing.T) {
 
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetErr(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"create", "--title", "Unknown stack", "--desc", "Description long enough to satisfy required quality checks during create command execution."})
+	rootCmd.SetArgs([]string{"create", "--title", "Unknown stack", "--parent", "TKT-001", "--desc", "Description long enough to satisfy required quality checks during create command execution."})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("create failed for unknown stack: %v", err)
 	}
