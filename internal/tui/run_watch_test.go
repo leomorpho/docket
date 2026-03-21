@@ -553,6 +553,10 @@ func TestRunWatchModelRenderStepBar(t *testing.T) {
 	if !strings.Contains(got, "50%") {
 		t.Fatalf("expected 50%% progress, got %q", got)
 	}
+	stripped := stripLipglossANSI(got)
+	if !strings.Contains(stripped, "██████") || !strings.Contains(stripped, "░░░░░░") {
+		t.Fatalf("expected distinct filled and remaining segments, got %q", stripped)
+	}
 
 	model.snapshot.status = runruntime.StatusSnapshot{}
 	got = model.renderStepBar()

@@ -619,7 +619,7 @@ func (m RunWatchModel) renderStepBar() string {
 		filled = width
 	}
 	bar := runWatchProgressDoneStyle.Render(strings.Repeat("█", filled)) +
-		runWatchProgressTodoStyle.Render(strings.Repeat("█", width-filled))
+		runWatchProgressTodoStyle.Render(strings.Repeat("░", width-filled))
 	percent := int(float64(current) / float64(m.snapshot.status.PlannedSteps) * 100)
 	return fmt.Sprintf("%s %d%%", bar, percent)
 }
