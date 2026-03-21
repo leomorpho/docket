@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/leomorpho/docket/internal/tui"
 	"github.com/leomorpho/docket/internal/vcs"
 	"github.com/leomorpho/docket/internal/workflow"
+	"github.com/leomorpho/docket/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +36,7 @@ var (
 	runManagedAdapter  string
 	runWatch           bool
 	runWatchMouse      bool
+	runWorkspace       bool
 )
 
 var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
@@ -379,6 +382,12 @@ var runWatchCmd = &cobra.Command{
 		if len(args) == 1 {
 			ticketID = args[0]
 		}
+		if runWorkspace {
+			if ticketID != "" {
+				return fmt.Errorf("workspace watch does not support a ticket id argument yet")
+			}
+			return runWorkspaceWatchDashboard(repo)
+		}
 		if ticketID != "" {
 			return runWatchDashboard(repo, ticketID, nil, false, nil)
 		}
@@ -399,6 +408,12 @@ var tuiWatchCmd = &cobra.Command{
 		ticketID := ""
 		if len(args) == 1 {
 			ticketID = args[0]
+		}
+		if runWorkspace {
+			if ticketID != "" {
+				return fmt.Errorf("workspace watch does not support a ticket id argument yet")
+			}
+			return runWorkspaceWatchDashboard(repo)
 		}
 		if ticketID != "" {
 			return runWatchDashboard(repo, ticketID, nil, false, nil)
@@ -565,6 +580,18 @@ func runWatchProgramOptions(enableMouse bool) []tea.ProgramOption {
 	return options
 }
 
+func runWorkspaceWatchDashboard(workspaceRoot string) error {
+	repos, err := workspace.Discover(workspaceRoot)
+	if err != nil {
+		return fmt.Errorf("discovering workspace repos: %w", err)
+	}
+	options, initialRepo, err := workspaceRunWatchLaunchOptions(workspaceRoot, repos)
+	if err != nil {
+		return err
+	}
+	return runWatchDashboard(initialRepo, "", nil, false, options)
+}
+
 func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 	return []tui.RunWatchLaunchOption{
 		{
@@ -622,6 +649,95 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 			},
 		},
 	}
+}
+
+func workspaceRunWatchLaunchOptions(workspaceRoot string, repos []workspace.Repo) ([]tui.RunWatchLaunchOption, string, error) {
+	if len(repos) == 0 {
+		return nil, "", fmt.Errorf("no connected Docket repos found under %s", workspaceRoot)
+	}
+	initialRepo := repos[0].Path
+	options := make([]tui.RunWatchLaunchOption, 0, len(repos)*5)
+	for _, repoItem := range repos {
+		labelSuffix := " • " + repoItem.Name
+		descSuffix := relativeRepoLabel(workspaceRoot, repoItem.Path)
+		if current, err := currentManagedRunTicketID(repoItem.Path); err == nil && strings.TrimSpace(current) != "" {
+			initialRepo = repoItem.Path
+			options = append(options, tui.RunWatchLaunchOption{
+				ID:          "attach:" + repoItem.Name,
+				Label:       "Attach To Active Run" + labelSuffix,
+				Description: "Watch the current managed run in " + descSuffix + ".",
+				RepoRoot:    repoItem.Path,
+				Start:       nil,
+			})
+		}
+		options = append(options,
+			tui.RunWatchLaunchOption{
+				ID:          "single-session:" + repoItem.Name,
+				Label:       "Start Next Ticket" + labelSuffix,
+				Description: "Pick the next runnable ticket in " + descSuffix + " and run it in a persisted Codex session.",
+				RepoRoot:    repoItem.Path,
+				Start: func(repoRoot string) func() error {
+					return func() error { return launchManagedSingleRunWithMode(repoRoot, "session") }
+				}(repoItem.Path),
+			},
+			tui.RunWatchLaunchOption{
+				ID:          "auto-session:" + repoItem.Name,
+				Label:       "Start Auto Cycle" + labelSuffix,
+				Description: "Keep running runnable tickets in " + descSuffix + " using persisted Codex sessions.",
+				RepoRoot:    repoItem.Path,
+				Start: func(repoRoot string) func() error {
+					return func() error { return launchManagedAutoCycleWithMode(repoRoot, "session") }
+				}(repoItem.Path),
+			},
+			tui.RunWatchLaunchOption{
+				ID:          "ping:" + repoItem.Name,
+				Label:       "Ping Active Session" + labelSuffix,
+				Description: "Send a structured status ping into the active run for " + descSuffix + ".",
+				RepoRoot:    repoItem.Path,
+				StayInMenu:  true,
+				Start: func(repoRoot string) func() error {
+					return func() error {
+						ticketID, err := currentManagedRunTicketID(repoRoot)
+						if err != nil {
+							return err
+						}
+						if ticketID == "" {
+							return fmt.Errorf("no active managed run to ping")
+						}
+						svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), "session")
+						_, err = svc.PingTicket(context.Background(), ticketID)
+						return err
+					}
+				}(repoItem.Path),
+			},
+			tui.RunWatchLaunchOption{
+				ID:          "clean:" + repoItem.Name,
+				Label:       "Clean Stale Runs" + labelSuffix,
+				Description: "Remove inactive stale runtime records in " + descSuffix + ".",
+				RepoRoot:    repoItem.Path,
+				StayInMenu:  true,
+				Start: func(repoRoot string) func() error {
+					return func() error {
+						store := runruntime.New(repoRoot)
+						if _, err := store.HealRuntimeState(time.Now()); err != nil {
+							return err
+						}
+						_, err := store.CleanupStaleRuns()
+						return err
+					}
+				}(repoItem.Path),
+			},
+		)
+	}
+	return options, initialRepo, nil
+}
+
+func relativeRepoLabel(workspaceRoot, repoRoot string) string {
+	rel, err := filepath.Rel(workspaceRoot, repoRoot)
+	if err != nil || strings.TrimSpace(rel) == "" {
+		return filepath.Base(repoRoot)
+	}
+	return rel
 }
 
 func launchManagedSingleRun(repoRoot string) error {
@@ -715,8 +831,10 @@ func init() {
 	rootCmd.AddCommand(runPingCmd)
 	rootCmd.AddCommand(runWatchCmd)
 	runWatchCmd.Flags().BoolVar(&runWatchMouse, "mouse", false, "enable mouse capture in the managed-run dashboard")
+	runWatchCmd.Flags().BoolVar(&runWorkspace, "workspace", false, "aggregate connected Docket repos under the current workspace root")
 	tuiCmd.AddCommand(tuiWatchCmd)
 	tuiWatchCmd.Flags().BoolVar(&runWatchMouse, "mouse", false, "enable mouse capture in the managed-run dashboard")
+	tuiWatchCmd.Flags().BoolVar(&runWorkspace, "workspace", false, "aggregate connected Docket repos under the current workspace root")
 	tuiCmd.AddCommand(tuiRunLogCmd)
 	rootCmd.AddCommand(tuiCmd)
 }

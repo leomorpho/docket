@@ -78,6 +78,29 @@ func TestRunWatchModelToggleAndStopRequest(t *testing.T) {
 	}
 }
 
+func TestRunWatchModelStartLaunchOptionSwitchesRepoRoot(t *testing.T) {
+	t.Parallel()
+
+	repoA := t.TempDir()
+	repoB := t.TempDir()
+	model := NewRunWatchModel(repoA, "", nil, false, nil)
+	option := RunWatchLaunchOption{
+		ID:       "attach:repo-b",
+		Label:    "Attach To Active Run • repo-b",
+		RepoRoot: repoB,
+		Start:    nil,
+	}
+
+	updated, _ := model.startLaunchOption(option)
+	next := updated.(RunWatchModel)
+	if next.repoRoot != repoB {
+		t.Fatalf("expected repoRoot to switch to %s, got %s", repoB, next.repoRoot)
+	}
+	if next.store == nil || !strings.Contains(next.store.RunsRootDir(), repoB) {
+		t.Fatalf("expected store repo root to switch to %s", repoB)
+	}
+}
+
 func TestRunWatchModelMouseWheelScrollsBody(t *testing.T) {
 	t.Parallel()
 

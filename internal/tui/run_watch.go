@@ -34,6 +34,7 @@ type RunWatchLaunchOption struct {
 	ID          string
 	Label       string
 	Description string
+	RepoRoot    string
 	Start       func() error
 	StayInMenu  bool
 }
@@ -955,6 +956,12 @@ func (m RunWatchModel) startLaunchOptionByID(id string) (tea.Model, tea.Cmd) {
 }
 
 func (m RunWatchModel) startLaunchOption(option RunWatchLaunchOption) (tea.Model, tea.Cmd) {
+	if strings.TrimSpace(option.RepoRoot) != "" && option.RepoRoot != m.repoRoot {
+		m.repoRoot = option.RepoRoot
+		m.store = runruntime.New(option.RepoRoot)
+		m.focusTicketID = ""
+		m.snapshot = runWatchSnapshot{}
+	}
 	if option.Start == nil {
 		m.launchMode = launchModeWatch
 		m.statusMessage = "watching managed run"

@@ -49,6 +49,8 @@ var rootCmd = &cobra.Command{
 		runInactivityLimit = 0
 		runManagedAdapter = ""
 		runWatch = false
+		runWorkspace = false
+		listWorkspace = false
 		if f := cmd.Root().PersistentFlags().Lookup("automation"); f != nil {
 			f.Changed = false
 		}

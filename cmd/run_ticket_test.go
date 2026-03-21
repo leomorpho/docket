@@ -11,6 +11,9 @@ import (
 
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -486,6 +489,66 @@ func TestRunWatchProgramOptionsDisableMouseByDefault(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRunWatchLaunchOptionsIncludePerRepoActions(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".gitmodules"), []byte(`
+[submodule "goship"]
+	path = goship
+	url = git@github.com:example/goship.git
+[submodule "control-plane"]
+	path = control-plane
+	url = git@github.com:example/control-plane.git
+`), 0o644); err != nil {
+		t.Fatalf("write .gitmodules failed: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, item := range []struct {
+		repoPath string
+		id       string
+	}{
+		{repoPath: filepath.Join(workspaceRoot, "goship"), id: "TKT-101"},
+		{repoPath: filepath.Join(workspaceRoot, "control-plane"), id: "TKT-201"},
+	} {
+		if err := os.MkdirAll(filepath.Join(item.repoPath, ".docket"), 0o755); err != nil {
+			t.Fatalf("mkdir .docket failed: %v", err)
+		}
+		if err := ticket.SaveConfig(item.repoPath, ticket.DefaultConfig()); err != nil {
+			t.Fatalf("save config failed: %v", err)
+		}
+		s := local.New(item.repoPath)
+		if err := s.CreateTicket(ctx, &ticket.Ticket{
+			ID: item.id, Seq: 1, Title: "Runnable", State: ticket.State("todo"), Priority: 1,
+			CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		}); err != nil {
+			t.Fatalf("create ticket failed: %v", err)
+		}
+	}
+
+	repos, err := workspace.Discover(workspaceRoot)
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	options, initialRepo, err := workspaceRunWatchLaunchOptions(workspaceRoot, repos)
+	if err != nil {
+		t.Fatalf("workspaceRunWatchLaunchOptions() error = %v", err)
+	}
+	if initialRepo == "" {
+		t.Fatalf("expected initial repo")
+	}
+	var labels []string
+	for _, option := range options {
+		labels = append(labels, option.Label)
+	}
+	if !containsString(labels, "Start Next Ticket • goship") {
+		t.Fatalf("missing goship workspace launch option: %v", labels)
+	}
+	if !containsString(labels, "Start Next Ticket • control-plane") {
+		t.Fatalf("missing control-plane workspace launch option: %v", labels)
+	}
+}
+
 func TestFormatManagedRunTitle(t *testing.T) {
 	if got := formatManagedRunTitle("goship", "TKT-287", "testing", 2, 5, true); got != "goship • TKT-287 • testing • 2/5" {
 		t.Fatalf("unexpected title: %q", got)
@@ -500,4 +563,13 @@ func TestWriteTerminalTitleSkipsNonStdout(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("expected no title write to custom output, got %q", out.String())
 	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

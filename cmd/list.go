@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -10,6 +11,7 @@ import (
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/leomorpho/docket/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +22,7 @@ var (
 	listOnlyUnblocked   bool
 	listIncludeArchived bool
 	listFull            bool
+	listWorkspace       bool
 )
 
 type listRow struct {
@@ -27,11 +30,20 @@ type listRow struct {
 	depth int
 }
 
+type workspaceListRow struct {
+	RepoName string         `json:"repo_name"`
+	RepoPath string         `json:"repo_path"`
+	Ticket   *ticket.Ticket `json:"ticket"`
+}
+
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if listWorkspace {
+			return runWorkspaceList(cmd)
+		}
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
@@ -88,6 +100,130 @@ var listCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func runWorkspaceList(cmd *cobra.Command) error {
+	repos, err := workspace.Discover(repo)
+	if err != nil {
+		return fmt.Errorf("discovering workspace repos: %w", err)
+	}
+	rows, workableView, err := workspaceListRows(context.Background(), repo, repos)
+	if err != nil {
+		return err
+	}
+	switch format {
+	case "json":
+		printJSON(cmd, rows)
+	case "context":
+		printWorkspaceContext(cmd, rows, workableView)
+	default:
+		printWorkspaceTable(cmd, rows, workableView)
+	}
+	return nil
+}
+
+func workspaceListRows(ctx context.Context, workspaceRoot string, repos []workspace.Repo) ([]workspaceListRow, bool, error) {
+	var rows []workspaceListRow
+	useWorkableView := !listFull
+	for _, repoItem := range repos {
+		cfg, err := ticket.LoadConfig(repoItem.Path)
+		if err != nil {
+			return nil, false, err
+		}
+		s := local.New(repoItem.Path)
+		if err := s.SyncIndex(ctx); err != nil {
+			return nil, false, fmt.Errorf("syncing index for %s: %w", repoItem.Name, err)
+		}
+		f := store.Filter{
+			Labels:          listLabels,
+			MaxPriority:     listMaxPriority,
+			OnlyUnblocked:   listOnlyUnblocked,
+			IncludeArchived: listIncludeArchived,
+		}
+		if listState != "" && listState != "open" {
+			if !cfg.IsValidState(listState) {
+				return nil, false, fmt.Errorf("invalid state: %s", listState)
+			}
+			f.States = []ticket.State{ticket.State(listState)}
+			useWorkableView = false
+		} else {
+			for _, state := range cfg.OpenStates() {
+				f.States = append(f.States, ticket.State(state))
+			}
+		}
+		var tickets []*ticket.Ticket
+		if useWorkableView {
+			tickets, err = workableTickets(ctx, s, cfg, f)
+			if err != nil {
+				return nil, false, fmt.Errorf("listing workable tickets for %s: %w", repoItem.Name, err)
+			}
+		} else {
+			tickets, err = s.ListTickets(ctx, f)
+			if err != nil {
+				return nil, false, fmt.Errorf("listing tickets for %s: %w", repoItem.Name, err)
+			}
+		}
+		for _, t := range tickets {
+			rows = append(rows, workspaceListRow{
+				RepoName: repoItem.Name,
+				RepoPath: repoItem.Path,
+				Ticket:   t,
+			})
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Ticket.Priority != rows[j].Ticket.Priority {
+			return rows[i].Ticket.Priority < rows[j].Ticket.Priority
+		}
+		if rows[i].RepoName != rows[j].RepoName {
+			return rows[i].RepoName < rows[j].RepoName
+		}
+		if !rows[i].Ticket.CreatedAt.Equal(rows[j].Ticket.CreatedAt) {
+			return rows[i].Ticket.CreatedAt.Before(rows[j].Ticket.CreatedAt)
+		}
+		return rows[i].Ticket.ID < rows[j].Ticket.ID
+	})
+	return rows, useWorkableView, nil
+}
+
+func printWorkspaceTable(cmd *cobra.Command, rows []workspaceListRow, workableView bool) {
+	if len(rows) == 0 {
+		if workableView {
+			fmt.Fprintln(cmd.OutOrStdout(), "No workable workspace tickets found.")
+			return
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "No workspace tickets found.")
+		return
+	}
+	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "REPO\tID\tSTATE\tPRI\tTITLE\tLABELS")
+	for _, row := range rows {
+		fmt.Fprintf(w, "%s\t%s\t%s\tP%d\t%s\t%s\n", row.RepoName, row.Ticket.ID, row.Ticket.State, row.Ticket.Priority, row.Ticket.Title, strings.Join(row.Ticket.Labels, ","))
+	}
+	w.Flush()
+}
+
+func printWorkspaceContext(cmd *cobra.Command, rows []workspaceListRow, workableView bool) {
+	if len(rows) == 0 {
+		if workableView {
+			fmt.Fprintln(cmd.OutOrStdout(), "No workable workspace tickets found.")
+			return
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "No workspace tickets found.")
+		return
+	}
+	for _, row := range rows {
+		relPath, _ := filepath.Rel(repo, row.RepoPath)
+		s := local.New(row.RepoPath)
+		blockedStr := ""
+		unresolved, err := s.UnresolvedBlockers(context.Background(), row.Ticket)
+		if err == nil && len(unresolved) > 0 {
+			blockedStr = " | BLOCKED by " + strings.Join(unresolved, ",")
+		} else if len(row.Ticket.Labels) > 0 {
+			blockedStr = " | labels:" + strings.Join(row.Ticket.Labels, ",")
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "[%s/%s] P%d %-11s | %-28s%s\n", relPath, row.Ticket.ID, row.Ticket.Priority, row.Ticket.State, row.Ticket.Title, blockedStr)
+	}
 }
 
 func printTable(cmd *cobra.Command, rows []listRow, workableView bool, cfg *ticket.Config) {
@@ -236,6 +372,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listOnlyUnblocked, "unblocked", false, "exclude blocked tickets")
 	listCmd.Flags().BoolVar(&listIncludeArchived, "include-archived", false, "include archived tickets")
 	listCmd.Flags().BoolVar(&listFull, "full", false, "show the full matching ticket graph instead of only workable tickets")
+	listCmd.Flags().BoolVar(&listWorkspace, "workspace", false, "aggregate tickets across connected Docket repos under the current workspace root")
 
 	rootCmd.AddCommand(listCmd)
 }

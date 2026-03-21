@@ -207,6 +207,63 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	}
 }
 
+func TestListCmd_WorkspaceAggregatesTicketsAcrossRepos(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	repo = workspaceRoot
+	format = "context"
+	listFull = false
+	listState = "open"
+	listWorkspace = true
+
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".gitmodules"), []byte(`
+[submodule "goship"]
+	path = goship
+	url = git@github.com:example/goship.git
+[submodule "control-plane"]
+	path = control-plane
+	url = git@github.com:example/control-plane.git
+`), 0o644); err != nil {
+		t.Fatalf("write .gitmodules failed: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, item := range []struct {
+		repoPath string
+		id       string
+		title    string
+	}{
+		{repoPath: filepath.Join(workspaceRoot, "goship"), id: "TKT-101", title: "GoShip leaf"},
+		{repoPath: filepath.Join(workspaceRoot, "control-plane"), id: "TKT-201", title: "Control plane leaf"},
+	} {
+		if err := os.MkdirAll(filepath.Join(item.repoPath, ".docket"), 0o755); err != nil {
+			t.Fatalf("mkdir .docket failed: %v", err)
+		}
+		if err := ticket.SaveConfig(item.repoPath, ticket.DefaultConfig()); err != nil {
+			t.Fatalf("save config failed for %s: %v", item.repoPath, err)
+		}
+		s := local.New(item.repoPath)
+		if err := s.CreateTicket(ctx, &ticket.Ticket{
+			ID: item.id, Seq: 1, Title: item.title, State: ticket.State("todo"), Priority: 1,
+			CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		}); err != nil {
+			t.Fatalf("create ticket failed for %s: %v", item.repoPath, err)
+		}
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list", "--workspace", "--format", "context"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("workspace list failed: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "[control-plane/TKT-201]") || !strings.Contains(got, "[goship/TKT-101]") {
+		t.Fatalf("expected aggregated workspace tickets, got:\n%s", got)
+	}
+}
+
 func TestListCmd_UsesSharedRepoRootWhenInvokedFromWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
