@@ -28,7 +28,7 @@ var startCmd = &cobra.Command{
 	Short: "Automatically pick up and start the next best ticket",
 	Long: `Identify the next unblocked high-priority ticket in an open state,
 claims it, creates a worktree for it if needed, and transitions it to the repo's configured active work state.
-In --auto mode, it will continue to the next ticket after each completion.`,
+In --auto mode, it runs the managed ticket flow and continues to the next ticket after each completion.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deps := newRuntimeDeps(repo)
 		s := deps.store
@@ -41,7 +41,7 @@ In --auto mode, it will continue to the next ticket after each completion.`,
 		if err != nil {
 			return err
 		}
-		if startRun {
+		if startRun || startAuto {
 			return runStartManaged(cmd, ctx, s, cfg)
 		}
 		ns := security.NewRepoNamespaceStore(docketHome)
@@ -353,7 +353,7 @@ func lookupClaimIfAvailable(repoRoot, ticketID string) (*claim.ClaimMetadata, er
 }
 
 func init() {
-	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion")
+	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion; implies --run")
 	startCmd.Flags().BoolVar(&startRun, "run", false, "run the next workable ticket through the Codex flow instead of printing a prompt")
 	startCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	startCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")

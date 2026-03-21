@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/store/local"
@@ -696,6 +696,32 @@ func TestRunWatchModelMenuLaunchInvokesStartCallback(t *testing.T) {
 	}
 	if result.err != nil {
 		t.Fatalf("unexpected launch error: %v", result.err)
+	}
+}
+
+func TestRunWatchModelMenuLaunchCanQuitAfterSuccessfulRun(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{
+			ID:            "single",
+			Label:         "Start Next Ticket",
+			QuitOnSuccess: true,
+			Start:         func() error { return nil },
+		},
+	})
+
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("launch option should return an async command")
+	}
+	msg := cmd()
+	updated, nextCmd := gotModel.Update(msg)
+	if nextCmd == nil {
+		t.Fatalf("expected successful launch completion to request quit")
+	}
+	if _, ok := updated.(RunWatchModel); !ok {
+		t.Fatalf("expected updated model type, got %T", updated)
 	}
 }
 

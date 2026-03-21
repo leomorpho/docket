@@ -595,17 +595,19 @@ func runWorkspaceWatchDashboard(workspaceRoot string) error {
 func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 	return []tui.RunWatchLaunchOption{
 		{
-			ID:          "single-session",
-			Label:       "Start Next Ticket",
-			Description: "Pick the next runnable ticket and run it in a persisted Codex session that can be resumed later.",
+			ID:            "single-session",
+			Label:         "Start Next Ticket",
+			Description:   "Pick the next runnable ticket and run it in a persisted Codex session that can be resumed later.",
+			QuitOnSuccess: true,
 			Start: func() error {
 				return launchManagedSingleRunWithMode(repoRoot, "session")
 			},
 		},
 		{
-			ID:          "auto-session",
-			Label:       "Start Auto Cycle",
-			Description: "Keep running tickets using persisted Codex sessions so follow-up resumes stay on the same thread.",
+			ID:            "auto-session",
+			Label:         "Start Auto Cycle",
+			Description:   "Keep running tickets using persisted Codex sessions so follow-up resumes stay on the same thread.",
+			QuitOnSuccess: true,
 			Start: func() error {
 				return launchManagedAutoCycleWithMode(repoRoot, "session")
 			},
@@ -672,19 +674,21 @@ func workspaceRunWatchLaunchOptions(workspaceRoot string, repos []workspace.Repo
 		}
 		options = append(options,
 			tui.RunWatchLaunchOption{
-				ID:          "single-session:" + repoItem.Name,
-				Label:       "Start Next Ticket" + labelSuffix,
-				Description: "Pick the next runnable ticket in " + descSuffix + " and run it in a persisted Codex session.",
-				RepoRoot:    repoItem.Path,
+				ID:            "single-session:" + repoItem.Name,
+				Label:         "Start Next Ticket" + labelSuffix,
+				Description:   "Pick the next runnable ticket in " + descSuffix + " and run it in a persisted Codex session.",
+				RepoRoot:      repoItem.Path,
+				QuitOnSuccess: true,
 				Start: func(repoRoot string) func() error {
 					return func() error { return launchManagedSingleRunWithMode(repoRoot, "session") }
 				}(repoItem.Path),
 			},
 			tui.RunWatchLaunchOption{
-				ID:          "auto-session:" + repoItem.Name,
-				Label:       "Start Auto Cycle" + labelSuffix,
-				Description: "Keep running runnable tickets in " + descSuffix + " using persisted Codex sessions.",
-				RepoRoot:    repoItem.Path,
+				ID:            "auto-session:" + repoItem.Name,
+				Label:         "Start Auto Cycle" + labelSuffix,
+				Description:   "Keep running runnable tickets in " + descSuffix + " using persisted Codex sessions.",
+				RepoRoot:      repoItem.Path,
+				QuitOnSuccess: true,
 				Start: func(repoRoot string) func() error {
 					return func() error { return launchManagedAutoCycleWithMode(repoRoot, "session") }
 				}(repoItem.Path),

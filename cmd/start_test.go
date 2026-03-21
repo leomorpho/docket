@@ -869,64 +869,55 @@ func TestStartRunAutoStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
 	}
 }
 
-func TestStartAutoPreservesReviewTransitionBehavior(t *testing.T) {
-	tmpRepo := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	tmpUserHome := filepath.Join(t.TempDir(), "home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	t.Setenv("DOCKET_AGENT_ID", "test-agent")
-	t.Setenv("HOME", tmpUserHome)
-	docketHome = ""
-	repo = tmpRepo
+func TestStartAutoImpliesManagedRun(t *testing.T) {
+	prev := newRunOrchestrator
+	prevStartRun := startRun
+	prevStartAuto := startAuto
+	prevNoReview := runDisableReview
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		newRunOrchestrator = prev
+		startRun = prevStartRun
+		startAuto = prevStartAuto
+		runDisableReview = prevNoReview
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repo = t.TempDir()
 	format = "human"
-
-	runGitSession(t, tmpRepo, "init")
-	runGitSession(t, tmpRepo, "config", "user.email", "test@example.com")
-	runGitSession(t, tmpRepo, "config", "user.name", "Test User")
-	if err := os.WriteFile(filepath.Join(tmpRepo, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
-		t.Fatalf("write seed file failed: %v", err)
-	}
-	runGitSession(t, tmpRepo, "add", ".")
-	runGitSession(t, tmpRepo, "commit", "-m", "chore: seed")
-
-	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
+	startRun = false
+	startAuto = false
+	runDisableReview = false
+	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
-	s := local.New(tmpRepo)
-	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-777",
-		Seq:         777,
-		Title:       "Start auto smoke",
-		State:       ticket.State("todo"),
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "agent:test-agent",
-		Description: "D",
-		Handoff:     "**Current state:** todo\n**Decisions made:** none\n**Files touched:** n/a\n**Remaining work:** start\n**AC status:** pending",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "A1", Done: true, Evidence: "done"},
-			{Description: "A2", Done: true, Evidence: "done"},
-		},
-	}); err != nil {
-		t.Fatalf("CreateTicket failed: %v", err)
+	var runNextCalled bool
+	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				runNextCalled = true
+				return agentrun.CycleSummary{
+					Runs: []agentrun.TicketRunSummary{{TicketID: "TKT-777", Status: agentrun.StatusDone}},
+				}, nil
+			},
+		}
 	}
 
-	b := new(bytes.Buffer)
-	rootCmd.SetOut(b)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"start", "--auto"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("start --auto failed: %v", err)
+		t.Fatalf("start --auto failed: %v\n%s", err, out.String())
 	}
-
-	got, err := s.GetTicket(context.Background(), "TKT-777")
-	if err != nil {
-		t.Fatalf("GetTicket failed: %v", err)
+	if !runNextCalled {
+		t.Fatalf("expected start --auto to imply managed run cycle")
 	}
-	if got.State != ticket.State("in-progress") {
-		t.Fatalf("expected start to preserve in-progress transition behavior, got %s", got.State)
+	if got := out.String(); !strings.Contains(got, "TKT-777: done") {
+		t.Fatalf("unexpected output: %s", got)
 	}
 }
 

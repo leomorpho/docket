@@ -37,12 +37,13 @@ const (
 )
 
 type RunWatchLaunchOption struct {
-	ID          string
-	Label       string
-	Description string
-	RepoRoot    string
-	Start       func() error
-	StayInMenu  bool
+	ID            string
+	Label         string
+	Description   string
+	RepoRoot      string
+	Start         func() error
+	QuitOnSuccess bool
+	StayInMenu    bool
 }
 
 type runWatchSnapshot struct {
@@ -71,6 +72,7 @@ type runWatchDoneMsg struct{}
 type runWatchTickMsg struct{}
 type runWatchLaunchResultMsg struct {
 	err        error
+	quitOnDone bool
 	stayInMenu bool
 }
 
@@ -116,7 +118,7 @@ var (
 	runWatchMutedCardStyle = runWatchCardStyle.Copy().
 				BorderForeground(lipgloss.Color("240"))
 	runWatchCompactCardStyle = runWatchCardStyle.Copy().
-				Padding(0, 1)
+					Padding(0, 1)
 	runWatchKeyStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("229"))
@@ -215,6 +217,10 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "launch failed: " + msg.err.Error()
 			m.launchMode = launchModeMenu
 			return m, nil
+		}
+		if msg.quitOnDone {
+			m.showDoneNotice = true
+			return m, tea.Quit
 		}
 		if msg.stayInMenu {
 			m.launchMode = launchModeMenu
@@ -1070,7 +1076,11 @@ func (m RunWatchModel) startLaunchOption(option RunWatchLaunchOption) (tea.Model
 	m.doneCh = doneCh
 	return m, func() tea.Msg {
 		defer close(doneCh)
-		return runWatchLaunchResultMsg{err: option.Start(), stayInMenu: option.StayInMenu}
+		return runWatchLaunchResultMsg{
+			err:        option.Start(),
+			quitOnDone: option.QuitOnSuccess,
+			stayInMenu: option.StayInMenu,
+		}
 	}
 }
 
