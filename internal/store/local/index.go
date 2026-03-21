@@ -135,9 +135,10 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 	}
 	rowsToInsert := make([]ticketRow, 0, len(entries))
 	ticketsByID := make(map[string]*ticket.Ticket, len(entries))
+	seenTicketIDs := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".md" {
-			id := entry.Name()[:len(entry.Name())-3]
+			id := s.normalizeTicketLookupID(entry.Name()[:len(entry.Name())-3])
 			if id == "" {
 				continue
 			}
@@ -145,6 +146,16 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
+			if t == nil {
+				continue
+			}
+			// The filename is the canonical ticket identity. Frontmatter can drift
+			// during manual edits or file copies, and the index should remain usable.
+			t.ID = id
+			if _, exists := seenTicketIDs[t.ID]; exists {
+				continue
+			}
+			seenTicketIDs[t.ID] = struct{}{}
 
 			acTotal := len(t.AC)
 			acDone := 0

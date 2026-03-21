@@ -7,7 +7,8 @@ import (
 
 // MergeBranch merges the given branch into the current HEAD of repoRoot.
 func MergeBranch(repoRoot, branch string) error {
-	out, err := runGit(repoRoot, "merge", "--no-ff", "-m", fmt.Sprintf("Merge ticket branch %s", branch), branch)
+	args := []string{"merge", "--no-ff", "--autostash", "-m", fmt.Sprintf("Merge ticket branch %s", branch), branch}
+	out, err := runGit(repoRoot, args...)
 	if err != nil {
 		// If merge failed, we might want to abort it to keep the main repo clean
 		_, _ = runGit(repoRoot, "merge", "--abort")
@@ -23,7 +24,7 @@ func GetDefaultBranch(repoRoot string) (string, error) {
 		parts := strings.Split(strings.TrimSpace(out), "/")
 		return parts[len(parts)-1], nil
 	}
-	
+
 	// Fallback to local branches
 	for _, b := range []string{"main", "master"} {
 		_, err := runGit(repoRoot, "rev-parse", "--verify", b)

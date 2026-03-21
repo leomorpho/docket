@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func TestMerge(t *testing.T) {
 	runGit("init")
 	runGit("config", "user.email", "test@example.com")
 	runGit("config", "user.name", "test")
-	
+
 	// Create initial commit
 	os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root"), 0644)
 	runGit("add", "README")
@@ -40,13 +41,13 @@ func TestMerge(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "feature.txt"), []byte("feat"), 0644)
 	runGit("add", "feature.txt")
 	runGit("commit", "-m", "feature")
-	
+
 	runGit("checkout", def)
-	
+
 	if err := MergeBranch(tmpDir, "feature-1"); err != nil {
 		t.Fatalf("MergeBranch failed: %v", err)
 	}
-	
+
 	if _, err := os.Stat(filepath.Join(tmpDir, "feature.txt")); err != nil {
 		t.Fatal("expected merged file to exist")
 	}
@@ -64,5 +65,69 @@ func TestMerge(t *testing.T) {
 	// 5. Delete non-existent
 	if err := DeleteBranch(tmpDir, "no-such-branch"); err == nil {
 		t.Error("expected error deleting non-existent branch")
+	}
+}
+
+func TestMergeBranch_AutostashesUnrelatedDirtyTrackedChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		c := exec.Command("git", append([]string{"-C", tmpDir}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+
+	dirtyPath := filepath.Join(tmpDir, "docs.txt")
+	if err := os.WriteFile(dirtyPath, []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write docs.txt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGit("add", ".")
+	runGit("commit", "-m", "initial")
+
+	def, err := GetDefaultBranch(tmpDir)
+	if err != nil {
+		t.Fatalf("GetDefaultBranch failed: %v", err)
+	}
+
+	runGit("checkout", "-b", "feature-1")
+	if err := os.WriteFile(filepath.Join(tmpDir, "feature.txt"), []byte("feat\n"), 0o644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	runGit("add", "feature.txt")
+	runGit("commit", "-m", "feature")
+	runGit("checkout", def)
+
+	if err := os.WriteFile(dirtyPath, []byte("base\nlocal dirty change\n"), 0o644); err != nil {
+		t.Fatalf("dirty docs.txt: %v", err)
+	}
+
+	if err := MergeBranch(tmpDir, "feature-1"); err != nil {
+		t.Fatalf("MergeBranch with dirty tracked file failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, "feature.txt")); err != nil {
+		t.Fatalf("expected merged file to exist: %v", err)
+	}
+	data, err := os.ReadFile(dirtyPath)
+	if err != nil {
+		t.Fatalf("read dirty file after merge: %v", err)
+	}
+	if !strings.Contains(string(data), "local dirty change") {
+		t.Fatalf("expected dirty tracked changes to survive merge, got %q", string(data))
+	}
+	statusCmd := exec.Command("git", "-C", tmpDir, "status", "--porcelain")
+	out, err := statusCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status failed: %v (%s)", err, string(out))
+	}
+	if got := strings.TrimSpace(string(out)); got != " M docs.txt" && got != "M docs.txt" {
+		t.Fatalf("expected only docs.txt to remain dirty after merge, got %q", got)
 	}
 }
