@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,7 +14,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	charmansi "github.com/charmbracelet/x/ansi"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
+	"github.com/leomorpho/docket/internal/store"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
+	workablepkg "github.com/leomorpho/docket/internal/workable"
 )
 
 type watchMode string
@@ -45,9 +51,15 @@ type runWatchSnapshot struct {
 	ticketID     string
 	status       runruntime.StatusSnapshot
 	statusOK     bool
+	queue        []runWatchQueueItem
 	transcript   []runruntime.TranscriptEntry
 	conversation []string
 	warnings     []string
+}
+
+type runWatchQueueItem struct {
+	TicketID string
+	Title    string
 }
 
 type runWatchLoadedMsg struct {
@@ -87,7 +99,7 @@ type RunWatchModel struct {
 
 var (
 	runWatchShellStyle = lipgloss.NewStyle().
-				Padding(1, 2)
+				Padding(0, 2)
 	runWatchHeaderStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("230")).
@@ -103,6 +115,8 @@ var (
 				BorderForeground(lipgloss.Color("36"))
 	runWatchMutedCardStyle = runWatchCardStyle.Copy().
 				BorderForeground(lipgloss.Color("240"))
+	runWatchCompactCardStyle = runWatchCardStyle.Copy().
+				Padding(0, 1)
 	runWatchKeyStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("229"))
@@ -449,23 +463,22 @@ func (m RunWatchModel) renderWatchView() string {
 		statusBanner = m.renderStatusBanner(contentWidth)
 	}
 	footer := m.renderFooter(contentWidth)
-	bodyOuterHeight, bodyInnerHeight := m.watchBodyHeights(header, statusBanner, footer)
+	summaryOuterHeight, summaryInnerHeight, bodyOuterHeight, bodyInnerHeight := m.watchLayoutHeights(header, statusBanner, footer)
 	if m.showOverview {
 		mainCardStyle := runWatchActiveCardStyle.Copy().Width(contentWidth)
 		if m.snapshot.ticketID == "" {
 			mainCardStyle = runWatchMutedCardStyle.Copy().Width(contentWidth)
 		}
-		summaryCard := mainCardStyle.Render(m.renderWatchSummaryCard(contentWidth))
+		summaryCard := runWatchCompactCardStyle.Copy().Inherit(mainCardStyle).Width(contentWidth).Height(summaryOuterHeight).Render(m.renderWatchSummaryCard(contentWidth, summaryInnerHeight))
 		sections = append(sections, summaryCard)
-		bodyOuterHeight, bodyInnerHeight = m.watchBodyHeights(header, statusBanner, footer, summaryCard)
 	}
 	bodyTitle := "Visible Session Log"
 	bodyContent := m.renderLogBody()
 	if m.mode == watchModeLog {
 		leftWidth := max(30, (contentWidth-2)/2)
 		rightWidth := max(30, contentWidth-leftWidth-2)
-		leftCard := runWatchCardStyle.Copy().Width(leftWidth).Height(bodyOuterHeight).Render("Visible Session Log\n\n" + m.renderScrollableBody(m.renderLogBody(), leftWidth, bodyInnerHeight))
-		rightCard := runWatchCardStyle.Copy().Width(rightWidth).Height(bodyOuterHeight).Render("Codex Session Transcript\n\n" + m.renderScrollableBody(m.renderConversationBody(), rightWidth, bodyInnerHeight))
+		leftCard := runWatchCompactCardStyle.Copy().Width(leftWidth).Height(bodyOuterHeight).Render("Visible Session Log\n\n" + m.renderScrollableBody(m.renderLogBody(), leftWidth, bodyInnerHeight))
+		rightCard := runWatchCompactCardStyle.Copy().Width(rightWidth).Height(bodyOuterHeight).Render("Codex Session Transcript\n\n" + m.renderScrollableBody(m.renderConversationBody(), rightWidth, bodyInnerHeight))
 		bodyTitle = ""
 		bodyContent = lipgloss.JoinHorizontal(lipgloss.Top, leftCard, "  ", rightCard)
 	} else {
@@ -474,7 +487,7 @@ func (m RunWatchModel) renderWatchView() string {
 	}
 	bodyCard := bodyContent
 	if m.mode != watchModeLog {
-		bodyCard = runWatchCardStyle.Copy().Width(contentWidth).Height(bodyOuterHeight).Render(bodyTitle + "\n\n" + m.renderScrollableBody(bodyContent, contentWidth, bodyInnerHeight))
+		bodyCard = runWatchCompactCardStyle.Copy().Width(contentWidth).Height(bodyOuterHeight).Render(bodyTitle + "\n\n" + m.renderScrollableBody(bodyContent, contentWidth, bodyInnerHeight))
 	}
 
 	sections = append(sections, bodyCard)
@@ -482,7 +495,7 @@ func (m RunWatchModel) renderWatchView() string {
 		sections = append(sections, statusBanner)
 	}
 	sections = append(sections, footer)
-	content := strings.Join(sections, "\n\n")
+	content := strings.Join(sections, "\n")
 	return terminalTitle(m.terminalTitle()) + runWatchShellStyle.Render(m.padToHeight(content))
 }
 
@@ -511,42 +524,26 @@ func (m RunWatchModel) renderHeaderMeta() string {
 	return strings.Join(parts, "  •  ")
 }
 
-func (m RunWatchModel) renderWatchSummaryCard(contentWidth int) string {
-	sections := make([]string, 0, 2)
-	if len(m.snapshot.cycle.Completed) > 0 {
-		completed := make([]string, 0, len(m.snapshot.cycle.Completed)+2)
-		completed = append(completed, fmt.Sprintf("Completed This Cycle (%d)", len(m.snapshot.cycle.Completed)), "")
-		for _, item := range m.snapshot.cycle.Completed {
-			line := item.TicketID
-			if strings.TrimSpace(item.Status) != "" {
-				line += "  " + runWatchSubtleStyle.Render("["+item.Status+"]")
-			}
-			if strings.TrimSpace(item.Length) != "" {
-				line += "  " + runWatchSubtleStyle.Render(item.Length)
-			}
-			completed = append(completed, line)
-		}
-		sections = append(sections, strings.Join(completed, "\n"))
-	}
+func (m RunWatchModel) renderWatchSummaryCard(contentWidth int, viewportHeight int) string {
+	leftWidth := max(28, (contentWidth-10)/2)
+	rightWidth := max(28, contentWidth-leftWidth-6)
 
-	rows := []string{
-		m.renderKeyValue("Ticket", valueOrFallback(m.snapshot.ticketID, "(none)")),
-		m.renderKeyValue("Run state", m.renderRunState()),
-		m.renderKeyValue("Step", m.renderStepProgress()),
-		m.renderKeyValue("Progress", m.renderStepBar()),
-		m.renderKeyValue("Phase", valueOrFallback(m.snapshot.status.CurrentPhase, "waiting")),
-		m.renderKeyValue("Started", formattedRuntimeTimestampOrFallback(m.snapshot.status.StartedAt, "unknown")),
-		m.renderKeyValue("Length", formatRuntimeDurationOrFallback(m.snapshot.status.StartedAt, "unknown")),
-		m.renderKeyValue("Last event", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
-		m.renderKeyValue("Messages", strconv.Itoa(m.snapshot.status.SessionMessageCount)),
-		m.renderKeyValue("Health", strconv.Itoa(m.snapshot.status.HealthCheckCount)),
-		m.renderKeyValue("Intervention", valueOrFallback(m.snapshot.status.LastIntervention, "none")),
+	leftBody := m.renderFixedBody("Ticket Stats", m.renderTicketStatsBody(), leftWidth, viewportHeight)
+	rightBody := m.renderFixedBody("General Stats", m.renderGeneralOverviewBody(), rightWidth, viewportHeight)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftBody, "  ", rightBody)
+}
+
+func (m RunWatchModel) renderTicketStatsBody() string {
+	progress := strings.TrimSpace(stripLipglossANSI(m.renderStepBar()))
+	if progress == "" {
+		progress = "waiting"
 	}
-	if strings.TrimSpace(m.snapshot.status.LastHealthCheck) != "" {
-		rows = append(rows, m.renderKeyValue("Latest", m.snapshot.status.LastHealthCheck))
+	lines := []string{
+		fmt.Sprintf("%s  %s", valueOrFallback(m.snapshot.ticketID, "(none)"), stripLipglossANSI(m.renderRunState())),
+		fmt.Sprintf("%s  •  %s", stripLipglossANSI(m.renderStepProgress()), progress),
+		fmt.Sprintf("Last: %s", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
 	}
-	sections = append(sections, "Run Overview\n\n"+strings.Join(rows, "\n"))
-	return strings.Join(sections, "\n\n")
+	return strings.Join(lines, "\n")
 }
 
 func (m RunWatchModel) renderRunState() string {
@@ -684,6 +681,81 @@ func (m RunWatchModel) renderScrollableBody(content string, contentWidth int, vi
 	return strings.Join(visible, "\n") + "\n\n" + topMarker
 }
 
+func (m RunWatchModel) renderFixedBody(title, content string, contentWidth int, viewportHeight int) string {
+	innerWidth := max(20, contentWidth-2)
+	bodyHeight := max(3, viewportHeight-1)
+	body := m.clampBodyLines(content, innerWidth, bodyHeight)
+	return title + "\n" + body
+}
+
+func (m RunWatchModel) clampBodyLines(content string, contentWidth int, viewportHeight int) string {
+	wrapped := lipgloss.NewStyle().Width(contentWidth).Render(content)
+	lines := strings.Split(strings.TrimRight(wrapped, "\n"), "\n")
+	if viewportHeight <= 0 || len(lines) <= viewportHeight {
+		return strings.Join(lines, "\n")
+	}
+	if viewportHeight == 1 {
+		return runWatchSubtleStyle.Render("…")
+	}
+	hidden := len(lines) - (viewportHeight - 1)
+	visible := append([]string{}, lines[:viewportHeight-1]...)
+	visible = append(visible, runWatchSubtleStyle.Render(fmt.Sprintf("… +%d more", hidden)))
+	return strings.Join(visible, "\n")
+}
+
+func (m RunWatchModel) renderGeneralOverviewBody() string {
+	lines := []string{fmt.Sprintf("Planned Queue (%d): %s", len(m.snapshot.queue), m.renderQueueSummary())}
+	if len(m.snapshot.cycle.Completed) == 0 {
+		lines = append(lines, "Done This Session (0): none")
+	} else {
+		lines = append(lines, fmt.Sprintf("Done This Session (%d): %s", len(m.snapshot.cycle.Completed), m.renderCompletedSummary()))
+	}
+	lines = append(lines, "Cycle: "+stripLipglossANSI(m.renderCycleMode()))
+	return strings.Join(lines, "\n")
+}
+
+func (m RunWatchModel) renderQueueSummary() string {
+	if len(m.snapshot.queue) == 0 {
+		return "none"
+	}
+	items := make([]string, 0, minInt(3, len(m.snapshot.queue)))
+	for _, item := range m.snapshot.queue[:minInt(3, len(m.snapshot.queue))] {
+		items = append(items, item.TicketID)
+	}
+	if len(m.snapshot.queue) > len(items) {
+		items = append(items, fmt.Sprintf("+%d more", len(m.snapshot.queue)-len(items)))
+	}
+	return strings.Join(items, ", ")
+}
+
+func (m RunWatchModel) renderCompletedSummary() string {
+	items := make([]string, 0, minInt(3, len(m.snapshot.cycle.Completed)))
+	for _, item := range m.snapshot.cycle.Completed[:minInt(3, len(m.snapshot.cycle.Completed))] {
+		label := item.TicketID
+		if strings.TrimSpace(item.Status) != "" {
+			label += " [" + item.Status + "]"
+		}
+		if strings.TrimSpace(item.Length) != "" {
+			label += " " + item.Length
+		}
+		items = append(items, label)
+	}
+	if len(m.snapshot.cycle.Completed) > len(items) {
+		items = append(items, fmt.Sprintf("+%d more", len(m.snapshot.cycle.Completed)-len(items)))
+	}
+	return strings.Join(items, ", ")
+}
+
+func (m RunWatchModel) renderCycleMode() string {
+	if m.snapshot.cycle.StopAfterCurrent {
+		return runWatchStatusWarnStyle.Render("stop after current")
+	}
+	if m.snapshot.cycle.Active || m.snapshot.ticketID != "" {
+		return runWatchStatusOKStyle.Render("continuous")
+	}
+	return runWatchSubtleStyle.Render("idle")
+}
+
 func (m RunWatchModel) renderFooter(contentWidth int) string {
 	help := runWatchHelpStyle.Render("keys: " + m.runWatchKeyLegend())
 	status := runWatchSubtleStyle.Render("")
@@ -763,24 +835,44 @@ func (m RunWatchModel) bodyViewportHeight() int {
 	return base
 }
 
-func (m RunWatchModel) watchBodyHeights(fixedSections ...string) (int, int) {
-	outer := m.bodyViewportHeight()
+func (m RunWatchModel) watchLayoutHeights(header, statusBanner, footer string) (int, int, int, int) {
+	bodyOuter := m.bodyViewportHeight()
+	summaryOuter := 0
 	if m.height > 0 {
 		target := max(12, m.height-2)
 		fixedHeight := 0
 		visibleSections := 0
-		for _, section := range fixedSections {
+		for _, section := range []string{header, statusBanner, footer} {
 			if strings.TrimSpace(section) == "" {
 				continue
 			}
 			fixedHeight += lipgloss.Height(section)
 			visibleSections++
 		}
-		separatorLines := visibleSections
-		outer = max(8, target-fixedHeight-separatorLines)
+		totalSections := visibleSections + 1
+		if m.showOverview {
+			totalSections++
+		}
+		separatorLines := max(0, totalSections-1)
+		available := max(8, target-fixedHeight-separatorLines)
+		if m.showOverview {
+			summaryOuter = minInt(10, max(6, available/3))
+			bodyOuter = max(6, available-summaryOuter)
+			if bodyOuter < 8 && summaryOuter > 6 {
+				needed := minInt(summaryOuter-6, 8-bodyOuter)
+				summaryOuter -= needed
+				bodyOuter += needed
+			}
+		} else {
+			bodyOuter = available
+		}
 	}
-	inner := max(3, outer-6)
-	return outer, inner
+	if m.showOverview && summaryOuter == 0 {
+		summaryOuter = 6
+	}
+	summaryInner := max(4, summaryOuter-2)
+	bodyInner := max(3, bodyOuter-4)
+	return summaryOuter, summaryInner, bodyOuter, bodyInner
 }
 
 func valueOrFallback(value, fallback string) string {
@@ -930,7 +1022,7 @@ func (m RunWatchModel) tickCmd() tea.Cmd {
 
 func (m RunWatchModel) loadCmd() tea.Cmd {
 	return func() tea.Msg {
-		snapshot, err := loadRunWatchSnapshot(m.store, m.focusTicketID)
+		snapshot, err := loadRunWatchSnapshot(m.store, m.repoRoot, m.focusTicketID)
 		return runWatchLoadedMsg{snapshot: snapshot, err: err}
 	}
 }
@@ -980,7 +1072,7 @@ func (m RunWatchModel) startLaunchOption(option RunWatchLaunchOption) (tea.Model
 	}
 }
 
-func loadRunWatchSnapshot(store *runruntime.Store, focusTicketID string) (runWatchSnapshot, error) {
+func loadRunWatchSnapshot(store *runruntime.Store, repoRoot string, focusTicketID string) (runWatchSnapshot, error) {
 	var snapshot runWatchSnapshot
 	if store == nil {
 		return snapshot, nil
@@ -1001,6 +1093,11 @@ func loadRunWatchSnapshot(store *runruntime.Store, focusTicketID string) (runWat
 	snapshot.ticketID = ticketID
 	snapshot.status = status
 	snapshot.statusOK = statusOK
+	if queue, err := loadRunWatchQueue(repoRoot, ticketID, cycle.Completed); err != nil {
+		snapshot.warnings = append(snapshot.warnings, "planned queue unavailable: "+err.Error())
+	} else {
+		snapshot.queue = queue
+	}
 	if ticketID != "" {
 		transcript, err := store.LoadTranscript(ticketID)
 		if err != nil {
@@ -1022,6 +1119,52 @@ func loadRunWatchSnapshot(store *runruntime.Store, focusTicketID string) (runWat
 		}
 	}
 	return snapshot, nil
+}
+
+func loadRunWatchQueue(repoRoot, currentTicketID string, completed []runruntime.CycleCompletedRun) ([]runWatchQueueItem, error) {
+	repoRoot = strings.TrimSpace(repoRoot)
+	if repoRoot == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, ".docket")); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		return nil, nil
+	}
+	s := local.New(repoRoot)
+	if err := s.SyncIndex(context.Background()); err != nil {
+		return nil, err
+	}
+	tickets, err := workablepkg.Tickets(context.Background(), s, cfg, store.Filter{})
+	if err != nil {
+		return nil, err
+	}
+	doneSet := make(map[string]struct{}, len(completed)+1)
+	if strings.TrimSpace(currentTicketID) != "" {
+		doneSet[currentTicketID] = struct{}{}
+	}
+	for _, item := range completed {
+		doneSet[strings.TrimSpace(item.TicketID)] = struct{}{}
+	}
+	queue := make([]runWatchQueueItem, 0, len(tickets))
+	for _, t := range tickets {
+		if t == nil {
+			continue
+		}
+		if _, skip := doneSet[strings.TrimSpace(t.ID)]; skip {
+			continue
+		}
+		queue = append(queue, runWatchQueueItem{
+			TicketID: t.ID,
+			Title:    strings.TrimSpace(t.Title),
+		})
+	}
+	return queue, nil
 }
 
 func loadCodexSessionLines(sessionID string) ([]string, bool, error) {
@@ -1342,6 +1485,10 @@ func prefixedLines(prefix, text string) []string {
 	return out
 }
 
+func stripLipglossANSI(value string) string {
+	return strings.TrimSpace(charmansi.Strip(value))
+}
+
 func selectWatchedTicket(store *runruntime.Store, focusTicketID string, cycle runruntime.CycleState) (string, runruntime.StatusSnapshot, bool, []string) {
 	var warnings []string
 	if focusTicketID != "" {
@@ -1426,6 +1573,13 @@ func renderLegend(parts ...string) string {
 
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

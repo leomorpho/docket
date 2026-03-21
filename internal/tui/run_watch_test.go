@@ -7,13 +7,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func startManagedLikeProcess(t *testing.T) *exec.Cmd {
@@ -154,7 +158,7 @@ func TestLoadRunWatchSnapshotPrefersCycleCurrentTicket(t *testing.T) {
 		t.Fatalf("AppendTranscript() error = %v", err)
 	}
 
-	snapshot, err := loadRunWatchSnapshot(store, "")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -190,7 +194,7 @@ func TestLoadRunWatchSnapshotIgnoresStaleInactiveRunsWithoutCycle(t *testing.T) 
 		t.Fatalf("WriteStatus() error = %v", err)
 	}
 
-	snapshot, err := loadRunWatchSnapshot(store, "")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -226,7 +230,7 @@ func TestLoadRunWatchSnapshotPrefersActiveRunWhenCycleIsStale(t *testing.T) {
 		t.Fatalf("UpdateCycleCurrent() error = %v", err)
 	}
 
-	snapshot, err := loadRunWatchSnapshot(store, "")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -278,7 +282,7 @@ func TestLoadRunWatchSnapshotIgnoresStaleNonCodexActiveRun(t *testing.T) {
 		t.Fatalf("WriteStatus(active) error = %v", err)
 	}
 
-	snapshot, err := loadRunWatchSnapshot(store, "")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -300,7 +304,17 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	store := runruntime.New(repoRoot)
+	docketStore := local.New(repoRoot)
+	ctx := context.Background()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, tk := range []*ticket.Ticket{
+		{ID: "TKT-701", Seq: 701, Title: "Future battery contract work", State: "backlog", Priority: 1, CreatedAt: time.Now(), UpdatedAt: time.Now(), CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}},
+		{ID: "TKT-702", Seq: 702, Title: "Doctor regression follow-up", State: "backlog", Priority: 2, CreatedAt: time.Now(), UpdatedAt: time.Now(), CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}},
+	} {
+		if err := docketStore.CreateTicket(ctx, tk); err != nil {
+			t.Fatalf("CreateTicket(%s) error = %v", tk.ID, err)
+		}
+	}
 	record := agentrun.RunRecord{
 		TicketID:     "TKT-700",
 		Role:         agentrun.RoleImplementer,
@@ -355,11 +369,17 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	}
 
 	model := NewRunWatchModel(repoRoot, "TKT-700", nil, false, nil)
-	snapshot, err := loadRunWatchSnapshot(store, "TKT-700")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "TKT-700")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
+	snapshot.queue = []runWatchQueueItem{
+		{TicketID: "TKT-701", Title: "Future battery contract work"},
+		{TicketID: "TKT-702", Title: "Doctor regression follow-up"},
+	}
 	model.snapshot = snapshot
+	model.width = 120
+	model.height = 28
 	view := model.View()
 	if !strings.Contains(view, "keys: "+model.runWatchKeyLegend()) {
 		t.Fatalf("view missing key legend: %q", view)
@@ -370,20 +390,20 @@ func TestRunWatchModelViewShowsKeyLegendAndSummary(t *testing.T) {
 	if !strings.Contains(view, "TKT-700") || !strings.Contains(view, "PLAN ticket=TKT-700 steps=3") {
 		t.Fatalf("view missing summary content: %q", view)
 	}
-	if !strings.Contains(view, "done 2") || !strings.Contains(view, "Completed This Cycle (2)") || !strings.Contains(view, "TKT-698") || !strings.Contains(view, "[done]") || !strings.Contains(view, "12m") {
+	if !strings.Contains(view, "done 2") || !strings.Contains(view, "Done This Session (2)") || !strings.Contains(view, "TKT-698") {
 		t.Fatalf("view missing cycle completion content: %q", view)
 	}
-	if !strings.Contains(view, "PROGRESS") || !strings.Contains(view, "33%") {
+	if !strings.Contains(view, "Planned Queue (2)") || !strings.Contains(view, "TKT-701") || !strings.Contains(view, "TKT-702") {
+		t.Fatalf("view missing planned queue content: %q", view)
+	}
+	if !strings.Contains(view, "Ticket Stats") || !strings.Contains(view, "General Stats") {
+		t.Fatalf("view missing two-column overview headings: %q", view)
+	}
+	if !strings.Contains(view, "33%") {
 		t.Fatalf("view missing progress bar content: %q", view)
 	}
-	if !strings.Contains(view, "still working") || !strings.Contains(view, "ping") {
-		t.Fatalf("view missing health/intervention content: %q", view)
-	}
-	if !strings.Contains(view, "STARTED") || !strings.Contains(view, "LENGTH") {
-		t.Fatalf("view missing started/length content: %q", view)
-	}
-	if !strings.Contains(view, "4") || !strings.Contains(view, "MESSAGES") {
-		t.Fatalf("view missing session message count: %q", view)
+	if !strings.Contains(view, "Last:") {
+		t.Fatalf("view missing last-event content: %q", view)
 	}
 	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "Codex Session Transcript") {
 		t.Fatalf("view missing dual-pane titles: %q", view)
@@ -437,7 +457,7 @@ func TestLoadRunWatchSnapshotPrefersRealCodexSessionTranscript(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	snapshot, err := loadRunWatchSnapshot(store, "TKT-703")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "TKT-703")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -509,7 +529,7 @@ func TestRunWatchViewShowsErrorEventsInConversationPane(t *testing.T) {
 	}
 
 	model := NewRunWatchModel(repoRoot, "TKT-702", nil, false, nil)
-	snapshot, err := loadRunWatchSnapshot(store, "TKT-702")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "TKT-702")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -572,11 +592,13 @@ func TestRunWatchModelViewFormatsLastEventInLocalTime(t *testing.T) {
 	}
 
 	model := NewRunWatchModel(repoRoot, "TKT-701", nil, false, nil)
-	snapshot, err := loadRunWatchSnapshot(store, "TKT-701")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "TKT-701")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
 	model.snapshot = snapshot
+	model.width = 120
+	model.height = 24
 	view := model.View()
 	if strings.Contains(view, now) {
 		t.Fatalf("view should not render raw RFC3339 timestamp: %q", view)
@@ -907,7 +929,7 @@ func TestRunWatchModelViewWrapsLongVisibleLines(t *testing.T) {
 	model := NewRunWatchModel(repoRoot, "TKT-888", nil, false, nil)
 	model.width = 60
 	model.height = 20
-	snapshot, err := loadRunWatchSnapshot(store, "TKT-888")
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "TKT-888")
 	if err != nil {
 		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
 	}
@@ -918,5 +940,40 @@ func TestRunWatchModelViewWrapsLongVisibleLines(t *testing.T) {
 	}
 	if !strings.Contains(view, "Visible Session Log") || !strings.Contains(view, "wrapped visible") {
 		t.Fatalf("expected visible transcript content in view, got:\n%s", view)
+	}
+}
+
+func TestRunWatchModelViewFitsWithinWindowHeight(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, nil)
+	model.width = 120
+	model.height = 24
+	model.showOverview = true
+	model.snapshot.statusOK = true
+	model.snapshot.ticketID = "TKT-900"
+	model.snapshot.status = runruntime.StatusSnapshot{
+		TicketID:         "TKT-900",
+		Active:           true,
+		CurrentPhase:     "implementation",
+		CurrentStep:      2,
+		PlannedSteps:     5,
+		CurrentStepTitle: "write tests",
+	}
+	for i := 0; i < 10; i++ {
+		model.snapshot.queue = append(model.snapshot.queue, runWatchQueueItem{
+			TicketID: "TKT-9" + strconv.Itoa(i),
+			Title:    "queued follow-up work item with a long title",
+		})
+		model.snapshot.cycle.Completed = append(model.snapshot.cycle.Completed, runruntime.CycleCompletedRun{
+			TicketID: "TKT-8" + strconv.Itoa(i),
+			Status:   "done",
+			Length:   "3m",
+		})
+		model.snapshot.transcript = append(model.snapshot.transcript, runruntime.TranscriptEntry{Text: "line"})
+	}
+	view := model.View()
+	if got := lipgloss.Height(strings.TrimPrefix(view, terminalTitle(model.terminalTitle()))); got > model.height {
+		t.Fatalf("view height overflowed terminal: got %d want <= %d\n%s", got, model.height, view)
 	}
 }
