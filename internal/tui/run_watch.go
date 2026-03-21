@@ -538,9 +538,11 @@ func (m RunWatchModel) renderTicketStatsBody() string {
 	if progress == "" {
 		progress = "waiting"
 	}
+	phase := strings.TrimSpace(valueOrFallback(m.snapshot.status.CurrentPhase, "waiting"))
 	lines := []string{
 		fmt.Sprintf("%s  %s", valueOrFallback(m.snapshot.ticketID, "(none)"), stripLipglossANSI(m.renderRunState())),
-		fmt.Sprintf("%s  •  %s", stripLipglossANSI(m.renderStepProgress()), progress),
+		fmt.Sprintf("Step: %s", stripLipglossANSI(m.renderStepProgress())),
+		fmt.Sprintf("Progress: %s  •  Phase: %s", progress, phase),
 		fmt.Sprintf("Last: %s", formattedRuntimeTimestampWithRelativeOrFallback(m.snapshot.status.LastEventAt, "none yet")),
 	}
 	return strings.Join(lines, "\n")
@@ -856,10 +858,10 @@ func (m RunWatchModel) watchLayoutHeights(header, statusBanner, footer string) (
 		separatorLines := max(0, totalSections-1)
 		available := max(8, target-fixedHeight-separatorLines)
 		if m.showOverview {
-			summaryOuter = minInt(10, max(6, available/3))
+			summaryOuter = minInt(11, max(7, available/3))
 			bodyOuter = max(6, available-summaryOuter)
-			if bodyOuter < 8 && summaryOuter > 6 {
-				needed := minInt(summaryOuter-6, 8-bodyOuter)
+			if bodyOuter < 8 && summaryOuter > 7 {
+				needed := minInt(summaryOuter-7, 8-bodyOuter)
 				summaryOuter -= needed
 				bodyOuter += needed
 			}
@@ -868,9 +870,9 @@ func (m RunWatchModel) watchLayoutHeights(header, statusBanner, footer string) (
 		}
 	}
 	if m.showOverview && summaryOuter == 0 {
-		summaryOuter = 6
+		summaryOuter = 7
 	}
-	summaryInner := max(4, summaryOuter-2)
+	summaryInner := max(5, summaryOuter-2)
 	bodyInner := max(3, bodyOuter-4)
 	return summaryOuter, summaryInner, bodyOuter, bodyInner
 }
