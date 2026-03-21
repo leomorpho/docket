@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +10,25 @@ import (
 
 	"github.com/leomorpho/docket/internal/agentrun"
 )
+
+func startManagedLikeProcess(t *testing.T) *exec.Cmd {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "codex-managed-run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write managed-like script: %v", err)
+	}
+	cmd := exec.Command(script)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start managed-like process: %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	return cmd
+}
 
 func TestStoreInitAppendSnapshotAndCleanup(t *testing.T) {
 	t.Parallel()
@@ -239,6 +259,52 @@ func TestLoadStatusReconcilesDeadActiveProcessToHung(t *testing.T) {
 	}
 }
 
+func TestLoadStatusReconcilesNonCodexReusedPIDToHung(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-405",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "codex",
+		RepoRoot:     repoRoot,
+		WorktreePath: filepath.Join(repoRoot, "wt"),
+		Branch:       "docket/TKT-405",
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:    "session-405",
+	}
+	if err := store.Init(record, "prompt body", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	sleep := exec.Command("sleep", "5")
+	if err := sleep.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	defer func() {
+		_ = sleep.Process.Kill()
+		_, _ = sleep.Process.Wait()
+	}()
+
+	if err := store.WriteStatus(StatusSnapshot{
+		TicketID:  record.TicketID,
+		SessionID: record.SessionID,
+		PID:       sleep.Process.Pid,
+		Active:    true,
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	status, ok, err := store.LoadStatus(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.Active || !status.Hung {
+		t.Fatalf("expected non-codex reused pid to reconcile to hung status, got %#v", status)
+	}
+}
+
 func TestStoreHealRuntimeStateClearsStaleCycle(t *testing.T) {
 	t.Parallel()
 
@@ -296,7 +362,8 @@ func TestStoreCleanupStaleRunsRemovesOnlyInactiveRuns(t *testing.T) {
 	if err := store.Init(stale, "prompt", 10*time.Minute); err != nil {
 		t.Fatalf("Init(stale) error = %v", err)
 	}
-	if err := store.WriteStatus(StatusSnapshot{TicketID: active.TicketID, SessionID: active.SessionID, PID: os.Getpid(), Active: true}); err != nil {
+	managed := startManagedLikeProcess(t)
+	if err := store.WriteStatus(StatusSnapshot{TicketID: active.TicketID, SessionID: active.SessionID, PID: managed.Process.Pid, Active: true}); err != nil {
 		t.Fatalf("WriteStatus(active) error = %v", err)
 	}
 	if err := store.WriteStatus(StatusSnapshot{TicketID: stale.TicketID, SessionID: stale.SessionID, Active: false, Hung: true, LastResultStatus: "stopped"}); err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -169,7 +170,7 @@ func (s *Store) WriteStatus(status StatusSnapshot) error {
 	if strings.TrimSpace(status.TicketID) == "" {
 		return writeJSON(filepath.Join(s.RunDir(status.TicketID), statusFile), status)
 	}
-	if existing, ok, err := s.LoadStatus(status.TicketID); err == nil && ok {
+	if existing, ok, err := s.loadStatusRaw(status.TicketID); err == nil && ok {
 		if strings.TrimSpace(status.StartedAt) == "" {
 			status.StartedAt = existing.StartedAt
 		}
@@ -178,6 +179,20 @@ func (s *Store) WriteStatus(status StatusSnapshot) error {
 }
 
 func (s *Store) LoadStatus(ticketID string) (StatusSnapshot, bool, error) {
+	status, ok, err := s.loadStatusRaw(ticketID)
+	if err != nil || !ok {
+		return status, ok, err
+	}
+	if reconciled, changed := reconcileRuntimeStatus(status); changed {
+		status = reconciled
+		if err := writeJSON(filepath.Join(s.RunDir(ticketID), statusFile), status); err != nil {
+			return StatusSnapshot{}, false, err
+		}
+	}
+	return status, true, nil
+}
+
+func (s *Store) loadStatusRaw(ticketID string) (StatusSnapshot, bool, error) {
 	path := filepath.Join(s.RunDir(ticketID), statusFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -189,12 +204,6 @@ func (s *Store) LoadStatus(ticketID string) (StatusSnapshot, bool, error) {
 	var status StatusSnapshot
 	if err := json.Unmarshal(data, &status); err != nil {
 		return StatusSnapshot{}, false, err
-	}
-	if reconciled, changed := reconcileRuntimeStatus(status); changed {
-		status = reconciled
-		if err := s.WriteStatus(status); err != nil {
-			return StatusSnapshot{}, false, err
-		}
 	}
 	return status, true, nil
 }
@@ -425,7 +434,7 @@ func reconcileRuntimeStatus(status StatusSnapshot) (StatusSnapshot, bool) {
 	if !status.Active || status.PID <= 0 {
 		return status, false
 	}
-	if processAlive(status.PID) {
+	if processLooksLikeManagedRun(status.PID) {
 		return status, false
 	}
 	status.Active = false
@@ -442,6 +451,22 @@ func processAlive(pid int) bool {
 		return true
 	}
 	return !errors.Is(err, syscall.ESRCH)
+}
+
+func processLooksLikeManagedRun(pid int) bool {
+	if !processAlive(pid) {
+		return false
+	}
+	cmd := exec.Command("ps", "-p", fmt.Sprintf("%d", pid), "-o", "args=")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	args := strings.ToLower(strings.TrimSpace(string(out)))
+	if args == "" {
+		return false
+	}
+	return strings.Contains(args, "codex") || strings.Contains(args, "docket")
 }
 
 func writeJSON(path string, payload any) error {

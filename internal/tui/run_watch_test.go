@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,25 @@ import (
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 )
+
+func startManagedLikeProcess(t *testing.T) *exec.Cmd {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "codex-managed-run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write managed-like script: %v", err)
+	}
+	cmd := exec.Command(script)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start managed-like process: %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	return cmd
+}
 
 func TestRunWatchModelToggleAndStopRequest(t *testing.T) {
 	t.Parallel()
@@ -172,7 +192,8 @@ func TestLoadRunWatchSnapshotPrefersActiveRunWhenCycleIsStale(t *testing.T) {
 	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: stale.TicketID, SessionID: stale.SessionID, Active: false, Hung: true, LastResultStatus: string(agentrun.StatusFailed)}); err != nil {
 		t.Fatalf("WriteStatus(stale) error = %v", err)
 	}
-	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: active.TicketID, SessionID: active.SessionID, PID: os.Getpid(), Active: true, LastEventAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+	managed := startManagedLikeProcess(t)
+	if err := store.WriteStatus(runruntime.StatusSnapshot{TicketID: active.TicketID, SessionID: active.SessionID, PID: managed.Process.Pid, Active: true, LastEventAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
 		t.Fatalf("WriteStatus(active) error = %v", err)
 	}
 	if err := store.BeginCycle(time.Now()); err != nil {
@@ -188,6 +209,66 @@ func TestLoadRunWatchSnapshotPrefersActiveRunWhenCycleIsStale(t *testing.T) {
 	}
 	if snapshot.ticketID != active.TicketID || !snapshot.status.Active {
 		t.Fatalf("expected active ticket to win after stale cycle heal, got %#v", snapshot)
+	}
+}
+
+func TestLoadRunWatchSnapshotIgnoresStaleNonCodexActiveRun(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	stale := agentrun.RunRecord{TicketID: "TKT-605", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-605", SessionID: "session-605"}
+	active := agentrun.RunRecord{TicketID: "TKT-606", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-606", SessionID: "session-606"}
+	if err := store.Init(stale, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(stale) error = %v", err)
+	}
+	if err := store.Init(active, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(active) error = %v", err)
+	}
+
+	sleep := exec.Command("sleep", "5")
+	if err := sleep.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	defer func() {
+		_ = sleep.Process.Kill()
+		_, _ = sleep.Process.Wait()
+	}()
+
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:    stale.TicketID,
+		SessionID:   stale.SessionID,
+		PID:         sleep.Process.Pid,
+		Active:      true,
+		LastEventAt: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("WriteStatus(stale) error = %v", err)
+	}
+	managed := startManagedLikeProcess(t)
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:    active.TicketID,
+		SessionID:   active.SessionID,
+		PID:         managed.Process.Pid,
+		Active:      true,
+		LastEventAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("WriteStatus(active) error = %v", err)
+	}
+
+	snapshot, err := loadRunWatchSnapshot(store, "")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	if snapshot.ticketID != active.TicketID || !snapshot.status.Active {
+		t.Fatalf("expected live codex-like run to win over stale non-codex active record, got %#v", snapshot)
+	}
+
+	staleStatus, ok, err := store.LoadStatus(stale.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus(stale) ok=%v err=%v", ok, err)
+	}
+	if staleStatus.Active || !staleStatus.Hung {
+		t.Fatalf("expected stale non-codex active record to reconcile to hung, got %#v", staleStatus)
 	}
 }
 
