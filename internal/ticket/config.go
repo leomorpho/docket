@@ -98,7 +98,7 @@ var defaultStates = map[string]StateConfig{
 	"backlog":     {Label: "Backlog", Open: true, Column: 0, Next: []string{"todo", "archived"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
 	"todo":        {Label: "To Do", Open: true, Column: 1, Next: []string{"in-progress", "backlog", "archived"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
 	"in-progress": {Label: "In Progress", Open: true, Column: 2, Next: []string{"in-review", "todo", "backlog", "archived"}, Roles: []string{"active"}, BlocksDependents: true},
-	"in-review":   {Label: "In Review", Open: true, Column: 3, Next: []string{"done", "in-progress", "archived"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+	"in-review":   {Label: "In Review", Open: true, Column: 3, Next: []string{"done", "in-progress", "archived"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: false},
 	"done":        {Label: "Done", Open: false, Column: 4, Next: []string{"archived", "in-progress"}, Roles: []string{"completed"}, Terminal: true},
 	"archived":    {Label: "Archived", Open: false, Column: 5, Next: []string{"backlog"}, Roles: []string{"archived"}, Terminal: true},
 }

@@ -230,6 +230,21 @@ func TestSaveConfigPreservesFalseWorkflowBooleans(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigDoesNotBlockDependentsInReview(t *testing.T) {
+	cfg := DefaultConfig()
+
+	review := cfg.States["in-review"]
+	if review.BlocksDependents {
+		t.Fatal("default in-review state should not block dependents")
+	}
+	if !review.Reviewable {
+		t.Fatal("default in-review state should remain reviewable")
+	}
+	if cfg.BlocksDependents("in-review") {
+		t.Fatal("helper should report default in-review as non-blocking")
+	}
+}
+
 func TestLoadConfigWorkflowV1SchemaValidation(t *testing.T) {
 	tests := []struct {
 		name   string
