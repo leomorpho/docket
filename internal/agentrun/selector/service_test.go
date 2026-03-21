@@ -57,7 +57,7 @@ func TestServiceNextReturnsHighestPriorityRunnableTicket(t *testing.T) {
 	}
 }
 
-func TestServiceNextSkipsClaimedRunnableTicket(t *testing.T) {
+func TestServiceNextSkipsClaimedActiveTicket(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -70,15 +70,16 @@ func TestServiceNextSkipsClaimedRunnableTicket(t *testing.T) {
 	for _, tc := range []struct {
 		id       string
 		priority int
+		state    ticket.State
 	}{
-		{id: "TKT-101", priority: 1},
-		{id: "TKT-102", priority: 2},
+		{id: "TKT-101", priority: 1, state: ticket.State("in-progress")},
+		{id: "TKT-102", priority: 2, state: ticket.State("todo")},
 	} {
 		if err := store.CreateTicket(context.Background(), &ticket.Ticket{
 			ID:          tc.id,
 			Seq:         100 + tc.priority,
 			Title:       tc.id,
-			State:       ticket.State("todo"),
+			State:       tc.state,
 			Priority:    tc.priority,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -99,6 +100,50 @@ func TestServiceNextSkipsClaimedRunnableTicket(t *testing.T) {
 	}
 	if !selection.Found || selection.TicketID != "TKT-102" {
 		t.Fatalf("unexpected selection: %#v", selection)
+	}
+}
+
+func TestServiceNextReleasesStaleClaimForStartableTicket(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	runGit(t, repoRoot, "init")
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-150",
+		Seq:         150,
+		Title:       "Runnable",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create TKT-150: %v", err)
+	}
+	if err := claim.Claim(repoRoot, "TKT-150", filepath.Join(repoRoot, "wt-150"), "human:test"); err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if !selection.Found || selection.TicketID != "TKT-150" {
+		t.Fatalf("unexpected selection: %#v", selection)
+	}
+	cl, err := claim.GetClaim(repoRoot, "TKT-150")
+	if err != nil {
+		t.Fatalf("GetClaim() error = %v", err)
+	}
+	if cl != nil {
+		t.Fatalf("expected stale claim to be released, got %#v", cl)
 	}
 }
 

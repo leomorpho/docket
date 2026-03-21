@@ -117,6 +117,55 @@ func TestSelectNextTicket_HonorsConfigForReviewBlockers(t *testing.T) {
 	}
 }
 
+func TestSelectNextTicket_ReleasesStaleClaimForStartableTicket(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := local.New(tmpDir)
+	ctx := context.Background()
+	runGitSession(t, tmpDir, "init")
+
+	cfg := ticket.DefaultConfig()
+	backlog := cfg.States["backlog"]
+	backlog.Next = append(backlog.Next, "in-progress")
+	cfg.States["backlog"] = backlog
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-030",
+		Seq:         30,
+		Title:       "Stale claim leaf",
+		State:       "backlog",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+	if err := claim.Claim(tmpDir, "TKT-030", filepath.Join(tmpDir, "wt-030"), "human:test"); err != nil {
+		t.Fatalf("Claim() failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil || got.ID != "TKT-030" {
+		t.Fatalf("expected stale claimed ticket to become selectable, got %#v", got)
+	}
+	cl, err := claim.GetClaim(tmpDir, "TKT-030")
+	if err != nil {
+		t.Fatalf("GetClaim() failed: %v", err)
+	}
+	if cl != nil {
+		t.Fatalf("expected stale claim to be released, got %#v", cl)
+	}
+}
+
 func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := local.New(tmpDir)

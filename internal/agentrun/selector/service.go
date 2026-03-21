@@ -2,13 +2,12 @@ package selector
 
 import (
 	"context"
-	"strings"
 
 	"github.com/leomorpho/docket/internal/agentrun"
-	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	workablepkg "github.com/leomorpho/docket/internal/workable"
 )
 
 type Dependencies struct {
@@ -58,76 +57,9 @@ func (s *Service) Next(ctx context.Context) (agentrun.Selection, error) {
 }
 
 func workableTickets(ctx context.Context, s *local.Store, cfg *ticket.Config, f store.Filter) ([]*ticket.Ticket, error) {
-	startableStates := cfg.StartableStates()
-	if len(startableStates) == 0 {
-		return nil, nil
-	}
-
-	startableSet := make(map[ticket.State]struct{}, len(startableStates))
-	for _, state := range startableStates {
-		startableSet[ticket.State(state)] = struct{}{}
-	}
-	if len(f.States) == 0 {
-		f.States = make([]ticket.State, 0, len(startableStates))
-		for state := range startableSet {
-			f.States = append(f.States, state)
-		}
-	}
-	f.OnlyUnblocked = true
-
-	tickets, err := s.ListTickets(ctx, f)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]*ticket.Ticket, 0, len(tickets))
-	for _, t := range tickets {
-		full, err := s.GetTicket(ctx, t.ID)
-		if err != nil {
-			return nil, err
-		}
-		if full == nil || !isWorkableTicket(cfg, full) {
-			continue
-		}
-		cl, err := lookupClaimIfAvailable(s.RepoRoot, full.ID)
-		if err != nil {
-			return nil, err
-		}
-		if cl != nil {
-			continue
-		}
-		out = append(out, full)
-	}
-	return out, nil
-}
-
-func lookupClaimIfAvailable(repoRoot, ticketID string) (*claim.ClaimMetadata, error) {
-	cl, err := claim.GetClaim(repoRoot, ticketID)
-	if err != nil && strings.Contains(err.Error(), "not a git repository") {
-		return nil, nil
-	}
-	return cl, err
+	return workablepkg.Tickets(ctx, s, cfg, f)
 }
 
 func isWorkableTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
-	if cfg == nil || t == nil {
-		return false
-	}
-	stateCfg, ok := cfg.States[string(t.State)]
-	if !ok || !stateCfg.Startable {
-		return false
-	}
-	if len(cfg.StartTransitionTargets(string(t.State))) == 0 {
-		return false
-	}
-	for _, label := range t.Labels {
-		switch strings.ToLower(strings.TrimSpace(label)) {
-		case "epic", "program", "topo:coordination":
-			return false
-		}
-	}
-	title := strings.TrimSpace(t.Title)
-	return !strings.HasPrefix(title, "[Epic]") &&
-		!strings.HasPrefix(title, "Epic:") &&
-		!strings.HasPrefix(title, "Program:")
+	return workablepkg.IsTicket(cfg, t)
 }
