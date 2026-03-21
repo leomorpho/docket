@@ -43,7 +43,7 @@ var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orche
 	return newRunOrchestratorWithMode(repoRoot, enableReview, managedRunAdapterMode())
 }
 
-func newRunOrchestratorWithMode(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
+var newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
 	store := local.New(repoRoot)
 	wf := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), newRuntimeDeps(repoRoot).claimer)
 	runtimeStore := runruntime.New(repoRoot)
@@ -763,8 +763,11 @@ func launchManagedSingleRunWithMode(repoRoot, mode string) error {
 		return fmt.Errorf("no runnable tickets remain")
 	}
 	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
-	_, err = svc.RunTicket(ctx, next.ID)
-	return err
+	summary, err := svc.RunTicket(ctx, next.ID)
+	if err != nil {
+		return err
+	}
+	return singleRunSummaryError(summary)
 }
 
 func launchManagedAutoCycle(repoRoot string) error {
@@ -774,8 +777,41 @@ func launchManagedAutoCycle(repoRoot string) error {
 func launchManagedAutoCycleWithMode(repoRoot, mode string) error {
 	healManagedRuntime(repoRoot)
 	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
-	_, err := svc.RunNext(context.Background())
-	return err
+	summary, err := svc.RunNext(context.Background())
+	if err != nil {
+		return err
+	}
+	return cycleSummaryError(summary)
+}
+
+func singleRunSummaryError(summary agentrun.TicketRunSummary) error {
+	if summary.Status == agentrun.StatusDone {
+		return nil
+	}
+	reason := strings.TrimSpace(summary.Reason)
+	if reason == "" {
+		reason = string(summary.Status)
+	}
+	if strings.TrimSpace(summary.TicketID) == "" {
+		return fmt.Errorf("managed run failed: %s", reason)
+	}
+	return fmt.Errorf("%s failed: %s", summary.TicketID, reason)
+}
+
+func cycleSummaryError(summary agentrun.CycleSummary) error {
+	for _, run := range summary.Runs {
+		if err := singleRunSummaryError(run); err != nil {
+			return err
+		}
+	}
+	if len(summary.Runs) == 0 {
+		reason := strings.TrimSpace(summary.StopReason)
+		if reason == "" || reason == "no runnable tickets remain" {
+			return nil
+		}
+		return fmt.Errorf("managed run stopped: %s", reason)
+	}
+	return nil
 }
 
 func healManagedRuntime(repoRoot string) {
