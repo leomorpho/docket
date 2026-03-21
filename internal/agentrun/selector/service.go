@@ -121,9 +121,13 @@ func isWorkableTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 		return false
 	}
 	for _, label := range t.Labels {
-		if label == "epic" {
+		switch strings.ToLower(strings.TrimSpace(label)) {
+		case "epic", "program", "topo:coordination":
 			return false
 		}
 	}
-	return true
+	title := strings.TrimSpace(t.Title)
+	return !strings.HasPrefix(title, "[Epic]") &&
+		!strings.HasPrefix(title, "Epic:") &&
+		!strings.HasPrefix(title, "Program:")
 }

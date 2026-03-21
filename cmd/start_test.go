@@ -176,6 +176,81 @@ func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 	}
 }
 
+func TestSelectNextTicket_SkipsCoordinationTickets(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := local.New(tmpDir)
+	ctx := context.Background()
+
+	cfg := ticket.DefaultConfig()
+	backlog := cfg.States["backlog"]
+	backlog.Next = append(backlog.Next, "in-progress")
+	cfg.States["backlog"] = backlog
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-020",
+		Seq:         20,
+		Title:       "Program: Framework Beauty",
+		State:       "backlog",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Labels:      []string{"program", "topo:coordination"},
+	}); err != nil {
+		t.Fatalf("CreateTicket program failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-021",
+		Seq:         21,
+		Title:       "Epic: Starter Quality",
+		State:       "backlog",
+		Priority:    2,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Labels:      []string{"topo:coordination"},
+	}); err != nil {
+		t.Fatalf("CreateTicket epic failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-022",
+		Seq:         22,
+		Title:       "Actionable leaf",
+		State:       "backlog",
+		Priority:    3,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Labels:      []string{"topo:leaf"},
+	}); err != nil {
+		t.Fatalf("CreateTicket leaf failed: %v", err)
+	}
+	if err := s.SyncIndex(ctx); err != nil {
+		t.Fatalf("SyncIndex failed: %v", err)
+	}
+
+	got, err := selectNextTicket(ctx, s, cfg)
+	if err != nil {
+		t.Fatalf("selectNextTicket failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected a ticket, got nil")
+	}
+	if got.ID != "TKT-022" {
+		t.Fatalf("expected non-coordination ticket TKT-022, got %s", got.ID)
+	}
+}
+
 func TestSelectNextTicket_UsesStartableStatesFromConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := local.New(tmpDir)

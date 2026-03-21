@@ -102,6 +102,51 @@ func TestServiceNextSkipsClaimedRunnableTicket(t *testing.T) {
 	}
 }
 
+func TestServiceNextSkipsCoordinationTickets(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tc := range []struct {
+		id       string
+		priority int
+		title    string
+		labels   []string
+	}{
+		{id: "TKT-201", priority: 1, title: "Program: Wrapper", labels: []string{"program", "topo:coordination"}},
+		{id: "TKT-202", priority: 2, title: "Epic: Wrapper", labels: []string{"topo:coordination"}},
+		{id: "TKT-203", priority: 3, title: "Actionable leaf", labels: []string{"topo:leaf"}},
+	} {
+		if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+			ID:          tc.id,
+			Seq:         200 + tc.priority,
+			Title:       tc.title,
+			State:       ticket.State("todo"),
+			Priority:    tc.priority,
+			Labels:      tc.labels,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "desc",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		}); err != nil {
+			t.Fatalf("create %s: %v", tc.id, err)
+		}
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if !selection.Found || selection.TicketID != "TKT-203" {
+		t.Fatalf("unexpected selection: %#v", selection)
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

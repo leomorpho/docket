@@ -62,17 +62,21 @@ func isWorkableTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 	if !ok || !stateCfg.Startable {
 		return false
 	}
-	if isEpicTicket(t) {
+	if isCoordinationTicket(t) {
 		return false
 	}
 	return len(cfg.StartTransitionTargets(string(t.State))) > 0
 }
 
-func isEpicTicket(t *ticket.Ticket) bool {
+func isCoordinationTicket(t *ticket.Ticket) bool {
 	for _, l := range t.Labels {
-		if strings.EqualFold(strings.TrimSpace(l), "epic") {
+		label := strings.ToLower(strings.TrimSpace(l))
+		if label == "epic" || label == "program" || label == "topo:coordination" {
 			return true
 		}
 	}
-	return strings.HasPrefix(strings.TrimSpace(t.Title), "[Epic]")
+	title := strings.TrimSpace(t.Title)
+	return strings.HasPrefix(title, "[Epic]") ||
+		strings.HasPrefix(title, "Epic:") ||
+		strings.HasPrefix(title, "Program:")
 }

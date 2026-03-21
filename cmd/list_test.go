@@ -28,6 +28,7 @@ func TestListCmd(t *testing.T) {
 
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Workable Ticket", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Title: "Epic Ticket", State: ticket.State("todo"), Priority: 2, Labels: []string{"epic"}, CreatedAt: now.Add(2 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-005", Title: "Program: Wrapper", State: ticket.State("todo"), Priority: 1, Labels: []string{"program", "topo:coordination"}, CreatedAt: now.Add(3 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Done Ticket", State: ticket.State("done"), Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "Archived Ticket", State: ticket.State("archived"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
@@ -44,6 +45,9 @@ func TestListCmd(t *testing.T) {
 	}
 	if strings.Contains(b.String(), "TKT-004") {
 		t.Errorf("expected epic ticket to be hidden in default list, got:\n%s", b.String())
+	}
+	if strings.Contains(b.String(), "TKT-005") {
+		t.Errorf("expected coordination ticket to be hidden in default list, got:\n%s", b.String())
 	}
 	if strings.Contains(b.String(), "TKT-002") || strings.Contains(b.String(), "TKT-003") {
 		t.Errorf("expected only workable tickets, but got:\n%s", b.String())
