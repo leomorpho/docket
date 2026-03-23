@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -475,7 +476,7 @@ func TestUpdateCmd_PrivilegedDoneWarningOnlyByDefault(t *testing.T) {
 	}
 }
 
-func TestUpdateCmd_AgentDoneTransitionRedirectsToInReview(t *testing.T) {
+func TestUpdateCmd_AgentDoneTransitionWarningOnlyProceeds(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -484,7 +485,9 @@ func TestUpdateCmd_AgentDoneTransitionRedirectsToInReview(t *testing.T) {
 	repo = tmpDir
 	format = "human"
 
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = false
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
@@ -506,12 +509,79 @@ func TestUpdateCmd_AgentDoneTransitionRedirectsToInReview(t *testing.T) {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
+	errBuf := new(bytes.Buffer)
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-333", "--state", "done", "--ticket", "TKT-333", "--yes"})
-	if err := rootCmd.Execute(); err == nil {
-		t.Fatalf("expected agent done transition to be redirected")
-	} else if !strings.Contains(err.Error(), "human-only") || !strings.Contains(err.Error(), "in-review") {
-		t.Fatalf("expected agent done transition guidance to point at in-review, got: %v", err)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"update", "TKT-333", "--state", "done"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected warning-only done transition to proceed for agent actor, got: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "warning: privileged enforcement is disabled") {
+		t.Fatalf("expected warning-only privileged message, got: %s", errBuf.String())
+	}
+	got, err := s.GetTicket(context.Background(), "TKT-333")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != "done" {
+		t.Fatalf("expected done state, got %s", got.State)
+	}
+}
+
+func TestUpdateCmd_AgentDoneTransitionEnforcedRequiresPrivilegedSurface(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	t.Setenv("DOCKET_AGENT_ID", "codex-test")
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-334",
+		Seq:         334,
+		Title:       "Agent enforced closure attempt",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
+		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-334", "--state", "done"})
+	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "--ticket is required") {
+		t.Fatalf("expected privileged surface guidance requiring --ticket, got: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-334", "--state", "done", "--ticket", "TKT-334", "--yes"})
+	if err := rootCmd.Execute(); !errors.Is(err, security.ErrSecureModeInactive) {
+		t.Fatalf("expected secure-mode inactive rejection when enforced, got: %v", err)
+	}
+
+	ks := security.NewFileKeystore(tmpHome)
+	if err := ks.Create("pw-1"); err != nil {
+		t.Fatalf("create keystore failed: %v", err)
+	}
+	t.Setenv("DOCKET_KEYSTORE_PASSWORD", "pw-1")
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"--automation", "update", "TKT-334", "--state", "done", "--ticket", "TKT-334"})
+	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "automation mode requires --yes") {
+		t.Fatalf("expected automation-mode --yes requirement, got: %v", err)
 	}
 }
 

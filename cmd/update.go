@@ -155,9 +155,6 @@ var updateCmd = &cobra.Command{
 				}
 				transitionChecks = append(transitionChecks, "structured_ac_closure_gate")
 			}
-			if isCompletedTarget && isLLMActor() {
-				return fmt.Errorf("transition to %s is human-only. If you are an LLM agent, stop at `%s` instead; that is enough to unblock yourself and hand off for human verification", newState, preferredReviewState(cfg))
-			}
 			if isCompletedTarget || isArchivedTarget {
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
 					return err
