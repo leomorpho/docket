@@ -468,6 +468,21 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 }
 
 func selectResumableActiveTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (*ticket.Ticket, error) {
+	if diagnosis, diagErr := workablepkg.DiagnoseEmpty(ctx, s, cfg); diagErr == nil {
+		for _, blocker := range diagnosis.TopBlockers {
+			full, getErr := s.GetTicket(ctx, blocker.ID)
+			if getErr != nil {
+				return nil, getErr
+			}
+			if full == nil || full.StartedAt.IsZero() {
+				continue
+			}
+			if cfg.StateHasRole(string(full.State), "active") {
+				return full, nil
+			}
+		}
+	}
+
 	activeStates := cfg.StatesWithRole("active")
 	if len(activeStates) == 0 {
 		return nil, nil
