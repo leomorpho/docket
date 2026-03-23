@@ -18,8 +18,9 @@ This repo uses `docket` for ticket tracking. Read these instructions carefully.
 2. Determine which ticket your work relates to.
    - If a ticket matches: note its ID (e.g. TKT-001) and run `docket show TKT-001 --format context`
    - If no ticket matches: create one with `docket create --title "..." --desc "..." --priority N`
-3. Move the ticket to `in-progress` if it isn't already:
-   `docket update TKT-001 --state in-progress`
+3. Move the ticket into your repo's configured active-work state if it isn't already
+   (default is `in-progress`):
+   `docket update TKT-001 --state <active-state>`
 
 ### During work
 - Add a comment when you make a significant decision:
@@ -46,7 +47,8 @@ This repo uses `docket` for ticket tracking. Read these instructions carefully.
   ```
 
 ### When finishing work
-- Update ticket state: `docket update TKT-001 --state in-review`
+- Update ticket state to your configured review state (default is `in-review`):
+  `docket update TKT-001 --state <review-state>`
 - Write a handoff summary: `docket session compress TKT-001`
   (This will prompt you to write the summary — follow the format shown)
 
