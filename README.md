@@ -30,9 +30,11 @@ Markdown ticket files are the source of truth. SQLite is a cache only and is nev
 ## Ticket states
 
 ```
-backlog → todo → in-progress → [blocked*] → in-review → done → archived
+default example: backlog → todo → in-progress → [blocked*] → in-review → done → archived
 ```
 
+Your repository defines workflow states and transitions in `.docket/config.json`.
+Treat the graph above as a default example, not a universal rule.
 `blocked` is computed automatically from unresolved `blocked-by` dependencies.
 
 ## DOCKET_HOME
