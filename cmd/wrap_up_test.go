@@ -179,3 +179,85 @@ func TestWrapUpUsesConfiguredWorkflowRoleStates(t *testing.T) {
 		t.Fatalf("expected configured review transition hint, got:\n%s", out)
 	}
 }
+
+func TestWrapUpSuggestsIntermediaryActiveStateBeforeReviewWhenRequired(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued": {
+			Label:            "Queued",
+			Open:             true,
+			Column:           0,
+			Next:             []string{"coding"},
+			Roles:            []string{"intake"},
+			Startable:        true,
+			BlocksDependents: true,
+		},
+		"coding": {
+			Label:            "Coding",
+			Open:             true,
+			Column:           1,
+			Next:             []string{"testing"},
+			Roles:            []string{"active"},
+			BlocksDependents: true,
+		},
+		"testing": {
+			Label:            "Testing",
+			Open:             true,
+			Column:           2,
+			Next:             []string{"qa"},
+			Roles:            []string{"active"},
+			BlocksDependents: true,
+		},
+		"qa": {
+			Label:            "QA",
+			Open:             true,
+			Column:           3,
+			Next:             []string{"shipped"},
+			Roles:            []string{"review"},
+			Reviewable:       true,
+			BlocksDependents: true,
+		},
+		"shipped": {
+			Label:    "Shipped",
+			Open:     false,
+			Column:   4,
+			Next:     []string{},
+			Roles:    []string{"completed"},
+			Terminal: true,
+		},
+	}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("save custom workflow config failed: %v", err)
+	}
+
+	s := local.New(h.repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-972",
+		Seq:         972,
+		Title:       "Intermediary wrap-up",
+		Description: "Wrap-up should suggest next intermediary active state.",
+		State:       "coding",
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "all good", Done: true},
+		},
+		Handoff: "**Current state:** coding\n\n**Decisions made:** done\n\n**Files touched:** cmd/wrap_up.go\n\n**Remaining work:** move to testing before review\n\n**AC status:** complete",
+	}); err != nil {
+		t.Fatalf("seed intermediary wrap-up ticket failed: %v", err)
+	}
+
+	out, err := h.run("wrap-up", "TKT-972")
+	if err != nil {
+		t.Fatalf("wrap-up human failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "docket update TKT-972 --state testing") {
+		t.Fatalf("expected intermediary active transition hint, got:\n%s", out)
+	}
+}
