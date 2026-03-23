@@ -112,6 +112,7 @@ func TestSessionRunnerStartsPersistentCodexExecAndCanResume(t *testing.T) {
 	script := "#!/bin/sh\n" +
 		"printf 'ARGS:%s\\n' \"$*\" >> \"$DOCKET_TEST_LOG\"\n" +
 		"printf 'PWD:%s\\n' \"$PWD\" >> \"$DOCKET_TEST_LOG\"\n" +
+		"printf 'ENV_DOCKET_SESSION_ID:%s\\n' \"$DOCKET_SESSION_ID\" >> \"$DOCKET_TEST_LOG\"\n" +
 		"cat - > \"$DOCKET_TEST_STDIN\"\n" +
 		"printf 'RESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\\n'\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
@@ -185,5 +186,8 @@ func TestSessionRunnerStartsPersistentCodexExecAndCanResume(t *testing.T) {
 	}
 	if !strings.Contains(log, "-C "+worktreePath+" exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox thread-123 -") {
 		t.Fatalf("session resume args missing in log: %s", log)
+	}
+	if !strings.Contains(log, "ENV_DOCKET_SESSION_ID:thread-123") {
+		t.Fatalf("resume should propagate existing session id to codex env, got: %s", log)
 	}
 }
