@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/leomorpho/docket/internal/agentrun"
@@ -336,31 +338,110 @@ func routingInputs(t *ticket.Ticket) (tokenEstimate int, risk string, failureCou
 }
 
 func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (*ticket.Ticket, error) {
+	claimedAtSelection, err := listClaimedTicketIDs(s.RepoRoot)
+	if err != nil {
+		return nil, err
+	}
 	tickets, err := workableTickets(ctx, s, cfg, store.Filter{})
 	if err != nil {
 		return nil, err
 	}
 
+	var claimedFallback *ticket.Ticket
 	for _, t := range tickets {
-		cl, err := lookupClaimIfAvailable(s.RepoRoot, t.ID)
-		if err != nil {
-			return nil, err
-		}
-		if cl != nil {
+		if claimedAtSelection[t.ID] {
+			if claimedFallback == nil {
+				claimedFallback = t
+			}
 			continue
 		}
-		return t, nil
+		cl, claimErr := lookupClaimIfAvailable(s.RepoRoot, t.ID)
+		if claimErr != nil {
+			return nil, claimErr
+		}
+		if cl == nil {
+			return t, nil
+		}
+		if claimedFallback == nil {
+			claimedFallback = t
+		}
 	}
 
-	return nil, nil
+	return claimedFallback, nil
+}
+
+func listClaimedTicketIDs(repoRoot string) (map[string]bool, error) {
+	ids := make(map[string]bool)
+	dirs := make([]string, 0, 2)
+	if dir, err := claim.GetClaimsDir(repoRoot); err == nil {
+		dirs = append(dirs, dir)
+	} else if !strings.Contains(err.Error(), "not a git repository") {
+		return nil, err
+	}
+	dirs = append(dirs, filepath.Join(repoRoot, ".git", "docket", "claims"))
+
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(name, ".json") {
+				continue
+			}
+			ids[strings.TrimSuffix(name, ".json")] = true
+		}
+	}
+	return ids, nil
 }
 
 func lookupClaimIfAvailable(repoRoot, ticketID string) (*claim.ClaimMetadata, error) {
 	cl, err := claim.GetClaim(repoRoot, ticketID)
-	if err != nil && strings.Contains(err.Error(), "not a git repository") {
-		return nil, nil
+	if err == nil && cl != nil {
+		return cl, nil
 	}
-	return cl, err
+	if err != nil && !strings.Contains(err.Error(), "not a git repository") {
+		return nil, err
+	}
+
+	// Fallback: detect raw claim files even when claim metadata lookup cannot
+	// resolve the repository path in the current execution context.
+	dir, dirErr := claim.GetClaimsDir(repoRoot)
+	if dirErr != nil {
+		if strings.Contains(dirErr.Error(), "not a git repository") {
+			return nil, nil
+		}
+		return nil, dirErr
+	}
+	path := filepath.Join(dir, ticketID+".json")
+	data, readErr := os.ReadFile(path)
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			legacyPath := filepath.Join(repoRoot, ".git", "docket", "claims", ticketID+".json")
+			legacyData, legacyErr := os.ReadFile(legacyPath)
+			if legacyErr != nil {
+				if os.IsNotExist(legacyErr) {
+					return nil, nil
+				}
+				return nil, legacyErr
+			}
+			data = legacyData
+		} else {
+			return nil, readErr
+		}
+	}
+	var fallback claim.ClaimMetadata
+	if err := json.Unmarshal(data, &fallback); err == nil {
+		return &fallback, nil
+	}
+	return &claim.ClaimMetadata{}, nil
 }
 
 func init() {
