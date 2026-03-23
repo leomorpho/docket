@@ -87,6 +87,7 @@ type Config struct {
 	Workflow        WorkflowConfig           `json:"-"`
 	Labels          []string                 `json:"labels"`
 	CommitSessions  bool                     `json:"commit_sessions"`
+	SecurityEnforcement bool                 `json:"security_enforcement,omitempty"`
 	DefaultState    string                   `json:"default_state"`
 	DefaultPriority int                      `json:"default_priority"`
 	HandoffSections []string                 `json:"handoff_sections"`
@@ -120,6 +121,7 @@ func DefaultConfig() *Config {
 		Workflow:        workflow,
 		Labels:          []string{"bug", "feature", "refactor", "chore", "llm-only", "human-only"},
 		CommitSessions:  false,
+		SecurityEnforcement: false,
 		DefaultState:    "backlog",
 		DefaultPriority: 10,
 		HandoffSections: append([]string(nil), defaultHandoffSections...),
@@ -349,6 +351,7 @@ type rawConfigForLoad struct {
 	Workflow        json.RawMessage          `json:"workflow"`
 	Labels          []string                 `json:"labels"`
 	CommitSessions  bool                     `json:"commit_sessions"`
+	SecurityEnforcement bool                 `json:"security_enforcement,omitempty"`
 	DefaultState    string                   `json:"default_state"`
 	DefaultPriority int                      `json:"default_priority"`
 	HandoffSections []string                 `json:"handoff_sections"`
@@ -375,6 +378,7 @@ func LoadConfig(repoRoot string) (*Config, error) {
 		Backend:         raw.Backend,
 		Labels:          raw.Labels,
 		CommitSessions:  raw.CommitSessions,
+		SecurityEnforcement: raw.SecurityEnforcement,
 		DefaultState:    raw.DefaultState,
 		DefaultPriority: raw.DefaultPriority,
 		HandoffSections: raw.HandoffSections,

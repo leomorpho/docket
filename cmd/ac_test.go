@@ -310,6 +310,35 @@ func TestHookACCheckEnforcedFailsDeterministically(t *testing.T) {
 	}
 }
 
+func TestHookACCheckConfigEnforcedFailsDeterministically(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-009", Seq: 9, Title: "Hook Config Enforced", State: ticket.State("todo"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc",
+		AC: []ticket.AcceptanceCriterion{{Description: "Manual check"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-009"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("expected config-enforced hook mode to fail on incomplete AC")
+	}
+}
+
 func TestHookACCheckNonInteractiveDoesNotWaitOnPrompt(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
