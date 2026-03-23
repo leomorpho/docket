@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/lifecycle"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestStatusIncludesQuietHookReadinessWhenHealthy(t *testing.T) {
@@ -26,6 +27,9 @@ func TestStatusIncludesQuietHookReadinessWhenHealthy(t *testing.T) {
 	}
 	if strings.Contains(out, "Hook remediation:") {
 		t.Fatalf("healthy status should not print remediation, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Security enforcement: warning-only") {
+		t.Fatalf("expected warning-only enforcement note, got:\n%s", out)
 	}
 }
 
@@ -61,5 +65,25 @@ func TestStatusIncludesHookPolicyAndRecentBlockingEventsWhenDegraded(t *testing.
 	}
 	if !strings.Contains(out, "Hook remediation: run `docket bootstrap`") {
 		t.Fatalf("expected remediation guidance for degraded hooks, got:\n%s", out)
+	}
+}
+
+func TestStatusReportsEnabledSecurityEnforcement(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	cfg, err := ticket.LoadConfig(h.repo)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+
+	out, err := h.run("status")
+	if err != nil {
+		t.Fatalf("status failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Security enforcement: enabled") {
+		t.Fatalf("expected enabled enforcement note, got:\n%s", out)
 	}
 }

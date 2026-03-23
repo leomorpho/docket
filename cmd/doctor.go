@@ -25,9 +25,11 @@ type doctorCheck struct {
 }
 
 type doctorReport struct {
-	Adapter string        `json:"adapter"`
-	Summary doctorSummary `json:"summary"`
-	Checks  []doctorCheck `json:"checks"`
+	Adapter         string        `json:"adapter"`
+	EnforcementMode string        `json:"security_enforcement_mode"`
+	EnforcementNote string        `json:"security_enforcement_note"`
+	Summary         doctorSummary `json:"summary"`
+	Checks          []doctorCheck `json:"checks"`
 }
 
 var doctorCmd = &cobra.Command{
@@ -41,6 +43,8 @@ var doctorCmd = &cobra.Command{
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Setup and integration health report (adapter: %s)\n", report.Adapter)
+		fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", report.EnforcementMode)
+		fmt.Fprintf(cmd.OutOrStdout(), "Enforcement note: %s\n", report.EnforcementNote)
 		for _, chk := range report.Checks {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %-8s %s\n", chk.Status, chk.Name, chk.Detail)
 			if chk.Status == "FAIL" && chk.Remediation != "" {
@@ -54,8 +58,11 @@ var doctorCmd = &cobra.Command{
 
 func buildDoctorReport(repoRoot string) doctorReport {
 	digest := buildStartCapabilityDigest(repoRoot)
+	securityMode, securityNote := securityEnforcementSurface(repoRoot)
 	report := doctorReport{
-		Adapter: digest.Adapter,
+		Adapter:         digest.Adapter,
+		EnforcementMode: securityMode,
+		EnforcementNote: securityNote,
 		Checks: []doctorCheck{
 			newReadinessCheck("mcp", digest.Readiness.MCP == "ready", "MCP wiring detected.", "MCP wiring not detected.", digest.Adapter),
 			newReadinessCheck("skills", digest.Readiness.Skills == "ready", "Skill integration detected.", "Skill integration not detected.", digest.Adapter),

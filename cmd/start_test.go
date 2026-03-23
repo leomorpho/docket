@@ -578,6 +578,9 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	if !strings.Contains(b.String(), "Runtime policy: unsecured") {
 		t.Fatalf("expected unsecured runtime note in output, got: %s", b.String())
 	}
+	if !strings.Contains(b.String(), "Security enforcement: warning-only") {
+		t.Fatalf("expected warning-only enforcement note in output, got: %s", b.String())
+	}
 
 	ns := security.NewRepoNamespaceStore(tmpHome)
 	run, ok, err := ns.GetRunManifest(tmpRepo, "TKT-001")
@@ -592,6 +595,27 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	}
 	if run.WorktreePath == "" || run.WorktreePath == tmpRepo {
 		t.Fatalf("expected dedicated worktree path, got %q", run.WorktreePath)
+	}
+}
+
+func TestStartCmd_ReportsEnabledSecurityEnforcement(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	cfg, err := ticket.LoadConfig(h.repo)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	h.seedTicket("TKT-810", 810, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+
+	out, err := h.run("start")
+	if err != nil {
+		t.Fatalf("start failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Security enforcement: enabled") {
+		t.Fatalf("expected enabled enforcement note in output, got:\n%s", out)
 	}
 }
 
