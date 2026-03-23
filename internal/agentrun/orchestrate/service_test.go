@@ -754,6 +754,11 @@ func TestServiceRunTicketWithReviewerChangesRequiredRunsOneFixLoop(t *testing.T)
 	if got := strings.Join(impl.starts, ","); got != "TKT-375,TKT-375" {
 		t.Fatalf("expected one fresh fix loop, got implementer starts %s", got)
 	}
+	reviewer.mu.Lock()
+	defer reviewer.mu.Unlock()
+	if got := strings.Join(reviewer.starts, ","); got != "TKT-375,TKT-375" {
+		t.Fatalf("expected exactly one review pass plus one post-fix review, got reviewer starts %s", got)
+	}
 }
 
 func TestServiceRunTicketStopsAfterSingleFixReviewLoopWhenReviewerStillRequestsChanges(t *testing.T) {
@@ -809,6 +814,11 @@ func TestServiceRunTicketStopsAfterSingleFixReviewLoopWhenReviewerStillRequestsC
 	defer impl.mu.Unlock()
 	if got := strings.Join(impl.starts, ","); got != "TKT-375,TKT-375" {
 		t.Fatalf("expected exactly one fix loop, got implementer starts %s", got)
+	}
+	reviewer.mu.Lock()
+	defer reviewer.mu.Unlock()
+	if got := strings.Join(reviewer.starts, ","); got != "TKT-375,TKT-375" {
+		t.Fatalf("expected exactly one review pass plus one post-fix review, got reviewer starts %s", got)
 	}
 }
 
