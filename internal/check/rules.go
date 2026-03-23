@@ -28,7 +28,8 @@ type Finding struct {
 type Rule func(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding
 
 func RuleR001(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding {
-	if cfg == nil || !cfg.StateHasRole(string(t.State), "active") {
+	ev := ticket.NewWorkflowEvaluator(cfg)
+	if !ev.StateHasRole(t.State, "active") {
 		return nil
 	}
 	if now.Sub(t.UpdatedAt) <= 7*24*time.Hour {
@@ -39,13 +40,14 @@ func RuleR001(ctx context.Context, backend store.Backend, cfg *ticket.Config, t 
 }
 
 func RuleR006(ctx context.Context, backend store.Backend, cfg *ticket.Config, t *ticket.Ticket, now time.Time) []Finding {
+	ev := ticket.NewWorkflowEvaluator(cfg)
 	var out []Finding
 	for _, blockerID := range t.BlockedBy {
 		blocker, err := backend.GetTicket(ctx, blockerID)
 		if err != nil || blocker == nil {
 			continue
 		}
-		if !cfg.BlocksDependents(blocker.State) {
+		if !ev.DependencyBlocks(blocker) {
 			out = append(out, Finding{
 				TicketID: t.ID,
 				Rule:     "R006",
@@ -97,6 +99,7 @@ func DescendantClosureIssues(ctx context.Context, backend store.Backend, cfg *ti
 	if cfg == nil {
 		cfg = ticket.DefaultConfig()
 	}
+	ev := ticket.NewWorkflowEvaluator(cfg)
 
 	all, err := backend.ListTickets(ctx, store.Filter{IncludeArchived: true})
 	if err != nil {
@@ -132,7 +135,7 @@ func DescendantClosureIssues(ctx context.Context, backend store.Backend, cfg *ti
 
 	issues := make([]string, 0, len(descendants))
 	for _, desc := range descendants {
-		if !stateCountsAsClosed(cfg, desc.State) {
+		if !stateCountsAsClosed(ev, desc.State) {
 			issues = append(issues, fmt.Sprintf("descendant %s is still %s", desc.ID, desc.State))
 			continue
 		}
@@ -151,7 +154,7 @@ func DescendantClosureIssues(ctx context.Context, backend store.Backend, cfg *ti
 			if !ok || blocker == nil {
 				continue
 			}
-			if cfg.BlocksDependents(blocker.State) {
+			if ev.DependencyBlocks(blocker) {
 				issues = append(issues, fmt.Sprintf("descendant %s is still blocked by %s (%s)", desc.ID, blockerID, blocker.State))
 				break
 			}
@@ -161,6 +164,6 @@ func DescendantClosureIssues(ctx context.Context, backend store.Backend, cfg *ti
 	return issues, nil
 }
 
-func stateCountsAsClosed(cfg *ticket.Config, state ticket.State) bool {
-	return cfg.StateHasRole(string(state), "completed") || cfg.StateHasRole(string(state), "archived")
+func stateCountsAsClosed(ev ticket.WorkflowEvaluator, state ticket.State) bool {
+	return ev.StateHasRole(state, "completed") || ev.StateHasRole(state, "archived")
 }
