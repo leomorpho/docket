@@ -766,6 +766,40 @@ func TestRunWatchModelMenuLaunchShowsTerminalMessageAfterSuccessfulRun(t *testin
 	}
 }
 
+func TestRunWatchModelMenuLaunchAttachesWhenActiveRunAlreadyVisible(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{
+			ID:    "single",
+			Label: "Start Next Ticket",
+			Start: func() (string, error) {
+				called = true
+				return "out of tickets", nil
+			},
+		},
+	})
+	model.snapshot.ticketID = "TKT-554"
+	model.snapshot.status = runruntime.StatusSnapshot{TicketID: "TKT-554", Active: true}
+	model.snapshot.statusOK = true
+
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected active run launch to attach locally without async command")
+	}
+	updated := gotModel.(RunWatchModel)
+	if updated.launchMode != launchModeWatch {
+		t.Fatalf("expected watch mode, got %s", updated.launchMode)
+	}
+	if updated.statusMessage != "watching active managed run" {
+		t.Fatalf("expected active-run status message, got %q", updated.statusMessage)
+	}
+	if called {
+		t.Fatalf("expected launcher callback to be skipped when an active run is already visible")
+	}
+}
+
 func TestRunWatchModelMenuNavigationAndReturn(t *testing.T) {
 	t.Parallel()
 

@@ -98,6 +98,51 @@ func TestCreateWorktree_ReusesExistingRegisteredPath(t *testing.T) {
 	}
 }
 
+func TestCreateWorktree_ReusedPathRestoresTrackedDeletions(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", tmpDir}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root"), 0o644); err != nil {
+		t.Fatalf("write seed failed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, "framework", "web", "components", "gen"), 0o755); err != nil {
+		t.Fatalf("mkdir gen failed: %v", err)
+	}
+	genFile := filepath.Join(tmpDir, "framework", "web", "components", "gen", "card_templ.go")
+	if err := os.WriteFile(genFile, []byte("package gen\n"), 0o644); err != nil {
+		t.Fatalf("write gen file failed: %v", err)
+	}
+	runGit("add", "README", "framework/web/components/gen/card_templ.go")
+	runGit("commit", "-m", "initial")
+
+	wtPath := filepath.Join(tmpDir, "worktrees", "TKT-201")
+	branch := "docket/TKT-201"
+	if err := CreateWorktree(tmpDir, "TKT-201", branch, wtPath); err != nil {
+		t.Fatalf("initial CreateWorktree failed: %v", err)
+	}
+
+	worktreeGenFile := filepath.Join(wtPath, "framework", "web", "components", "gen", "card_templ.go")
+	if err := os.Remove(worktreeGenFile); err != nil {
+		t.Fatalf("remove worktree gen file failed: %v", err)
+	}
+
+	if err := CreateWorktree(tmpDir, "TKT-201", branch, wtPath); err != nil {
+		t.Fatalf("expected CreateWorktree to restore tracked deletions on reuse, got: %v", err)
+	}
+	if _, err := os.Stat(worktreeGenFile); err != nil {
+		t.Fatalf("expected tracked deletion to be restored, got err=%v", err)
+	}
+}
+
 func TestCreateWorktree_ReplacesOrphanedDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheHome := t.TempDir()

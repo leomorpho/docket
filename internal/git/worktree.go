@@ -24,7 +24,7 @@ func CreateWorktree(repoRoot, ticketID, branch, path string) error {
 	}
 	if registered {
 		if registeredBranch == "" || registeredBranch == branch {
-			return nil
+			return restoreTrackedDeletions(path)
 		}
 		return fmt.Errorf("worktree path %s is already registered to branch %s", path, registeredBranch)
 	}
@@ -67,7 +67,7 @@ func CreateWorktree(repoRoot, ticketID, branch, path string) error {
 	if err != nil {
 		return fmt.Errorf("git worktree add failed: %w\n%s", err, out)
 	}
-	return nil
+	return restoreTrackedDeletions(path)
 }
 
 // RemoveWorktree removes a git worktree and prunes it.
@@ -168,4 +168,22 @@ func canonicalPath(path string) (string, error) {
 		}
 	}
 	return abs, nil
+}
+
+func restoreTrackedDeletions(worktreePath string) error {
+	out, err := runGit(worktreePath, "ls-files", "--deleted", "-z")
+	if err != nil {
+		return fmt.Errorf("list deleted tracked files in %s: %w", worktreePath, err)
+	}
+	trimmed := strings.TrimSuffix(out, "\x00")
+	if trimmed == "" {
+		return nil
+	}
+	paths := strings.Split(trimmed, "\x00")
+	args := []string{"restore", "--source=HEAD", "--staged", "--worktree", "--"}
+	args = append(args, paths...)
+	if _, err := runGit(worktreePath, args...); err != nil {
+		return fmt.Errorf("restore deleted tracked files in %s: %w", worktreePath, err)
+	}
+	return nil
 }

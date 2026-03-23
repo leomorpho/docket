@@ -1070,6 +1070,13 @@ func (m RunWatchModel) startLaunchOption(option RunWatchLaunchOption) (tea.Model
 		m.focusTicketID = ""
 		m.snapshot = runWatchSnapshot{}
 	}
+	if option.Start != nil && !option.StayInMenu && m.snapshot.status.Active && strings.TrimSpace(m.snapshot.ticketID) != "" {
+		m.launchMode = launchModeWatch
+		m.showDoneNotice = false
+		m.terminalMessage = ""
+		m.statusMessage = "watching active managed run"
+		return m, nil
+	}
 	if option.Start == nil {
 		m.launchMode = launchModeWatch
 		m.statusMessage = "watching managed run"
