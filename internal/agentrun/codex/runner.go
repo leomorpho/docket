@@ -14,6 +14,14 @@ import (
 type commandFactory func(ctx context.Context, name string, args ...string) *exec.Cmd
 
 type Runner struct {
+	core runnerCore
+}
+
+type SessionRunner struct {
+	core runnerCore
+}
+
+type runnerCore struct {
 	command   string
 	newCmd    commandFactory
 	now       func() time.Time
@@ -23,43 +31,52 @@ type Runner struct {
 
 func NewRunner() *Runner {
 	return &Runner{
-		command:   "codex",
-		newCmd:    exec.CommandContext,
-		now:       time.Now,
-		ephemeral: true,
-		adapterID: "codex",
+		core: runnerCore{
+			command:   "codex",
+			newCmd:    exec.CommandContext,
+			now:       time.Now,
+			ephemeral: true,
+			adapterID: "codex",
+		},
 	}
 }
 
-func NewSessionRunner() *Runner {
-	return &Runner{
-		command:   "codex",
-		newCmd:    exec.CommandContext,
-		now:       time.Now,
-		ephemeral: false,
-		adapterID: "codex-session",
+func NewSessionRunner() *SessionRunner {
+	return &SessionRunner{
+		core: runnerCore{
+			command:   "codex",
+			newCmd:    exec.CommandContext,
+			now:       time.Now,
+			ephemeral: false,
+			adapterID: "codex-session",
+		},
 	}
 }
 
 func (r *Runner) ID() string {
-	return r.adapterID
+	return r.core.adapterID
 }
 
 func (r *Runner) Start(ctx context.Context, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
-	return r.start(ctx, spec, "")
+	return r.core.start(ctx, spec, "")
 }
 
-func (r *Runner) Resume(ctx context.Context, sessionID string, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
-	if r.ephemeral {
-		return nil, agentrun.RunRecord{}, fmt.Errorf("runner %s does not support resume", r.ID())
-	}
+func (r *SessionRunner) ID() string {
+	return r.core.adapterID
+}
+
+func (r *SessionRunner) Start(ctx context.Context, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+	return r.core.start(ctx, spec, "")
+}
+
+func (r *SessionRunner) Resume(ctx context.Context, sessionID string, spec agentrun.RunSpec) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
 	if sessionID == "" {
 		return nil, agentrun.RunRecord{}, fmt.Errorf("session id is required")
 	}
-	return r.start(ctx, spec, sessionID)
+	return r.core.start(ctx, spec, sessionID)
 }
 
-func (r *Runner) start(ctx context.Context, spec agentrun.RunSpec, resumeSessionID string) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
+func (r *runnerCore) start(ctx context.Context, spec agentrun.RunSpec, resumeSessionID string) (agentrun.ProcessHandle, agentrun.RunRecord, error) {
 	if err := spec.Validate(); err != nil {
 		return nil, agentrun.RunRecord{}, err
 	}
@@ -125,7 +142,7 @@ func (r *Runner) start(ctx context.Context, spec agentrun.RunSpec, resumeSession
 	record := agentrun.RunRecord{
 		TicketID:     spec.TicketID,
 		Role:         spec.Role,
-		Adapter:      r.ID(),
+		Adapter:      r.adapterID,
 		RepoRoot:     spec.RepoRoot,
 		WorktreePath: spec.WorktreePath,
 		Branch:       spec.Branch,
