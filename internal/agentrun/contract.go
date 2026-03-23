@@ -24,6 +24,15 @@ const (
 	StatusFailed  Status = "failed"
 )
 
+func (s Status) IsTerminal() bool {
+	switch s {
+	case StatusDone, StatusStuck, StatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 type ReviewStatus string
 
 const (

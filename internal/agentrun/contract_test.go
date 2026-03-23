@@ -1,6 +1,8 @@
 package agentrun
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -199,5 +201,74 @@ func TestRunSpecAndRunRecordValidateContractFields(t *testing.T) {
 	}
 	if err := record.Validate(); err != nil {
 		t.Fatalf("RunRecord.Validate() error = %v", err)
+	}
+}
+
+func TestStatusIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		status Status
+		want   bool
+	}{
+		{status: StatusRunning, want: false},
+		{status: StatusDone, want: true},
+		{status: StatusStuck, want: true},
+		{status: StatusFailed, want: true},
+		{status: Status("unknown"), want: false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(string(tc.status), func(t *testing.T) {
+			t.Parallel()
+			if got := tc.status.IsTerminal(); got != tc.want {
+				t.Fatalf("Status(%q).IsTerminal() = %v, want %v", tc.status, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidationInputJSONShapeIsStable(t *testing.T) {
+	t.Parallel()
+
+	input := ValidationInput{
+		TicketID:     "TKT-378",
+		RepoRoot:     "/repo",
+		WorktreePath: "/repo/.worktrees/TKT-378",
+		Branch:       "docket/TKT-378",
+		Result: Result{
+			Status:    StatusDone,
+			TicketID:  "TKT-378",
+			Role:      RoleImplementer,
+			CommitSHA: "abc123",
+			Tests:     "passed",
+		},
+	}
+
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal ValidationInput: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal ValidationInput: %v", err)
+	}
+	want := map[string]any{
+		"ticket_id":     "TKT-378",
+		"repo_root":     "/repo",
+		"worktree_path": "/repo/.worktrees/TKT-378",
+		"branch":        "docket/TKT-378",
+		"result": map[string]any{
+			"status":    "done",
+			"ticket_id": "TKT-378",
+			"role":      "implementer",
+			"commit":    "abc123",
+			"tests":     "passed",
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ValidationInput JSON mismatch\n got: %#v\nwant: %#v", got, want)
 	}
 }
