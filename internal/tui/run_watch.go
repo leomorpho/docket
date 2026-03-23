@@ -192,6 +192,7 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.snapshot.warnings) == 0 && m.snapshot.ticketID == "" {
 			if strings.TrimSpace(m.terminalMessage) != "" {
 				m.statusMessage = m.terminalMessage
+				m.showDoneNotice = false
 			} else {
 				m.statusMessage = "waiting for managed run"
 			}
@@ -232,6 +233,7 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.launchMode = launchModeWatch
 			if m.terminalMessage != "" {
+				m.showDoneNotice = false
 				m.statusMessage = m.terminalMessage
 			} else {
 				m.statusMessage = "run finished"

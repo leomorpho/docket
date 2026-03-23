@@ -23,6 +23,7 @@ import (
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/tui"
 	"github.com/leomorpho/docket/internal/vcs"
+	workablepkg "github.com/leomorpho/docket/internal/workable"
 	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/leomorpho/docket/internal/workspace"
 	"github.com/spf13/cobra"
@@ -774,7 +775,11 @@ func launchManagedSingleRunWithMode(repoRoot, mode string) (string, error) {
 		return "", err
 	}
 	if next == nil {
-		return "out of tickets", nil
+		diagnosis, err := workablepkg.DiagnoseEmpty(ctx, store, cfg)
+		if err != nil {
+			return "", err
+		}
+		return diagnosis.Summary(), nil
 	}
 	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
 	summary, err := svc.RunTicket(ctx, next.ID)
@@ -806,11 +811,14 @@ func launchManagedAutoCycleWithMode(repoRoot, mode string) (string, error) {
 	}
 	reason := strings.TrimSpace(summary.StopReason)
 	switch reason {
-	case "", "no runnable tickets remain":
+	case "":
 		return "out of tickets", nil
 	case "operator requested stop after current ticket", "operator requested stop before starting the next ticket":
 		return reason, nil
 	default:
+		if isNoRunnableReason(reason) {
+			return reason, nil
+		}
 		return "cycle finished", nil
 	}
 }
@@ -840,12 +848,17 @@ func cycleSummaryError(summary agentrun.CycleSummary) error {
 	}
 	if len(summary.Runs) == 0 {
 		reason := strings.TrimSpace(summary.StopReason)
-		if reason == "" || reason == "no runnable tickets remain" || isOperatorStopReason(reason) {
+		if reason == "" || isNoRunnableReason(reason) || isOperatorStopReason(reason) {
 			return nil
 		}
 		return fmt.Errorf("managed run stopped: %s", reason)
 	}
 	return nil
+}
+
+func isNoRunnableReason(reason string) bool {
+	reason = strings.TrimSpace(reason)
+	return reason == "no runnable tickets remain" || strings.HasPrefix(reason, "no runnable tickets remain:")
 }
 
 func healManagedRuntime(repoRoot string) {

@@ -240,6 +240,102 @@ func TestFakeRepoHarnessFailureRetryIntegration(t *testing.T) {
 	t.Logf("failure-retry fixtures: %s, %s", failFixture, retryFixture)
 }
 
+func TestFakeRepoHarnessBlockedBacklogDiagnosisIntegration(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	s := local.New(h.repo)
+	now := time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-910",
+			Seq:         910,
+			Title:       "Current blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "agent:harness-agent",
+			Description: "blocking ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-911",
+			Seq:         911,
+			Title:       "Blocked leaf one",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-910"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "agent:harness-agent",
+			Description: "blocked leaf",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-912",
+			Seq:         912,
+			Title:       "Blocked leaf two",
+			State:       ticket.State("todo"),
+			Priority:    3,
+			BlockedBy:   []string{"TKT-910"},
+			CreatedAt:   now.Add(2 * time.Minute),
+			UpdatedAt:   now.Add(2 * time.Minute),
+			CreatedBy:   "agent:harness-agent",
+			Description: "blocked leaf",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-913",
+			Seq:         913,
+			Title:       "Program: Coordination only",
+			State:       ticket.State("todo"),
+			Priority:    4,
+			Labels:      []string{"program", "topo:coordination"},
+			CreatedAt:   now.Add(3 * time.Minute),
+			UpdatedAt:   now.Add(3 * time.Minute),
+			CreatedBy:   "agent:harness-agent",
+			Description: "coordination parent",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("seed %s failed: %v", tk.ID, err)
+		}
+	}
+
+	listOut, err := h.run("list")
+	if err != nil {
+		t.Fatalf("list failed: %v\n%s", err, listOut)
+	}
+	if !strings.Contains(listOut, "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected blocked backlog diagnosis in list output, got:\n%s", listOut)
+	}
+	if !strings.Contains(listOut, "2 actionable tickets are in startable states, 2 blocked, 1 coordination-only hidden") {
+		t.Fatalf("expected deterministic blocked/coordination counts, got:\n%s", listOut)
+	}
+	if !strings.Contains(listOut, "Top unresolved blockers: TKT-910 x2") {
+		t.Fatalf("expected blocker summary, got:\n%s", listOut)
+	}
+
+	startOut, err := h.run("start", "--format", "json")
+	if err != nil {
+		t.Fatalf("start failed: %v\n%s", err, startOut)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(startOut), &payload); err != nil {
+		t.Fatalf("unmarshal start json failed: %v\n%s", err, startOut)
+	}
+	if payload["no_workable_ticket"] != true {
+		t.Fatalf("expected no_workable_ticket=true, got %#v", payload["no_workable_ticket"])
+	}
+	message, _ := payload["message"].(string)
+	if !strings.Contains(message, "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected diagnosis in start json message, got %q", message)
+	}
+	if !strings.Contains(message, "Top unresolved blockers: TKT-910 x2") {
+		t.Fatalf("expected blocker detail in start json message, got %q", message)
+	}
+}
+
 type adapterMatrixFixture struct {
 	AdapterID             string
 	ExpectedRepoArtifacts []string

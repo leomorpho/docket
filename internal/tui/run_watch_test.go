@@ -766,6 +766,46 @@ func TestRunWatchModelMenuLaunchShowsTerminalMessageAfterSuccessfulRun(t *testin
 	}
 }
 
+func TestRunWatchModelKeepsTerminalMessageAfterIdleRefresh(t *testing.T) {
+	t.Parallel()
+
+	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
+		{
+			ID:    "single",
+			Label: "Start Next Ticket",
+			Start: func() (string, error) {
+				return "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Backlog warning: none are runnable right now; 2 actionable tickets are in startable states, 2 blocked. Top unresolved blockers: TKT-101 x2.", nil
+			},
+		},
+	})
+
+	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("launch option should return an async command")
+	}
+	msg := cmd()
+	updated, nextCmd := gotModel.Update(msg)
+	if nextCmd == nil {
+		t.Fatalf("expected refresh command after terminal launch result")
+	}
+	watching := updated.(RunWatchModel)
+	if watching.showDoneNotice {
+		t.Fatalf("expected custom terminal message to suppress generic done notice")
+	}
+
+	refreshed, _ := watching.Update(runWatchLoadedMsg{snapshot: runWatchSnapshot{}})
+	final := refreshed.(RunWatchModel)
+	if final.statusMessage == "waiting for managed run" {
+		t.Fatalf("expected idle refresh to keep terminal message, got %q", final.statusMessage)
+	}
+	if !strings.Contains(final.statusMessage, "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected preserved backlog diagnosis, got %q", final.statusMessage)
+	}
+	if final.showDoneNotice {
+		t.Fatalf("expected no generic done notice after idle refresh")
+	}
+}
+
 func TestRunWatchModelMenuLaunchAttachesWhenActiveRunAlreadyVisible(t *testing.T) {
 	t.Parallel()
 

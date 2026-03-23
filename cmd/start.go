@@ -14,6 +14,7 @@ import (
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	workablepkg "github.com/leomorpho/docket/internal/workable"
 	"github.com/leomorpho/docket/internal/workflow"
 	"github.com/spf13/cobra"
 )
@@ -62,6 +63,11 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 			return err
 		}
 		if t == nil {
+			diagnosis, diagErr := workablepkg.DiagnoseEmpty(ctx, s, cfg)
+			if diagErr != nil {
+				return diagErr
+			}
+			message := diagnosis.Summary()
 			capabilityDigest := buildStartCapabilityDigest(repo)
 			quickPath := buildLLMQuickPath()
 			agentQuickstart := buildStartAgentQuickstart(repo, "", "")
@@ -69,7 +75,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				printJSON(cmd, map[string]interface{}{
 					"ticket":               nil,
 					"no_workable_ticket":   true,
-					"message":              fmt.Sprintf("No workable tickets found. Startable states in current config: %s.", startableStatesSummary(cfg)),
+					"message":              message,
 					"runtime_policy_mode":  runtimePolicyMode,
 					"runtime_policy_note":  runtimePolicyMessage,
 					"active_workflow_hash": activeWorkflowHash,
@@ -79,7 +85,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				})
 				return nil
 			}
-			renderStartNoTicketIntro(cmd, cfg, runtimePolicyMode, runtimePolicyMessage, capabilityDigest, quickPath, agentQuickstart)
+			renderStartNoTicketIntro(cmd, message, runtimePolicyMode, runtimePolicyMessage, capabilityDigest, quickPath, agentQuickstart)
 			return nil
 		}
 
@@ -246,15 +252,20 @@ func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cf
 		return err
 	}
 	if t == nil {
+		diagnosis, diagErr := workablepkg.DiagnoseEmpty(ctx, s, cfg)
+		if diagErr != nil {
+			return diagErr
+		}
+		message := diagnosis.Summary()
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{
 				"ticket":             nil,
 				"no_workable_ticket": true,
-				"message":            fmt.Sprintf("No workable tickets found. Startable states in current config: %s.", startableStatesSummary(cfg)),
+				"message":            message,
 			})
 			return nil
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "No workable tickets found. Startable states in current config: %s.\n", startableStatesSummary(cfg))
+		fmt.Fprintln(cmd.OutOrStdout(), message)
 		return nil
 	}
 
@@ -267,8 +278,8 @@ func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cf
 	return renderTicketRunSummary(cmd, summary)
 }
 
-func renderStartNoTicketIntro(cmd *cobra.Command, cfg *ticket.Config, runtimePolicyMode, runtimePolicyMessage string, capabilityDigest startCapabilityDigest, quickPath llmQuickPath, agentQuickstart startAgentQuickstart) {
-	fmt.Fprintf(cmd.OutOrStdout(), "No workable tickets found. Startable states in current config: %s.\n", startableStatesSummary(cfg))
+func renderStartNoTicketIntro(cmd *cobra.Command, message, runtimePolicyMode, runtimePolicyMessage string, capabilityDigest startCapabilityDigest, quickPath llmQuickPath, agentQuickstart startAgentQuickstart) {
+	fmt.Fprintln(cmd.OutOrStdout(), message)
 	fmt.Fprintf(cmd.OutOrStdout(), "\n=== Docket Intro ===\n")
 	fmt.Fprintf(cmd.OutOrStdout(), "Docket is ready even without an active ticket.\n")
 	fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)

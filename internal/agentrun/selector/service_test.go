@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +190,62 @@ func TestServiceNextSkipsCoordinationTickets(t *testing.T) {
 	}
 	if !selection.Found || selection.TicketID != "TKT-203" {
 		t.Fatalf("unexpected selection: %#v", selection)
+	}
+}
+
+func TestServiceNextExplainsBlockedBacklogWhenNothingRunnable(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-301",
+			Seq:         301,
+			Title:       "Current work",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "desc",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-302",
+			Seq:         302,
+			Title:       "Blocked backlog",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-301"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "human:test",
+			Description: "desc",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := store.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if selection.Found {
+		t.Fatalf("expected no runnable selection, got %#v", selection)
+	}
+	if !strings.HasPrefix(selection.Reason, "no runnable tickets remain:") {
+		t.Fatalf("expected explanatory no-runnable reason, got %q", selection.Reason)
+	}
+	if !strings.Contains(selection.Reason, "TKT-301 x1") {
+		t.Fatalf("expected blocker detail in reason, got %q", selection.Reason)
 	}
 }
 

@@ -47,7 +47,11 @@ func (s *Service) Next(ctx context.Context) (agentrun.Selection, error) {
 		return agentrun.Selection{}, err
 	}
 	if len(tickets) == 0 {
-		return agentrun.Selection{Found: false, Reason: "no runnable tickets remain"}, nil
+		diagnosis, err := workablepkg.DiagnoseEmpty(ctx, s.store, cfg)
+		if err != nil {
+			return agentrun.Selection{}, err
+		}
+		return agentrun.Selection{Found: false, Reason: diagnosis.NoRunnableReason()}, nil
 	}
 	return agentrun.Selection{
 		Found:    true,

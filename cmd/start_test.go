@@ -958,3 +958,62 @@ func TestStartCmd_EmptyWorkableSetShowsStartableStates(t *testing.T) {
 		t.Fatalf("expected skill reminder in empty workable-set intro, got:\n%s", b.String())
 	}
 }
+
+func TestStartCmd_EmptyWorkableSetExplainsBlockedBacklog(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpRepo
+	format = "human"
+
+	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(tmpRepo)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-001",
+			Seq:         1,
+			Title:       "Active blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "desc",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-002",
+			Seq:         2,
+			Title:       "Blocked backlog",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-001"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "human:test",
+			Description: "desc",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("CreateTicket failed: %v", err)
+		}
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"start"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if !strings.Contains(b.String(), "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected blocked backlog warning, got:\n%s", b.String())
+	}
+	if !strings.Contains(b.String(), "Top unresolved blockers: TKT-001 x1") {
+		t.Fatalf("expected blocker detail, got:\n%s", b.String())
+	}
+}

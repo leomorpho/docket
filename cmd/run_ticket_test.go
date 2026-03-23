@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -560,6 +561,12 @@ func TestCycleSummaryError(t *testing.T) {
 	if err == nil || err.Error() != "TKT-11 failed: commit hook failed" {
 		t.Fatalf("unexpected cycle failure error: %v", err)
 	}
+
+	if err := cycleSummaryError(agentrun.CycleSummary{
+		StopReason: "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Backlog warning: none are runnable right now; 3 actionable tickets are in startable states, 3 blocked. Top unresolved blockers: TKT-101 x3.",
+	}); err != nil {
+		t.Fatalf("diagnostic no-runnable stop should not error: %v", err)
+	}
 }
 
 func TestLaunchManagedSingleRunWithModeReturnsSummaryFailure(t *testing.T) {
@@ -652,6 +659,57 @@ func TestLaunchManagedSingleRunWithModeReturnsOperatorStopMessage(t *testing.T) 
 	}
 	if message != "operator requested hard stop" {
 		t.Fatalf("unexpected launch message: %q", message)
+	}
+}
+
+func TestLaunchManagedSingleRunWithModeReturnsDiagnosisWhenNoRunnableTicketExists(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-710",
+			Seq:         710,
+			Title:       "Current blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		},
+		{
+			ID:          "TKT-711",
+			Seq:         711,
+			Title:       "Blocked leaf",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-710"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "human:test",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		},
+	} {
+		if err := store.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("CreateTicket failed: %v", err)
+		}
+	}
+
+	message, err := launchManagedSingleRunWithMode(repoRoot, "session")
+	if err != nil {
+		t.Fatalf("expected diagnostic no-runnable launch result, got error: %v", err)
+	}
+	if !strings.Contains(message, "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected diagnosis message, got %q", message)
+	}
+	if !strings.Contains(message, "Top unresolved blockers: TKT-710 x1") {
+		t.Fatalf("expected blocker detail, got %q", message)
 	}
 }
 

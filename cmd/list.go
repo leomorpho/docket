@@ -11,6 +11,7 @@ import (
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	workablepkg "github.com/leomorpho/docket/internal/workable"
 	"github.com/leomorpho/docket/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -228,7 +229,7 @@ func printWorkspaceContext(cmd *cobra.Command, rows []workspaceListRow, workable
 
 func printTable(cmd *cobra.Command, rows []listRow, workableView bool, cfg *ticket.Config) {
 	if len(rows) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), emptyListMessage(workableView, cfg))
+		fmt.Fprintln(cmd.OutOrStdout(), emptyListMessage(context.Background(), local.New(repo), workableView, cfg))
 		return
 	}
 
@@ -249,7 +250,7 @@ func printTable(cmd *cobra.Command, rows []listRow, workableView bool, cfg *tick
 
 func printContext(cmd *cobra.Command, rows []listRow, workableView bool, cfg *ticket.Config) {
 	if len(rows) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), emptyListMessage(workableView, cfg))
+		fmt.Fprintln(cmd.OutOrStdout(), emptyListMessage(context.Background(), local.New(repo), workableView, cfg))
 		return
 	}
 
@@ -274,11 +275,14 @@ func printContext(cmd *cobra.Command, rows []listRow, workableView bool, cfg *ti
 	}
 }
 
-func emptyListMessage(workableView bool, cfg *ticket.Config) string {
+func emptyListMessage(ctx context.Context, s *local.Store, workableView bool, cfg *ticket.Config) string {
 	if !workableView {
 		return "No tickets found."
 	}
-
+	diagnosis, err := workablepkg.DiagnoseEmpty(ctx, s, cfg)
+	if err == nil {
+		return diagnosis.Summary()
+	}
 	startable := startableStatesSummary(cfg)
 	if startable == "none configured" {
 		return "No workable tickets found. Startable states in current config: none configured."

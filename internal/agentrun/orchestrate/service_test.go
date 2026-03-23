@@ -562,6 +562,27 @@ func TestServiceRunNextReturnsSelectorReasonWhenNoRunnableTicketsRemain(t *testi
 	}
 }
 
+func TestServiceRunNextPreservesSelectorDiagnosisWhenNoRunnableTicketsRemain(t *testing.T) {
+	t.Parallel()
+
+	service := New(Dependencies{
+		Selector: &fakeSelector{queue: []agentrun.Selection{
+			{Found: false, Reason: "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Backlog warning: none are runnable right now; 2 actionable tickets are in startable states, 2 blocked. Top unresolved blockers: TKT-910 x2."},
+		}},
+	})
+
+	summary, err := service.RunNext(context.Background())
+	if err != nil {
+		t.Fatalf("RunNext() error = %v", err)
+	}
+	if len(summary.Runs) != 0 {
+		t.Fatalf("expected no runs, got %#v", summary)
+	}
+	if !strings.Contains(summary.StopReason, "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected diagnostic stop reason, got %#v", summary.StopReason)
+	}
+}
+
 func TestServiceRunNextHonorsStopAfterCurrentRequest(t *testing.T) {
 	t.Parallel()
 

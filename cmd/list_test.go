@@ -165,6 +165,66 @@ func TestListCmd_EmptyWorkableViewShowsStartableStates(t *testing.T) {
 	}
 }
 
+func TestListCmd_EmptyWorkableViewExplainsBlockedBacklog(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	listFull = false
+	listState = "open"
+
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+	s := local.New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-001",
+			Seq:         1,
+			Title:       "Blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "me",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "x"}},
+		},
+		{
+			ID:          "TKT-002",
+			Seq:         2,
+			Title:       "Blocked backlog",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-001"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "me",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "x"}},
+		},
+	} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatalf("create ticket failed: %v", err)
+		}
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "Backlog warning: none are runnable right now") {
+		t.Fatalf("expected blocked backlog explanation, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Top unresolved blockers: TKT-001 x1") {
+		t.Fatalf("expected top blocker summary, got:\n%s", out.String())
+	}
+}
+
 func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
