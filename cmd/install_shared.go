@@ -10,12 +10,16 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/artifacts"
+	"github.com/leomorpho/docket/internal/capabilities"
+	"github.com/leomorpho/docket/internal/skills"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
 const (
 	docketBlockStart = "<!-- docket:start -->"
 	docketBlockEnd   = "<!-- docket:end -->"
+	skillPackStart   = "<!-- docket:skill-pack:start -->"
+	skillPackEnd     = "<!-- docket:skill-pack:end -->"
 )
 
 type installManifest struct {
@@ -268,6 +272,81 @@ func writeInstallManifest(repoRoot string) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+func ensurePortableSkillPack(repoRoot string) error {
+	runtime, _, err := capabilities.EnsureRuntimeContract(repoRoot)
+	if err != nil {
+		return err
+	}
+	pack, report := skills.BuildPack(runtime)
+	if !report.Valid() {
+		return fmt.Errorf("invalid portable skill metadata: %#v", report.Errors)
+	}
+	rendered, err := skills.Render("codex", pack)
+	if err != nil {
+		return err
+	}
+	block := skillPackStart + "\n" + rendered.Content + skillPackEnd + "\n"
+	return upsertManagedTextBlock(filepath.Join(repoRoot, ".docket", "skills", "portable-codex.md"), skillPackStart, skillPackEnd, block)
+}
+
+func ensurePortableRepoMCP(repoRoot string) error {
+	path := filepath.Join(repoRoot, ".cursor", "mcp.json")
+	payload := map[string]any{}
+	raw, err := os.ReadFile(path)
+	if err == nil {
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return fmt.Errorf("parse %s: %w", filepath.Base(path), err)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	servers, _ := payload["servers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	if _, ok := servers["docket"]; !ok {
+		servers["docket"] = map[string]any{"command": "docket", "args": []string{"serve", "--mcp"}}
+	}
+	payload["servers"] = servers
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+func upsertManagedTextBlock(path, startMarker, endMarker, block string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.WriteFile(path, []byte(block), 0o644)
+		}
+		return err
+	}
+	text := string(raw)
+	start := strings.Index(text, startMarker)
+	end := strings.Index(text, endMarker)
+	if start >= 0 && end >= start {
+		end += len(endMarker)
+		updated := text[:start] + block + text[end:]
+		if !strings.HasSuffix(updated, "\n") {
+			updated += "\n"
+		}
+		return os.WriteFile(path, []byte(updated), 0o644)
+	}
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	text += "\n" + block
+	return os.WriteFile(path, []byte(text), 0o644)
 }
 
 func artifactStatus(repoRoot string) (hookStale bool, claudeStale bool, err error) {

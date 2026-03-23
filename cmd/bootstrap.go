@@ -157,6 +157,12 @@ func runCoreInstallStep(repoRoot string) (bool, error) {
 	if err := writeInstallManifest(repoRoot); err != nil {
 		return false, err
 	}
+	if err := ensurePortableSkillPack(repoRoot); err != nil {
+		return false, err
+	}
+	if err := ensurePortableRepoMCP(repoRoot); err != nil {
+		return false, err
+	}
 	if err := validateStarterScaffoldLayout(repoRoot); err != nil {
 		return false, err
 	}

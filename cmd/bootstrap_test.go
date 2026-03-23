@@ -219,6 +219,41 @@ func TestBootstrapCommandAmbiguityWarningInHumanOutput(t *testing.T) {
 	}
 }
 
+func TestBootstrapUnsupportedAdapterStillInstallsPortableBaseline(t *testing.T) {
+	tmpRepo := t.TempDir()
+	t.Setenv("DOCKET_HOME", filepath.Join(t.TempDir(), "docket-home"))
+	t.Setenv("DOCKET_ADAPTER", "")
+	docketHome = ""
+	repo = tmpRepo
+	format = "human"
+
+	if err := os.MkdirAll(filepath.Join(tmpRepo, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir .git/hooks failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"bootstrap", "--adapter", "unknown-adapter"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bootstrap with unsupported adapter failed: %v\n%s", err, out.String())
+	}
+
+	if !strings.Contains(out.String(), "adapter install: no-change") {
+		t.Fatalf("expected adapter install fallback reporting, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "adapter bootstrap: no-change") {
+		t.Fatalf("expected adapter bootstrap fallback reporting, got:\n%s", out.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpRepo, ".docket", "skills", "portable-codex.md")); err != nil {
+		t.Fatalf("expected portable skill artifact in .docket/skills, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpRepo, ".cursor", "mcp.json")); err != nil {
+		t.Fatalf("expected portable MCP wiring .cursor/mcp.json, got: %v", err)
+	}
+}
+
 type successAdapter struct {
 	id string
 }
