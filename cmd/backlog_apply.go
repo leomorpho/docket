@@ -16,6 +16,7 @@ import (
 )
 
 var backlogApplySpecPath string
+var backlogApplyAllowEmptyStartable bool
 
 var tktIDPattern = regexp.MustCompile(`^TKT-\d+$`)
 
@@ -31,7 +32,11 @@ var backlogApplyCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			backlogApplySpecPath = ""
+			backlogApplyAllowEmptyStartable = false
 			if f := cmd.Flags().Lookup("spec"); f != nil {
+				f.Changed = false
+			}
+			if f := cmd.Flags().Lookup("allow-empty-startable-leaf"); f != nil {
 				f.Changed = false
 			}
 		}()
@@ -62,7 +67,7 @@ var backlogApplyCmd = &cobra.Command{
 			return renderMutationValidationError(cmd, fmt.Errorf("backlog apply spec validation failed"), field, report)
 		}
 
-		res, err := executeBacklogApply(context.Background(), repo, cfg, spec)
+		res, err := executeBacklogApply(context.Background(), repo, cfg, spec, backlogApplyAllowEmptyStartable)
 		if err != nil {
 			return err
 		}
@@ -86,8 +91,12 @@ var backlogApplyCmd = &cobra.Command{
 	},
 }
 
-func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.BacklogApplySpec) (backlogApplyOutput, error) {
+func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.BacklogApplySpec, allowEmptyStartable bool) (backlogApplyOutput, error) {
 	s := local.New(repoRoot)
+	beforeWorkableCount, err := workableStartableLeafCount(ctx, s, cfg)
+	if err != nil {
+		return backlogApplyOutput{}, err
+	}
 
 	allocations, rollback, err := reserveBacklogIDs(repoRoot, len(spec.Tickets), s)
 	if err != nil {
@@ -179,6 +188,12 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 		}
 		createdFiles = append(createdFiles, artifacts.RepoPath(repoRoot, artifacts.RepoTicketsDir, id+".md"))
 	}
+	if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, allowEmptyStartable, beforeWorkableCount); err != nil {
+		if rbErr := rollback(createdFiles); rbErr != nil {
+			return backlogApplyOutput{}, fmt.Errorf("%v (rollback failed: %v)", err, rbErr)
+		}
+		return backlogApplyOutput{}, err
+	}
 
 	return backlogApplyOutput{
 		CreatedIDs:   createdIDs,
@@ -257,5 +272,6 @@ func readOptionalFile(path string) ([]byte, bool, error) {
 
 func init() {
 	backlogApplyCmd.Flags().StringVar(&backlogApplySpecPath, "spec", "", "spec file path (use - for stdin)")
+	addAllowEmptyStartableLeafFlag(backlogApplyCmd, &backlogApplyAllowEmptyStartable)
 	backlogCmd.AddCommand(backlogApplyCmd)
 }

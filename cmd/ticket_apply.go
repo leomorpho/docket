@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/applyspec"
+	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
 var ticketApplySpecPath string
+var ticketApplyAllowEmptyStartable bool
 
 type ticketApplyPresence struct {
 	ID          bool
@@ -43,7 +45,11 @@ var ticketApplyCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			ticketApplySpecPath = ""
+			ticketApplyAllowEmptyStartable = false
 			if f := cmd.Flags().Lookup("spec"); f != nil {
+				f.Changed = false
+			}
+			if f := cmd.Flags().Lookup("allow-empty-startable-leaf"); f != nil {
 				f.Changed = false
 			}
 		}()
@@ -82,7 +88,7 @@ var ticketApplyCmd = &cobra.Command{
 			return fmt.Errorf("parse ticket field presence: %w", err)
 		}
 
-		res, err := executeTicketApply(context.Background(), repo, cfg, spec, presence)
+		res, err := executeTicketApply(context.Background(), repo, cfg, spec, presence, ticketApplyAllowEmptyStartable)
 		if err != nil {
 			return err
 		}
@@ -106,8 +112,12 @@ var ticketApplyCmd = &cobra.Command{
 	},
 }
 
-func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.TicketApplySpec, presence ticketApplyPresence) (ticketApplyOutput, error) {
+func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.TicketApplySpec, presence ticketApplyPresence, allowEmptyStartable bool) (ticketApplyOutput, error) {
 	s := local.New(repoRoot)
+	beforeWorkableCount, err := workableStartableLeafCount(ctx, s, cfg)
+	if err != nil {
+		return ticketApplyOutput{}, err
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	actor := detectActor()
@@ -122,6 +132,14 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 			return ticketApplyOutput{}, fmt.Errorf("loading ticket %s: %w", spec.Ticket.ID, err)
 		}
 		if existing != nil {
+			original := *existing
+			original.Labels = append([]string(nil), existing.Labels...)
+			original.BlockedBy = append([]string(nil), existing.BlockedBy...)
+			original.Blocks = append([]string(nil), existing.Blocks...)
+			original.LinkedCommits = append([]string(nil), existing.LinkedCommits...)
+			original.AC = append([]ticket.AcceptanceCriterion(nil), existing.AC...)
+			original.Comments = append([]ticket.Comment(nil), existing.Comments...)
+			original.Plan = append([]ticket.PlanStep(nil), existing.Plan...)
 			updated, warnings, err := applyUpdateTicket(existing, spec, presence, cfg)
 			if err != nil {
 				return ticketApplyOutput{}, err
@@ -129,6 +147,13 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 			updated.UpdatedAt = now
 			if err := s.UpdateTicket(ctx, updated); err != nil {
 				return ticketApplyOutput{}, fmt.Errorf("updating ticket %s: %w", updated.ID, err)
+			}
+			if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, allowEmptyStartable, beforeWorkableCount); err != nil {
+				original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+				if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
+					return ticketApplyOutput{}, fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+				}
+				return ticketApplyOutput{}, err
 			}
 			return ticketApplyOutput{
 				ID:       updated.ID,
@@ -172,10 +197,16 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 		newTicket.State = ticket.State(spec.Ticket.State)
 	}
 	if err := s.CreateTicket(ctx, newTicket); err != nil {
-		if rollbackErr := rollbackCounter(); rollbackErr != nil {
+		if rollbackErr := rollbackCounter(""); rollbackErr != nil {
 			return ticketApplyOutput{}, fmt.Errorf("creating ticket failed: %v (rollback failed: %v)", err, rollbackErr)
 		}
 		return ticketApplyOutput{}, fmt.Errorf("creating ticket failed: %w", err)
+	}
+	if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, allowEmptyStartable, beforeWorkableCount); err != nil {
+		if rollbackErr := rollbackCounter(newTicket.ID); rollbackErr != nil {
+			return ticketApplyOutput{}, fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+		}
+		return ticketApplyOutput{}, err
 	}
 
 	warnings := []string{}
@@ -239,17 +270,32 @@ func applyUpdateTicket(existing *ticket.Ticket, spec applyspec.TicketApplySpec, 
 	return &t, warnings, nil
 }
 
-func reserveNextID(ctx context.Context, repoRoot string, s *local.Store) (string, int, func() error, error) {
+func reserveNextID(ctx context.Context, repoRoot string, s *local.Store) (string, int, func(createdTicketID string) error, error) {
 	cfgPath := ticket.ConfigPath(repoRoot)
 	before, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return "", 0, nil, fmt.Errorf("read config for rollback: %w", err)
 	}
+	manifestPath := artifacts.RepoPath(repoRoot, artifacts.RepoManifest)
+	manifestBefore, manifestExists, err := readOptionalFile(manifestPath)
+	if err != nil {
+		return "", 0, nil, fmt.Errorf("read manifest for rollback: %w", err)
+	}
 	id, seq, err := s.NextID(ctx)
 	if err != nil {
 		return "", 0, nil, err
 	}
-	rollback := func() error {
+	rollback := func(createdTicketID string) error {
+		if strings.TrimSpace(createdTicketID) != "" {
+			_ = os.Remove(artifacts.RepoPath(repoRoot, artifacts.RepoTicketsDir, createdTicketID+".md"))
+		}
+		if manifestExists {
+			if err := os.WriteFile(manifestPath, manifestBefore, 0o644); err != nil {
+				return err
+			}
+		} else {
+			_ = os.Remove(manifestPath)
+		}
 		return os.WriteFile(cfgPath, before, 0o644)
 	}
 	return id, seq, rollback, nil
@@ -321,5 +367,6 @@ func parseTicketPresence(raw []byte) (ticketApplyPresence, error) {
 
 func init() {
 	ticketApplyCmd.Flags().StringVar(&ticketApplySpecPath, "spec", "", "spec file path (use - for stdin)")
+	addAllowEmptyStartableLeafFlag(ticketApplyCmd, &ticketApplyAllowEmptyStartable)
 	ticketCmd.AddCommand(ticketApplyCmd)
 }

@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/leomorpho/docket/internal/artifacts"
 	"github.com/leomorpho/docket/internal/capabilities"
+	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -58,6 +61,7 @@ func buildDoctorReport(repoRoot string) doctorReport {
 			newReadinessCheck("skills", digest.Readiness.Skills == "ready", "Skill integration detected.", "Skill integration not detected.", digest.Adapter),
 			newReadinessCheck("hooks", digest.Readiness.Hooks == "ready", "Git hook wiring is healthy.", "Git hook wiring is missing or stale.", digest.Adapter),
 			buildContractCheck(repoRoot, digest.Adapter),
+			buildQueueInvariantCheck(repoRoot),
 		},
 	}
 	for _, chk := range report.Checks {
@@ -68,6 +72,32 @@ func buildDoctorReport(repoRoot string) doctorReport {
 		}
 	}
 	return report
+}
+
+func buildQueueInvariantCheck(repoRoot string) doctorCheck {
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		return doctorCheck{
+			Name:        "queue_invariant",
+			Status:      "FAIL",
+			Detail:      "Unable to load workflow config for queue invariant checks.",
+			Remediation: "Run `docket init` or fix .docket/config.json.",
+		}
+	}
+	s := local.New(repoRoot)
+	if err := enforceStartableLeafInvariant(context.Background(), s, cfg, false); err != nil {
+		return doctorCheck{
+			Name:        "queue_invariant",
+			Status:      "FAIL",
+			Detail:      err.Error(),
+			Remediation: "Run `docket queue heal` or unblock a startable leaf ticket.",
+		}
+	}
+	return doctorCheck{
+		Name:   "queue_invariant",
+		Status: "PASS",
+		Detail: "At least one unblocked startable leaf ticket is available.",
+	}
 }
 
 func newReadinessCheck(name string, ok bool, passDetail, failDetail, adapterID string) doctorCheck {

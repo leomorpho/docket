@@ -20,20 +20,21 @@ import (
 )
 
 var (
-	updateState        string
-	updatePriority     int
-	updateTitle        string
-	updateLabels       string
-	updateAddLabels    []string
-	updateRemoveLabels []string
-	updateBlockedBy    []string
-	updateUnblock      []string
-	updateParent       string
-	updateCascade      bool
-	updateDesc         string
-	updateHandoff      string
-	updatePrivTicket   string
-	updatePrivYes      bool
+	updateState               string
+	updatePriority            int
+	updateTitle               string
+	updateLabels              string
+	updateAddLabels           []string
+	updateRemoveLabels        []string
+	updateBlockedBy           []string
+	updateUnblock             []string
+	updateParent              string
+	updateCascade             bool
+	updateDesc                string
+	updateHandoff             string
+	updatePrivTicket          string
+	updatePrivYes             bool
+	updateAllowEmptyStartable bool
 )
 
 var updateCmd = &cobra.Command{
@@ -75,6 +76,10 @@ var updateCmd = &cobra.Command{
 		cfg, cfgErr := ticket.LoadConfig(repo)
 		if cfgErr != nil {
 			return cfgErr
+		}
+		beforeWorkableCount, err := workableStartableLeafCount(ctx, s, cfg)
+		if err != nil {
+			return err
 		}
 		cascadeRequested := cmd.Flags().Changed("cascade") && updateCascade
 		actor := detectActor()
@@ -374,6 +379,13 @@ var updateCmd = &cobra.Command{
 				updatedFields = append(updatedFields, "state")
 			}
 		}
+		if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, updateAllowEmptyStartable, beforeWorkableCount); err != nil {
+			original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+			if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
+				return fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+			}
+			return err
+		}
 		if transitionChanged {
 			emitStateTransitionEvent(
 				cmd.ErrOrStderr(),
@@ -422,6 +434,7 @@ func resetUpdateGlobals() {
 	updateHandoff = ""
 	updatePrivTicket = ""
 	updatePrivYes = false
+	updateAllowEmptyStartable = false
 }
 
 func resetUpdateFlagChanges(cmd *cobra.Command) {
@@ -440,6 +453,7 @@ func resetUpdateFlagChanges(cmd *cobra.Command) {
 		"desc",
 		"ticket",
 		"yes",
+		"allow-empty-startable-leaf",
 	}
 	for _, name := range flagNames {
 		if f := cmd.Flags().Lookup(name); f != nil {
@@ -474,6 +488,7 @@ func init() {
 	updateCmd.Flags().StringVar(&updateDesc, "desc", "", "new description (use - for stdin)")
 	updateCmd.Flags().StringVar(&updatePrivTicket, "ticket", "", "ticket ID authorizing privileged terminal transitions")
 	updateCmd.Flags().BoolVar(&updatePrivYes, "yes", false, "skip interactive confirmation for privileged terminal transitions")
+	addAllowEmptyStartableLeafFlag(updateCmd, &updateAllowEmptyStartable)
 
 	rootCmd.AddCommand(updateCmd)
 }

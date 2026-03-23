@@ -16,18 +16,19 @@ import (
 )
 
 var (
-	title        string
-	desc         string
-	priority     int
-	labels       string
-	state        string
-	createAC     []string
-	noACDefaults bool
-	acTemplate   string
-	authoringSpec string
-	createParent   string
-	createBlockedBy []string
-	createBlocks    []string
+	title                     string
+	desc                      string
+	priority                  int
+	labels                    string
+	state                     string
+	createAC                  []string
+	noACDefaults              bool
+	acTemplate                string
+	authoringSpec             string
+	createParent              string
+	createBlockedBy           []string
+	createBlocks              []string
+	createAllowEmptyStartable bool
 )
 
 var createCmd = &cobra.Command{
@@ -73,6 +74,10 @@ var createCmd = &cobra.Command{
 
 		s := local.New(repo)
 		ctx := context.Background()
+		beforeWorkableCount, err := workableStartableLeafCount(ctx, s, cfg)
+		if err != nil {
+			return err
+		}
 
 		// 1. Get next ID
 		id, seq, err := s.NextID(ctx)
@@ -149,6 +154,9 @@ var createCmd = &cobra.Command{
 		if err := s.CreateTicket(ctx, t); err != nil {
 			return fmt.Errorf("creating ticket: %w", err)
 		}
+		if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, createAllowEmptyStartable, beforeWorkableCount); err != nil {
+			return err
+		}
 
 		// 7. Output
 		if format == "json" {
@@ -182,6 +190,7 @@ func resetCreateGlobals() {
 	createParent = ""
 	createBlockedBy = nil
 	createBlocks = nil
+	createAllowEmptyStartable = false
 }
 
 func readyContractHints(description string) []string {
@@ -200,7 +209,7 @@ func readyContractHints(description string) []string {
 }
 
 func resetCreateFlagChanges(cmd *cobra.Command) {
-	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template", "authoring-spec", "parent", "blocked-by", "blocks"} {
+	for _, name := range []string{"title", "desc", "priority", "labels", "state", "ac", "no-ac-defaults", "ac-template", "authoring-spec", "parent", "blocked-by", "blocks", "allow-empty-startable-leaf"} {
 		if f := cmd.Flags().Lookup(name); f != nil {
 			f.Changed = false
 		}
@@ -261,6 +270,7 @@ func init() {
 	createCmd.Flags().StringVar(&createParent, "parent", "", "connect the new ticket under an existing parent ticket")
 	createCmd.Flags().StringSliceVar(&createBlockedBy, "blocked-by", []string{}, "connect the new ticket to existing blocker tickets (repeatable)")
 	createCmd.Flags().StringSliceVar(&createBlocks, "blocks", []string{}, "connect the new ticket to existing downstream tickets it blocks (repeatable)")
+	addAllowEmptyStartableLeafFlag(createCmd, &createAllowEmptyStartable)
 
 	rootCmd.AddCommand(createCmd)
 }
