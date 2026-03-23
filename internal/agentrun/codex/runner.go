@@ -65,6 +65,9 @@ func (r *Runner) start(ctx context.Context, spec agentrun.RunSpec, resumeSession
 	}
 
 	sessionID := fmt.Sprintf("%s-%d", spec.TicketID, r.now().UTC().UnixNano())
+	if resumeSessionID != "" {
+		sessionID = resumeSessionID
+	}
 	args := []string{
 		"-C",
 		spec.WorktreePath,
@@ -128,9 +131,6 @@ func (r *Runner) start(ctx context.Context, spec agentrun.RunSpec, resumeSession
 		Branch:       spec.Branch,
 		StartedAt:    r.now().UTC().Format(time.RFC3339Nano),
 		SessionID:    sessionID,
-	}
-	if resumeSessionID != "" {
-		record.SessionID = resumeSessionID
 	}
 	return processHandle{cmd: cmd, stdout: stdout, stderr: stderr}, record, nil
 }
