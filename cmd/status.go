@@ -26,9 +26,11 @@ var statusCmd = &cobra.Command{
 				f.Changed = false
 			}
 		}()
+		securityMode, _ := securityEnforcementSurface(repo)
 		if !statusParallel {
 			fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
 			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for active-work ticket matrix.")
+			fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
 			renderHookStatusSurface(cmd.OutOrStdout())
 			return nil
 		}
@@ -66,6 +68,7 @@ var statusCmd = &cobra.Command{
 		}
 		sort.Strings(ids)
 		fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: parallel matrix (safe/risky):")
+		fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
 		for i := 0; i < len(ids); i++ {
 			for j := i + 1; j < len(ids); j++ {
 				a, b := ids[i], ids[j]

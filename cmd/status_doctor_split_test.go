@@ -107,3 +107,32 @@ func TestStatusParallelUsesConfiguredActiveRoleStates(t *testing.T) {
 		t.Fatalf("expected custom active-role tickets in parallel matrix, got:\n%s", out)
 	}
 }
+
+func TestDoctorReportsSecurityEnforcementMode(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	warnOut, err := h.run("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\n%s", err, warnOut)
+	}
+	if !strings.Contains(warnOut, "Security enforcement: warning-only") {
+		t.Fatalf("expected warning-only enforcement note, got:\n%s", warnOut)
+	}
+
+	cfg, err := ticket.LoadConfig(h.repo)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+
+	enabledOut, err := h.run("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed after enabling enforcement: %v\n%s", err, enabledOut)
+	}
+	if !strings.Contains(enabledOut, "Security enforcement: enabled") {
+		t.Fatalf("expected enabled enforcement note, got:\n%s", enabledOut)
+	}
+}

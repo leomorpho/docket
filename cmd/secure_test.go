@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -99,8 +100,46 @@ func TestSecureUnlockPromptsAndConfirmsOnFirstUse(t *testing.T) {
 	if !strings.Contains(text, "No secure keystore found in DOCKET_HOME.") {
 		t.Fatalf("expected first-use messaging, got: %s", text)
 	}
+	if !strings.Contains(text, "Security enforcement: warning-only") {
+		t.Fatalf("expected warning-only enforcement mode in first-use messaging, got: %s", text)
+	}
 	if !strings.Contains(out.String(), "Secure mode active until") {
 		t.Fatalf("expected unlock success output, got: %s", out.String())
+	}
+}
+
+func TestSecureUnlockFirstUseReportsEnabledEnforcementMode(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = tmpHome
+	repo = tmpRepo
+	securePassword = ""
+	automationMode = false
+
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpRepo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
+
+	errOut := new(bytes.Buffer)
+	rootCmd.SetErr(errOut)
+
+	originalPrompt := securePromptPassword
+	defer func() { securePromptPassword = originalPrompt }()
+	responses := []string{"pw-1", "pw-1"}
+	securePromptPassword = func(cmd *cobra.Command, prompt string) (string, error) {
+		resp := responses[0]
+		responses = responses[1:]
+		return resp, nil
+	}
+
+	if _, err := resolveSecureUnlockPassword(rootCmd); err != nil {
+		t.Fatalf("resolve secure unlock password failed: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "Security enforcement: enabled") {
+		t.Fatalf("expected enabled enforcement mode in first-use messaging, got: %s", errOut.String())
 	}
 }
 

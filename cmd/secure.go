@@ -183,9 +183,12 @@ func resolveSecureUnlockPassword(cmd *cobra.Command) (string, error) {
 	}
 
 	if firstUse {
+		securityMode, securityNote := securityEnforcementSurface(repo)
 		fmt.Fprintln(cmd.ErrOrStderr(), "No secure keystore found in DOCKET_HOME.")
 		fmt.Fprintln(cmd.ErrOrStderr(), "This will create a local keystore for secure-mode operations.")
 		fmt.Fprintln(cmd.ErrOrStderr(), "Choose a password you will need again to unlock secure mode on this machine.")
+		fmt.Fprintf(cmd.ErrOrStderr(), "Security enforcement: %s.\n", securityMode)
+		fmt.Fprintf(cmd.ErrOrStderr(), "Enforcement note: %s\n", securityNote)
 	}
 
 	password, err := securePromptPassword(cmd, promptLabel(firstUse, false))

@@ -44,6 +44,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		if err != nil {
 			return err
 		}
+		securityMode, securityNote := securityEnforcementSurfaceFromConfig(cfg)
 		if startRun || startAuto {
 			return runStartManaged(cmd, ctx, s, cfg)
 		}
@@ -75,15 +76,17 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 			agentQuickstart := buildStartAgentQuickstart(repo, "", "")
 			if format == "json" {
 				printJSON(cmd, map[string]interface{}{
-					"ticket":               nil,
-					"no_workable_ticket":   true,
-					"message":              message,
-					"runtime_policy_mode":  runtimePolicyMode,
-					"runtime_policy_note":  runtimePolicyMessage,
-					"active_workflow_hash": activeWorkflowHash,
-					"capability_digest":    capabilityDigest,
-					"llm_quick_path":       quickPath,
-					"agent_quickstart":     agentQuickstart,
+					"ticket":                    nil,
+					"no_workable_ticket":        true,
+					"message":                   message,
+					"runtime_policy_mode":       runtimePolicyMode,
+					"runtime_policy_note":       runtimePolicyMessage,
+					"security_enforcement_mode": securityMode,
+					"security_enforcement_note": securityNote,
+					"active_workflow_hash":      activeWorkflowHash,
+					"capability_digest":         capabilityDigest,
+					"llm_quick_path":            quickPath,
+					"agent_quickstart":          agentQuickstart,
 				})
 				return nil
 			}
@@ -174,20 +177,22 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		// 3. Provide the Agent Prompt
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{
-				"ticket":               t,
-				"model_tier":           decision.SelectedTier,
-				"model_id":             model.ID,
-				"routing_rationale":    decision.Rationale,
-				"runtime_policy_mode":  runtimePolicyMode,
-				"runtime_policy_note":  runtimePolicyMessage,
-				"active_workflow_hash": activeWorkflowHash,
-				"managed_run_branch":   managedBranch,
-				"managed_run_worktree": worktreePath,
-				"agent_instruction":    instruction,
-				"capability_digest":    capabilityDigest,
-				"learn_replay":         learnReplay,
-				"llm_quick_path":       quickPath,
-				"agent_quickstart":     agentQuickstart,
+				"ticket":                    t,
+				"model_tier":                decision.SelectedTier,
+				"model_id":                  model.ID,
+				"routing_rationale":         decision.Rationale,
+				"runtime_policy_mode":       runtimePolicyMode,
+				"runtime_policy_note":       runtimePolicyMessage,
+				"security_enforcement_mode": securityMode,
+				"security_enforcement_note": securityNote,
+				"active_workflow_hash":      activeWorkflowHash,
+				"managed_run_branch":        managedBranch,
+				"managed_run_worktree":      worktreePath,
+				"agent_instruction":         instruction,
+				"capability_digest":         capabilityDigest,
+				"learn_replay":              learnReplay,
+				"llm_quick_path":            quickPath,
+				"agent_quickstart":          agentQuickstart,
 			})
 			return nil
 		}
@@ -199,6 +204,8 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
 		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
 		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
+		fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
+		fmt.Fprintf(cmd.OutOrStdout(), "Enforcement note: %s\n", securityNote)
 		fmt.Fprintf(cmd.OutOrStdout(), "Managed run binding: branch=%s | worktree=%s\n", managedBranch, worktreePath)
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartAgentQuickstartHuman(agentQuickstart))
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
