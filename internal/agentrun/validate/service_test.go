@@ -79,6 +79,79 @@ func TestServiceValidateRejectsMissingCommitAndDirtyWorktree(t *testing.T) {
 	}
 }
 
+func TestServiceValidateRejectsMismatchedResultTicketID(t *testing.T) {
+	t.Parallel()
+
+	env := buildValidationEnv(t)
+	sha := commitWorktreeChange(t, env.worktreePath, "feature.txt", "ok\n")
+
+	result, err := env.service.Validate(context.Background(), agentrun.ValidationInput{
+		TicketID:     "TKT-377",
+		RepoRoot:     env.repoRoot,
+		WorktreePath: env.worktreePath,
+		Branch:       "docket/TKT-377",
+		Result: agentrun.Result{
+			Status:    agentrun.StatusDone,
+			TicketID:  "TKT-999",
+			Role:      agentrun.RoleImplementer,
+			CommitSHA: sha,
+			Tests:     "passed",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if result.Accepted {
+		t.Fatalf("expected validation rejection, got %#v", result)
+	}
+	if joined := strings.Join(result.Reasons, "\n"); !strings.Contains(joined, "result ticket") {
+		t.Fatalf("expected mismatched ticket reason, got %q", joined)
+	}
+}
+
+func TestServiceValidateRejectsCommitOutsideManagedBranch(t *testing.T) {
+	t.Parallel()
+
+	env := buildValidationEnv(t)
+	if err := os.WriteFile(filepath.Join(env.worktreePath, "feature.txt"), []byte("off-branch\n"), 0o644); err != nil {
+		t.Fatalf("write feature file: %v", err)
+	}
+	runGit(t, env.worktreePath, "add", ".")
+	runGit(t, env.worktreePath, "commit", "-m", "feat: off branch change\n\nTicket: TKT-377")
+	offBranchSHA := strings.TrimSpace(runGitOutput(t, env.worktreePath, "rev-parse", "HEAD"))
+	runGit(t, env.worktreePath, "checkout", "-b", "temp/off-branch")
+	runGit(t, env.worktreePath, "checkout", "docket/TKT-377")
+	runGit(t, env.worktreePath, "reset", "--hard", "HEAD~1")
+	if err := os.WriteFile(filepath.Join(env.worktreePath, "feature.txt"), []byte("on-branch\n"), 0o644); err != nil {
+		t.Fatalf("write on-branch feature file: %v", err)
+	}
+	runGit(t, env.worktreePath, "add", ".")
+	runGit(t, env.worktreePath, "commit", "-m", "feat: managed branch change\n\nTicket: TKT-377")
+
+	result, err := env.service.Validate(context.Background(), agentrun.ValidationInput{
+		TicketID:     "TKT-377",
+		RepoRoot:     env.repoRoot,
+		WorktreePath: env.worktreePath,
+		Branch:       "docket/TKT-377",
+		Result: agentrun.Result{
+			Status:    agentrun.StatusDone,
+			TicketID:  "TKT-377",
+			Role:      agentrun.RoleImplementer,
+			CommitSHA: offBranchSHA,
+			Tests:     "passed",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if result.Accepted {
+		t.Fatalf("expected validation rejection, got %#v", result)
+	}
+	if joined := strings.Join(result.Reasons, "\n"); !strings.Contains(joined, "not reachable from branch") {
+		t.Fatalf("expected branch reachability reason, got %q", joined)
+	}
+}
+
 func TestServiceFinalizeAdvancesDoneRunToReviewAndRecordsHandoff(t *testing.T) {
 	t.Parallel()
 
