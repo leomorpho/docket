@@ -65,6 +65,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		if err != nil {
 			return err
 		}
+		resumeMode := ""
 		var autoHealResult *queueHealResult
 		if t == nil && shouldAutoHealQueueOnStart() {
 			heal, healErr := executeQueueHeal(ctx, s, cfg, true)
@@ -77,6 +78,16 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				if err != nil {
 					return err
 				}
+			}
+		}
+		if t == nil {
+			resume, resumeErr := selectResumableActiveTicket(ctx, s, cfg)
+			if resumeErr != nil {
+				return resumeErr
+			}
+			if resume != nil {
+				t = resume
+				resumeMode = "active"
 			}
 		}
 		if t == nil {
@@ -105,6 +116,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 					"llm_quick_path":            quickPath,
 					"agent_quickstart":          agentQuickstart,
 					"queue_heal":                autoHealResult,
+					"resume_mode":               resumeMode,
 				})
 				return nil
 			}
@@ -139,43 +151,57 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		}
 
 		previousState := t.State
-		t, worktreePath, err := deps.workflow.StartTask(ctx, t.ID, actor, cfg)
-		if err != nil {
-			return failStart("workflow.start_task", err)
+		worktreePath := repo
+		if resumeMode == "active" {
+			if format != "json" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Resuming active ticket: %s\n", t.ID)
+			}
+			if run, ok, runErr := ns.GetRunManifest(repo, t.ID); runErr == nil && ok {
+				if strings.TrimSpace(run.WorktreePath) != "" {
+					worktreePath = run.WorktreePath
+				}
+			}
+		} else {
+			t, worktreePath, err = deps.workflow.StartTask(ctx, t.ID, actor, cfg)
+			if err != nil {
+				return failStart("workflow.start_task", err)
+			}
+			emitStateTransitionEvent(
+				cmd.ErrOrStderr(),
+				"start",
+				t.ID,
+				actor,
+				string(previousState),
+				string(t.State),
+				"start selected next ticket",
+				[]string{"state_transition_validated", "next_ticket_selected"},
+			)
 		}
-		emitStateTransitionEvent(
-			cmd.ErrOrStderr(),
-			"start",
-			t.ID,
-			actor,
-			string(previousState),
-			string(t.State),
-			"start selected next ticket",
-			[]string{"state_transition_validated", "next_ticket_selected"},
-		)
 		if worktreePath == "" {
 			worktreePath = repo
 		}
-		hookManager := hooks.NewManager()
-		hooks.RegisterCoreHooks(hookManager)
-		targetState := activeWorkflowState(cfg)
-		advisory, hookErr := hookManager.Run(hooks.EventRunStart, hooks.Context{
-			Repo:         repo,
-			TicketID:     t.ID,
-			Actor:        actor,
-			ManagedRun:   strings.HasPrefix(actor, "agent:"),
-			WorktreePath: worktreePath,
-			Branch:       "docket/" + t.ID,
-			TargetState:  targetState,
-		})
-		for _, msg := range advisory {
-			fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
-		}
-		if hookErr != nil {
-			return failStart("hooks.run_start", fmt.Errorf("start hook failed: %w", hookErr))
-		}
-		if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
-			return failStart("security.record_run_start", fmt.Errorf("recording run manifest: %w", err))
+		if resumeMode != "active" {
+			hookManager := hooks.NewManager()
+			hooks.RegisterCoreHooks(hookManager)
+			targetState := activeWorkflowState(cfg)
+			advisory, hookErr := hookManager.Run(hooks.EventRunStart, hooks.Context{
+				Repo:         repo,
+				TicketID:     t.ID,
+				Actor:        actor,
+				ManagedRun:   strings.HasPrefix(actor, "agent:"),
+				WorktreePath: worktreePath,
+				Branch:       "docket/" + t.ID,
+				TargetState:  targetState,
+			})
+			for _, msg := range advisory {
+				fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
+			}
+			if hookErr != nil {
+				return failStart("hooks.run_start", fmt.Errorf("start hook failed: %w", hookErr))
+			}
+			if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
+				return failStart("security.record_run_start", fmt.Errorf("recording run manifest: %w", err))
+			}
 		}
 		tokenEstimate, risk, failureCount := routingInputs(t)
 		preferredTier := workflow.SelectCapabilityTier(tokenEstimate, risk, failureCount)
@@ -185,7 +211,12 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 			return failStart("workflow.resolve_model_route", fmt.Errorf("resolving model route: %w", routeErr))
 		}
 		if err := ns.RecordRunRoutingDecision(repo, t.ID, string(decision.SelectedTier), adapter.ProviderName(), model.ID, decision.Rationale); err != nil {
-			return failStart("security.record_run_routing", fmt.Errorf("recording run routing metadata: %w", err))
+			if resumeMode == "active" && strings.Contains(strings.ToLower(err.Error()), "run manifest missing") {
+				// Resumed active tickets may come from legacy/manual states without a managed run manifest.
+				// Keep start usable by continuing without routing metadata persistence.
+			} else {
+				return failStart("security.record_run_routing", fmt.Errorf("recording run routing metadata: %w", err))
+			}
 		}
 		lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, lifecycle.StatusOK)
 		instruction := startInstruction(t.ID)
@@ -214,6 +245,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				"learn_replay":              learnReplay,
 				"llm_quick_path":            quickPath,
 				"agent_quickstart":          agentQuickstart,
+				"resume_mode":               resumeMode,
 			}
 			if autoHealResult != nil {
 				payload["queue_heal"] = autoHealResult
@@ -300,6 +332,15 @@ func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cf
 			if err != nil {
 				return err
 			}
+		}
+	}
+	if t == nil {
+		resume, resumeErr := selectResumableActiveTicket(ctx, s, cfg)
+		if resumeErr != nil {
+			return resumeErr
+		}
+		if resume != nil {
+			t = resume
 		}
 	}
 	if t == nil {
@@ -424,6 +465,58 @@ func selectNextTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (
 	}
 
 	return claimedFallback, nil
+}
+
+func selectResumableActiveTicket(ctx context.Context, s *local.Store, cfg *ticket.Config) (*ticket.Ticket, error) {
+	activeStates := cfg.StatesWithRole("active")
+	if len(activeStates) == 0 {
+		return nil, nil
+	}
+	filter := store.Filter{States: make([]ticket.State, 0, len(activeStates))}
+	for _, state := range activeStates {
+		filter.States = append(filter.States, ticket.State(state))
+	}
+	tickets, err := s.ListTickets(ctx, filter)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(tickets) == 0 {
+		return nil, nil
+	}
+	started := make([]*ticket.Ticket, 0, len(tickets))
+	for _, item := range tickets {
+		full, getErr := s.GetTicket(ctx, item.ID)
+		if getErr != nil {
+			return nil, getErr
+		}
+		if full == nil || full.StartedAt.IsZero() {
+			continue
+		}
+		started = append(started, full)
+	}
+	if len(started) == 0 {
+		return nil, nil
+	}
+	best := started[0]
+	bestTime := best.StartedAt
+	for _, t := range started[1:] {
+		if t.Priority != best.Priority {
+			if t.Priority < best.Priority {
+				best = t
+				bestTime = t.StartedAt
+			}
+			continue
+		}
+		candidateTime := t.StartedAt
+		if candidateTime.Before(bestTime) || (candidateTime.Equal(bestTime) && t.ID < best.ID) {
+			best = t
+			bestTime = candidateTime
+		}
+	}
+	return best, nil
 }
 
 func listClaimedTicketIDs(repoRoot string) (map[string]bool, error) {

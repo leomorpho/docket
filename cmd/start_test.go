@@ -1132,3 +1132,72 @@ func TestStartCmd_AutomationAutoHealsBlockedQueue(t *testing.T) {
 		t.Fatalf("expected auto-heal to remove blockers, got %#v", updated.BlockedBy)
 	}
 }
+
+func TestStartCmd_ResumesActiveTicketWhenNoWorkableStartable(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpRepo
+	format = "json"
+
+	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(tmpRepo)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-399",
+			Seq:         399,
+			Title:       "Active blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    2,
+			CreatedAt:   now,
+			StartedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "active ticket in progress",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-400",
+			Seq:         400,
+			Title:       "Blocked backlog",
+			State:       ticket.State("backlog"),
+			Priority:    3,
+			BlockedBy:   []string{"TKT-399"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "human:test",
+			Description: "blocked backlog ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("CreateTicket failed: %v", err)
+		}
+	}
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetErr(b)
+	rootCmd.SetArgs([]string{"start", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start failed: %v\n%s", err, b.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(b.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload failed: %v\n%s", err, b.String())
+	}
+	if payload["no_workable_ticket"] == true {
+		t.Fatalf("expected start to resume active ticket instead of no_workable_ticket=true, payload=%#v", payload)
+	}
+	if payload["resume_mode"] != "active" {
+		t.Fatalf("expected resume_mode=active, got %#v", payload["resume_mode"])
+	}
+	ticketPayload, ok := payload["ticket"].(map[string]any)
+	if !ok || ticketPayload["id"] != "TKT-399" {
+		t.Fatalf("expected resumed ticket TKT-399, got %#v", payload["ticket"])
+	}
+}
