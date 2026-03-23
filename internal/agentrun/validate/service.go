@@ -58,12 +58,29 @@ func (s *Service) Validate(ctx context.Context, input agentrun.ValidationInput) 
 	if input.Result.Status != agentrun.StatusDone {
 		return agentrun.ValidationResult{Accepted: false, Reasons: []string{"only done results can be accepted"}}, nil
 	}
+	if strings.TrimSpace(input.TicketID) == "" {
+		return agentrun.ValidationResult{Accepted: false, Reasons: []string{"ticket id is required"}}, nil
+	}
+	if input.Result.TicketID != input.TicketID {
+		reasons = append(reasons, fmt.Sprintf("result ticket %s does not match expected ticket %s", input.Result.TicketID, input.TicketID))
+	}
+	if input.Result.Role != agentrun.RoleImplementer {
+		reasons = append(reasons, fmt.Sprintf("result role %s is not valid for implementer closeout", input.Result.Role))
+	}
 	ok, err := docketgit.CommitExists(input.WorktreePath, input.Result.CommitSHA)
 	if err != nil {
 		return agentrun.ValidationResult{}, err
 	}
 	if !ok {
 		reasons = append(reasons, fmt.Sprintf("commit %s does not exist in worktree", input.Result.CommitSHA))
+	} else if branch := strings.TrimSpace(input.Branch); branch != "" {
+		onBranch, err := docketgit.IsAncestor(input.WorktreePath, input.Result.CommitSHA, branch)
+		if err != nil {
+			return agentrun.ValidationResult{}, err
+		}
+		if !onBranch {
+			reasons = append(reasons, fmt.Sprintf("commit %s is not reachable from branch %s", input.Result.CommitSHA, branch))
+		}
 	}
 	clean, err := docketgit.IsClean(input.WorktreePath)
 	if err != nil {
@@ -75,10 +92,8 @@ func (s *Service) Validate(ctx context.Context, input agentrun.ValidationInput) 
 	if acErr := s.runAcceptanceCommands(ctx, input); acErr != nil {
 		reasons = append(reasons, acErr.Error())
 	}
-	if len(s.validationErrors(input.TicketID)) > 0 {
-		for _, err := range s.validationErrors(input.TicketID) {
-			reasons = append(reasons, err.Message)
-		}
+	for _, validationErr := range s.validationErrors(input.TicketID) {
+		reasons = append(reasons, validationErr.Message)
 	}
 	return agentrun.ValidationResult{
 		Accepted: len(reasons) == 0,
@@ -201,4 +216,3 @@ func buildHandoff(input agentrun.ValidationInput) string {
 		strings.TrimSpace(input.Result.Tests),
 	)
 }
-
