@@ -32,7 +32,7 @@ func TestBuildMutationErrorEnvelopeValidationTransitionAndStorage(t *testing.T) 
 		t.Fatalf("expected done transition fix to point agents at in-review, got %+v", transition)
 	}
 
-	humanOnly := buildMutationErrorEnvelope(errors.New("transition to done is human-only. If you are an LLM agent, stop at `in-review` instead; that is enough to unblock yourself and hand off for human verification"))
+	humanOnly := buildMutationErrorEnvelope(errors.New("transition to the configured completed state (default `done`) is human-only. If you are an LLM agent, stop at the configured review state (default `in-review`) instead; that is enough to unblock yourself and hand off for human verification"))
 	if humanOnly.ErrorCode != "transition_error" || humanOnly.Field != "state" {
 		t.Fatalf("expected human-only transition envelope with state field, got %+v", humanOnly)
 	}

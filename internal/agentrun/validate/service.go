@@ -209,7 +209,7 @@ func (s *Service) recordOutcomeComment(ctx context.Context, input agentrun.Valid
 
 func buildHandoff(input agentrun.ValidationInput) string {
 	return fmt.Sprintf(
-		"*Last updated: %s by agent:docket-runner*\n\n**Current state:** in-review.\n\n**Decisions made:** Managed run finished successfully at commit %s.\n\n**Files touched:** See commit %s.\n\n**Remaining work:** Human review.\n\n**AC status:** %s.",
+		"*Last updated: %s by agent:docket-runner*\n\n**Current state:** Ready for the configured review workflow state (default `in-review`).\n\n**Decisions made:** Managed run finished successfully at commit %s.\n\n**Files touched:** See commit %s.\n\n**Remaining work:** Human review.\n\n**AC status:** %s.",
 		time.Now().UTC().Format(time.RFC3339),
 		input.Result.CommitSHA,
 		input.Result.CommitSHA,

@@ -24,6 +24,7 @@ type startAgentQuickstart struct {
 }
 
 func buildStartAgentQuickstart(repoRoot, managedBranch, managedWorktree string) startAgentQuickstart {
+	// Defaults are only fallback examples when config cannot be loaded.
 	workState := "in-progress"
 	reviewState := "in-review"
 	if cfg, err := ticket.LoadConfig(repoRoot); err == nil {

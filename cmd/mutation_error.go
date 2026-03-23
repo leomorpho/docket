@@ -92,15 +92,15 @@ func buildMutationErrorEnvelope(err error) mutationErrorEnvelope {
 		env.ErrorCode = "storage_error"
 		env.Retryable = true
 		env.SuggestedFix = "Retry the command. If it persists, rerun after active writes settle."
-	case strings.Contains(lower, "human-only") && strings.Contains(lower, "in-review"):
+	case strings.Contains(lower, "human-only") && (strings.Contains(lower, "in-review") || strings.Contains(lower, "review state")):
 		env.ErrorCode = "transition_error"
 		env.Field = "state"
-		env.SuggestedFix = "If you are an LLM agent, transition the ticket to `in-review` instead of `done`. Human reviewers advance tickets to `done` after verification."
+		env.SuggestedFix = "If you are an LLM agent, transition the ticket to the configured review state (default `in-review`) instead of the configured completed state (default `done`). Human reviewers advance tickets after verification."
 	case strings.Contains(lower, "cannot transition"), strings.Contains(lower, "cannot advance to"):
 		env.ErrorCode = "transition_error"
 		env.Field = "state"
 		if strings.Contains(lower, "\"done\"") || strings.Contains(lower, " to done") {
-			env.SuggestedFix = "If you are an LLM agent, transition the ticket to `in-review` instead of `done`. Human reviewers advance tickets to `done` after verification."
+			env.SuggestedFix = "If you are an LLM agent, transition the ticket to the configured review state (default `in-review`) instead of the configured completed state (default `done`). Human reviewers advance tickets after verification."
 		} else {
 			env.SuggestedFix = "Use a valid state transition from `docket config` workflow states."
 		}
