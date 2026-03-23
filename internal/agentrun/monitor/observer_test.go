@@ -207,6 +207,29 @@ func TestObserverStoresRuntimeWarningsFromVisibleAndStderrOutput(t *testing.T) {
 	}
 }
 
+func TestObserverApplyLinePrefersAuthenticationWarningOverJsReplWarning(t *testing.T) {
+	t.Parallel()
+
+	observer := New()
+	status := runruntime.StatusSnapshot{TicketID: "TKT-381"}
+
+	jsReplLine := "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"error\",\"message\":\"Disabled `js_repl` for this session because the configured Node runtime is unavailable or incompatible.\"}}"
+	authLine := "2026-03-23T01:49:18.452882Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when AuthRequired(AuthRequiredError { www_authenticate_header: \"Bearer error=\\\"invalid_token\\\", error_description=\\\"Missing Authorization header\\\", resource_metadata=\\\"https://mcp.instantdb.com/.well-known/oauth-protected-resource/mcp\\\"\" })"
+
+	observer.applyLine("TKT-381", "stdout", jsReplLine, &status)
+	observer.applyLine("TKT-381", "stderr", authLine, &status)
+	if status.Warning != "optional MCP server mcp.instantdb.com rejected authentication; continuing without it" {
+		t.Fatalf("expected auth warning to win after stderr line, got %#v", status.Warning)
+	}
+
+	status.Warning = ""
+	observer.applyLine("TKT-381", "stderr", authLine, &status)
+	observer.applyLine("TKT-381", "stdout", jsReplLine, &status)
+	if status.Warning != "optional MCP server mcp.instantdb.com rejected authentication; continuing without it" {
+		t.Fatalf("expected auth warning to remain authoritative, got %#v", status.Warning)
+	}
+}
+
 func TestObserverKeepsExistingStableSessionIDWhenResumeReportsDifferentThread(t *testing.T) {
 	t.Parallel()
 

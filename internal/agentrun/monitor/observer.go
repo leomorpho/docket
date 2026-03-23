@@ -171,13 +171,16 @@ func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.S
 		}
 	}
 	if warning := runtimeWarningFromLine(stream, line, visibleTexts); warning != "" {
-		if warning != status.Warning && o.runtime != nil {
+		replace := shouldReplaceWarning(status.Warning, warning)
+		if replace && o.runtime != nil {
 			_ = o.runtime.AppendTranscript(ticketID, runruntime.TranscriptEntry{
 				At:   now.Format(time.RFC3339Nano),
 				Text: "warning: " + warning,
 			})
 		}
-		status.Warning = warning
+		if replace {
+			status.Warning = warning
+		}
 	}
 	_ = o.writeStatus(*status)
 }
@@ -539,6 +542,28 @@ func runtimeWarningFromVisibleText(text string) string {
 		return text
 	default:
 		return ""
+	}
+}
+
+func shouldReplaceWarning(current, candidate string) bool {
+	current = strings.TrimSpace(current)
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return false
+	}
+	if current == "" {
+		return true
+	}
+	return warningPriority(candidate) >= warningPriority(current)
+}
+
+func warningPriority(warning string) int {
+	warning = strings.TrimSpace(strings.ToLower(warning))
+	switch {
+	case strings.Contains(warning, "rejected authentication"):
+		return 2
+	default:
+		return 1
 	}
 }
 
