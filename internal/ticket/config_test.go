@@ -873,3 +873,41 @@ func TestLoadConfigSecurityEnforcementFlag(t *testing.T) {
 		t.Fatal("expected security_enforcement=true after save/load")
 	}
 }
+
+func TestLoadConfigSecurityEnforcementDefaultsFalseWhenOmitted(t *testing.T) {
+	tmpDir := t.TempDir()
+	raw := `{"counter":1,"backend":"local","states":{"backlog":{"label":"Backlog","open":true,"column":0,"next":["todo"]},"todo":{"label":"Todo","open":true,"column":1,"next":["done"]},"done":{"label":"Done","open":false,"column":2,"next":[]}},"labels":["bug"],"commit_sessions":false,"default_state":"backlog","default_priority":1}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(ConfigPath(tmpDir), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	loaded, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if loaded.SecurityEnforcement {
+		t.Fatal("expected security_enforcement default false when field is omitted")
+	}
+}
+
+func TestLoadConfigSecurityEnforcementIgnoresLocalEnvOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.SecurityEnforcement = false
+	if err := SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	t.Setenv("DOCKET_HOOK_AC_ENFORCE", "1")
+	t.Setenv("DOCKET_ENFORCE_HOOKS", "1")
+
+	loaded, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if loaded.SecurityEnforcement {
+		t.Fatal("expected repo config to remain source of truth for security enforcement")
+	}
+}

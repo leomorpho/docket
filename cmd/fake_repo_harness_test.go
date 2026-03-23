@@ -214,7 +214,14 @@ func TestFakeRepoHarnessFailureRetryIntegration(t *testing.T) {
 	h.seedTicket("TKT-903", 903, ticket.State("todo"), []ticket.AcceptanceCriterion{
 		{Description: "ready file exists", Run: "test -f .ready"},
 	})
-	h.t.Setenv("DOCKET_HOOK_AC_ENFORCE", "1")
+	cfg, err := ticket.LoadConfig(h.repo)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
 
 	failOut, err := h.run("__hook-ac-check", "TKT-903")
 	if err == nil {

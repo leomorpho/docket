@@ -105,9 +105,6 @@ func runHookACCheck(cmd *cobra.Command, id string) (runErr error) {
 }
 
 func shouldEnforceSecurityHooks(repoRoot string) bool {
-	if os.Getenv("DOCKET_HOOK_AC_ENFORCE") == "1" || os.Getenv("DOCKET_ENFORCE_HOOKS") == "1" {
-		return true
-	}
 	cfg, err := ticket.LoadConfig(repoRoot)
 	if err != nil || cfg == nil {
 		return false

@@ -286,7 +286,7 @@ func TestHookACCheckNonInteractiveAdvisoryDefault(t *testing.T) {
 	}
 }
 
-func TestHookACCheckEnforcedFailsDeterministically(t *testing.T) {
+func TestHookACCheckEnvOverrideDoesNotEnforceWithoutRepoConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "human"
@@ -303,10 +303,14 @@ func TestHookACCheckEnforcedFailsDeterministically(t *testing.T) {
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetErr(new(bytes.Buffer))
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
 	rootCmd.SetArgs([]string{"__hook-ac-check", "TKT-007"})
-	if err := rootCmd.Execute(); err == nil {
-		t.Fatal("expected enforced hook mode to fail on incomplete AC")
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected advisory mode without repo config enforcement, got: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "advisory") {
+		t.Fatalf("expected advisory guidance, got: %s", errBuf.String())
 	}
 }
 
