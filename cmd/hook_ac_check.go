@@ -9,6 +9,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/store/local"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +49,7 @@ func runHookACCheck(cmd *cobra.Command, id string) (runErr error) {
 	}
 
 	updated := false
-	enforce := os.Getenv("DOCKET_HOOK_AC_ENFORCE") == "1" || os.Getenv("DOCKET_ENFORCE_HOOKS") == "1"
+	enforce := shouldEnforceSecurityHooks(repo)
 	for i := range t.AC {
 		ac := &t.AC[i]
 		if ac.Done {
@@ -101,6 +102,17 @@ func runHookACCheck(cmd *cobra.Command, id string) (runErr error) {
 	}
 	lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseACCheck, lifecycle.StatusOK)
 	return nil
+}
+
+func shouldEnforceSecurityHooks(repoRoot string) bool {
+	if os.Getenv("DOCKET_HOOK_AC_ENFORCE") == "1" || os.Getenv("DOCKET_ENFORCE_HOOKS") == "1" {
+		return true
+	}
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil || cfg == nil {
+		return false
+	}
+	return cfg.SecurityEnforcement
 }
 
 func init() {

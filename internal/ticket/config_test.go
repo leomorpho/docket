@@ -856,3 +856,20 @@ func TestLoadConfigSemanticInvalidEnv(t *testing.T) {
 		t.Fatalf("expected env parse error, got %v", err)
 	}
 }
+
+func TestLoadConfigSecurityEnforcementFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	loaded, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if !loaded.SecurityEnforcement {
+		t.Fatal("expected security_enforcement=true after save/load")
+	}
+}
