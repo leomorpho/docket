@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 )
 
 var backlogApplySpecPath string
+var backlogApplyWorklistPath string
+var backlogApplyParent string
 var backlogApplyAllowEmptyStartable bool
 
 var tktIDPattern = regexp.MustCompile(`^TKT-\d+$`)
@@ -32,8 +35,16 @@ var backlogApplyCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		defer func() {
 			backlogApplySpecPath = ""
+			backlogApplyWorklistPath = ""
+			backlogApplyParent = ""
 			backlogApplyAllowEmptyStartable = false
 			if f := cmd.Flags().Lookup("spec"); f != nil {
+				f.Changed = false
+			}
+			if f := cmd.Flags().Lookup("worklist"); f != nil {
+				f.Changed = false
+			}
+			if f := cmd.Flags().Lookup("parent"); f != nil {
 				f.Changed = false
 			}
 			if f := cmd.Flags().Lookup("allow-empty-startable-leaf"); f != nil {
@@ -44,27 +55,40 @@ var backlogApplyCmd = &cobra.Command{
 			runErr = renderMutationError(cmd, runErr)
 		}()
 
-		if strings.TrimSpace(backlogApplySpecPath) == "" {
-			return fmt.Errorf("--spec is required")
-		}
-		raw, err := readTicketApplySpec(cmd, backlogApplySpecPath)
-		if err != nil {
-			return err
+		if strings.TrimSpace(backlogApplySpecPath) != "" && strings.TrimSpace(backlogApplyWorklistPath) != "" {
+			return fmt.Errorf("--spec cannot be combined with --worklist")
 		}
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
 		}
-		spec, report, err := applyspec.ParseBacklogSpecWithStates(raw, applyAllowedStates(cfg))
-		if err != nil {
-			return fmt.Errorf("parse spec JSON: %w", err)
-		}
-		if !report.Valid() {
-			field := ""
-			if len(report.Errors) > 0 {
-				field = report.Errors[0].Path
+
+		var spec applyspec.BacklogApplySpec
+		if strings.TrimSpace(backlogApplyWorklistPath) != "" {
+			spec, err = buildBacklogSpecFromWorklist(cmd, backlogApplyWorklistPath, backlogApplyParent)
+			if err != nil {
+				return err
 			}
-			return renderMutationValidationError(cmd, fmt.Errorf("backlog apply spec validation failed"), field, report)
+		} else {
+			if strings.TrimSpace(backlogApplySpecPath) == "" {
+				return fmt.Errorf("either --spec or --worklist is required")
+			}
+			raw, err := readTicketApplySpec(cmd, backlogApplySpecPath)
+			if err != nil {
+				return err
+			}
+			parsed, report, err := applyspec.ParseBacklogSpecWithStates(raw, applyAllowedStates(cfg))
+			if err != nil {
+				return fmt.Errorf("parse spec JSON: %w", err)
+			}
+			if !report.Valid() {
+				field := ""
+				if len(report.Errors) > 0 {
+					field = report.Errors[0].Path
+				}
+				return renderMutationValidationError(cmd, fmt.Errorf("backlog apply spec validation failed"), field, report)
+			}
+			spec = parsed
 		}
 
 		res, err := executeBacklogApply(context.Background(), repo, cfg, spec, backlogApplyAllowEmptyStartable)
@@ -205,6 +229,57 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 	}, nil
 }
 
+func buildBacklogSpecFromWorklist(cmd *cobra.Command, path, parent string) (applyspec.BacklogApplySpec, error) {
+	raw, err := readTicketApplySpec(cmd, path)
+	if err != nil {
+		return applyspec.BacklogApplySpec{}, err
+	}
+	parent = strings.TrimSpace(parent)
+	lines := strings.Split(string(raw), "\n")
+	tickets := make([]applyspec.BacklogTicketSpec, 0, len(lines))
+	for i, line := range lines {
+		title := normalizeWorklistTitle(line)
+		if title == "" {
+			continue
+		}
+		tickets = append(tickets, applyspec.BacklogTicketSpec{
+			Ref:         "item-" + strconv.Itoa(i+1),
+			Title:       title,
+			Description: "Draft ticket imported from worklist. Refine details during grooming.",
+			Parent:      parent,
+			State:       "backlog",
+		})
+	}
+	if len(tickets) == 0 {
+		return applyspec.BacklogApplySpec{}, fmt.Errorf("worklist did not contain any ticket titles")
+	}
+	return applyspec.BacklogApplySpec{
+		Version: applyspec.SchemaVersionV1,
+		Tickets: tickets,
+	}, nil
+}
+
+func normalizeWorklistTitle(line string) string {
+	title := strings.TrimSpace(line)
+	if title == "" {
+		return ""
+	}
+	title = strings.TrimLeft(title, "-* \t")
+	if dot := strings.Index(title, "."); dot > 0 {
+		isNumbered := true
+		for _, ch := range title[:dot] {
+			if ch < '0' || ch > '9' {
+				isNumbered = false
+				break
+			}
+		}
+		if isNumbered {
+			title = strings.TrimSpace(title[dot+1:])
+		}
+	}
+	return strings.TrimSpace(title)
+}
+
 type idAllocation struct {
 	id  string
 	seq int
@@ -272,6 +347,8 @@ func readOptionalFile(path string) ([]byte, bool, error) {
 
 func init() {
 	backlogApplyCmd.Flags().StringVar(&backlogApplySpecPath, "spec", "", "spec file path (use - for stdin)")
+	backlogApplyCmd.Flags().StringVar(&backlogApplyWorklistPath, "worklist", "", "worklist file path (use - for stdin)")
+	backlogApplyCmd.Flags().StringVar(&backlogApplyParent, "parent", "", "parent ticket ID for all worklist-created drafts")
 	addAllowEmptyStartableLeafFlag(backlogApplyCmd, &backlogApplyAllowEmptyStartable)
 	backlogCmd.AddCommand(backlogApplyCmd)
 }

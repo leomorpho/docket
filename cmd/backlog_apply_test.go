@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -66,7 +68,9 @@ func TestBacklogApplyRollbackOnPartialFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
 	format = "json"
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	cfg := ticket.DefaultConfig()
+	cfg.Counter = 1
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -84,12 +88,12 @@ func TestBacklogApplyRollbackOnPartialFailure(t *testing.T) {
 		t.Fatal("expected backlog apply to fail")
 	}
 
-	cfg, err := ticket.LoadConfig(tmpDir)
+	loadedCfg, err := ticket.LoadConfig(tmpDir)
 	if err != nil {
 		t.Fatalf("load config after failure: %v", err)
 	}
-	if cfg.Counter != 0 {
-		t.Fatalf("expected counter rollback to 0, got %d", cfg.Counter)
+	if loadedCfg.Counter != 1 {
+		t.Fatalf("expected counter rollback to 1, got %d", loadedCfg.Counter)
 	}
 
 	if _, statErr := os.Stat(filepath.Join(tmpDir, ".docket", "tickets", "TKT-001.md")); !os.IsNotExist(statErr) {
@@ -189,5 +193,105 @@ func TestBacklogApplyUsesConfiguredWorkflowStatesWithIntermediaryState(t *testin
 	}
 	if child.State != ticket.State("testing") {
 		t.Fatalf("child state = %q, want testing", child.State)
+	}
+}
+
+func TestBacklogApplyWorklistCreatesDraftTicketsWithStableTitlesAndParent(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	cfg := ticket.DefaultConfig()
+	cfg.Counter = 1
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Roadmap Parent",
+		Description: "Parent for imported worklist items",
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+	}); err != nil {
+		t.Fatalf("create parent ticket: %v", err)
+	}
+
+	worklistPath := filepath.Join(tmpDir, "worklist.txt")
+	worklist := strings.Join([]string{
+		"- Build auth middleware",
+		"2. Add rate-limit guardrails",
+		"* Document rollout plan",
+	}, "\n")
+	if err := os.WriteFile(worklistPath, []byte(worklist), 0o644); err != nil {
+		t.Fatalf("write worklist: %v", err)
+	}
+
+	out, _, err := runRootCommand(t, "backlog", "apply", "--worklist", worklistPath, "--parent", "TKT-001")
+	if err != nil {
+		t.Fatalf("backlog apply --worklist failed: %v", err)
+	}
+
+	var res struct {
+		Created []string `json:"created_order"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("parse output: %v\noutput=%s", err, out)
+	}
+	if len(res.Created) != 3 {
+		t.Fatalf("expected 3 created tickets, got %#v", res)
+	}
+
+	tickets := make([]*ticket.Ticket, 0, len(res.Created))
+	for _, id := range res.Created {
+		tkt, err := s.GetTicket(context.Background(), id)
+		if err != nil {
+			t.Fatalf("get created ticket %s: %v", id, err)
+		}
+		tickets = append(tickets, tkt)
+	}
+
+	wantTitles := []string{
+		"Build auth middleware",
+		"Add rate-limit guardrails",
+		"Document rollout plan",
+	}
+	for i, tkt := range tickets {
+		if tkt.Title != wantTitles[i] {
+			t.Fatalf("ticket %d title = %q, want %q", i, tkt.Title, wantTitles[i])
+		}
+		if tkt.Parent != "TKT-001" {
+			t.Fatalf("ticket %d parent = %q, want TKT-001", i, tkt.Parent)
+		}
+		if !strings.Contains(strings.ToLower(tkt.Description), "worklist") {
+			t.Fatalf("ticket %d should remain draft/groomable, got description %q", i, tkt.Description)
+		}
+	}
+}
+
+func TestBacklogApplyWorklistRejectsEmptyInputAndSpecConflict(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	emptyPath := filepath.Join(tmpDir, "empty-worklist.txt")
+	if err := os.WriteFile(emptyPath, []byte("\n  \n"), 0o644); err != nil {
+		t.Fatalf("write empty worklist: %v", err)
+	}
+	if _, _, err := runRootCommand(t, "backlog", "apply", "--worklist", emptyPath); err == nil {
+		t.Fatal("expected empty worklist to fail")
+	}
+
+	specPath := writeSpecFile(t, tmpDir, "spec.json", `{"version":"docket.apply/v1","tickets":[]}`)
+	if _, _, err := runRootCommand(t, "backlog", "apply", "--spec", specPath, "--worklist", emptyPath); err == nil {
+		t.Fatal("expected --spec and --worklist conflict to fail")
 	}
 }
