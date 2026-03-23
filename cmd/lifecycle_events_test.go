@@ -27,7 +27,14 @@ func TestLifecycleEventsSimulatedRunOrderAndSchemaFixtures(t *testing.T) {
 		t.Fatalf("start failed: %v\n%s", err, out)
 	}
 
-	h.t.Setenv("DOCKET_HOOK_AC_ENFORCE", "1")
+	cfg, err := ticket.LoadConfig(h.repo)
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
 	hookOut, err := h.run("__hook-ac-check", "TKT-941")
 	if err == nil {
 		t.Fatalf("expected hook failure to emit tool.failure event, output=%s", hookOut)
