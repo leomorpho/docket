@@ -36,99 +36,9 @@ var queueHealCmd = &cobra.Command{
 			return err
 		}
 		s := local.New(repo)
-
-		// Healthy queue: no-op.
-		workableCount, err := workableStartableLeafCount(ctx, s, cfg)
+		res, err := executeQueueHeal(ctx, s, cfg, queueHealApply)
 		if err != nil {
 			return err
-		}
-		if workableCount > 0 {
-			res := queueHealResult{
-				Healthy: true,
-				Applied: false,
-				Summary: "Queue invariant already healthy: at least one workable startable leaf ticket exists.",
-			}
-			if format == "json" {
-				printJSON(cmd, res)
-				return nil
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), res.Summary)
-			return nil
-		}
-
-		target, unresolved, err := pickBlockedStartableLeaf(ctx, s, cfg)
-		if err != nil {
-			return err
-		}
-		if target == nil {
-			diagnosis, _ := workablepkg.DiagnoseEmpty(ctx, s, cfg)
-			res := queueHealResult{
-				Healthy: false,
-				Applied: false,
-				Summary: diagnosis.Summary(),
-				NextActions: []string{
-					"Create or unblock at least one startable topo:leaf ticket.",
-					"Use `docket list --state backlog --full --label topo:leaf` to inspect candidates.",
-				},
-			}
-			if format == "json" {
-				printJSON(cmd, res)
-				return nil
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), res.Summary)
-			for _, next := range res.NextActions {
-				fmt.Fprintf(cmd.OutOrStdout(), "Next: %s\n", next)
-			}
-			return nil
-		}
-
-		res := queueHealResult{
-			Healthy:  false,
-			Applied:  false,
-			TicketID: target.ID,
-			Summary: fmt.Sprintf("Suggested minimal heal: unblock %s by removing blocker %s.",
-				target.ID, unresolved[0]),
-			NextActions: []string{
-				fmt.Sprintf("docket update %s --unblock %s", target.ID, unresolved[0]),
-				"docket list --state open --format context",
-			},
-		}
-
-		if queueHealApply {
-			original := *target
-			original.BlockedBy = append([]string(nil), target.BlockedBy...)
-
-			removed := unresolved[0]
-			filtered := make([]string, 0, len(target.BlockedBy))
-			dropped := false
-			for _, blockerID := range target.BlockedBy {
-				if !dropped && blockerID == removed {
-					dropped = true
-					continue
-				}
-				filtered = append(filtered, blockerID)
-			}
-			target.BlockedBy = filtered
-			target.UpdatedAt = time.Now().UTC().Truncate(time.Second)
-			if err := s.UpdateTicket(ctx, target); err != nil {
-				return fmt.Errorf("applying queue heal on %s: %w", target.ID, err)
-			}
-			if err := enforceStartableLeafInvariant(ctx, s, cfg, false); err != nil {
-				original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
-				if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
-					return fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
-				}
-				return err
-			}
-			remaining, _ := s.UnresolvedBlockers(ctx, target)
-			res.Applied = true
-			res.RemovedBlocker = removed
-			res.RemainingBlocker = remaining
-			res.Summary = fmt.Sprintf("Applied queue heal: removed blocker %s from %s and restored a workable queue.", removed, target.ID)
-			res.NextActions = []string{
-				fmt.Sprintf("docket show %s --format context", target.ID),
-				"docket list --state open --format context",
-			}
 		}
 
 		if format == "json" {
@@ -141,6 +51,90 @@ var queueHealCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func executeQueueHeal(ctx context.Context, s *local.Store, cfg *ticket.Config, apply bool) (queueHealResult, error) {
+	// Healthy queue: no-op.
+	workableCount, err := workableStartableLeafCount(ctx, s, cfg)
+	if err != nil {
+		return queueHealResult{}, err
+	}
+	if workableCount > 0 {
+		return queueHealResult{
+			Healthy: true,
+			Applied: false,
+			Summary: "Queue invariant already healthy: at least one workable startable leaf ticket exists.",
+		}, nil
+	}
+
+	target, unresolved, err := pickBlockedStartableLeaf(ctx, s, cfg)
+	if err != nil {
+		return queueHealResult{}, err
+	}
+	if target == nil {
+		diagnosis, _ := workablepkg.DiagnoseEmpty(ctx, s, cfg)
+		return queueHealResult{
+			Healthy: false,
+			Applied: false,
+			Summary: diagnosis.Summary(),
+			NextActions: []string{
+				"Create or unblock at least one startable topo:leaf ticket.",
+				"Use `docket list --state backlog --full --label topo:leaf` to inspect candidates.",
+			},
+		}, nil
+	}
+
+	res := queueHealResult{
+		Healthy:  false,
+		Applied:  false,
+		TicketID: target.ID,
+		Summary: fmt.Sprintf("Suggested minimal heal: unblock %s by removing blocker %s.",
+			target.ID, unresolved[0]),
+		NextActions: []string{
+			fmt.Sprintf("docket update %s --unblock %s", target.ID, unresolved[0]),
+			"docket list --state open --format context",
+		},
+	}
+
+	if !apply {
+		return res, nil
+	}
+
+	original := *target
+	original.BlockedBy = append([]string(nil), target.BlockedBy...)
+
+	removed := unresolved[0]
+	filtered := make([]string, 0, len(target.BlockedBy))
+	dropped := false
+	for _, blockerID := range target.BlockedBy {
+		if !dropped && blockerID == removed {
+			dropped = true
+			continue
+		}
+		filtered = append(filtered, blockerID)
+	}
+	target.BlockedBy = filtered
+	target.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+	if err := s.UpdateTicket(ctx, target); err != nil {
+		return queueHealResult{}, fmt.Errorf("applying queue heal on %s: %w", target.ID, err)
+	}
+	if err := enforceStartableLeafInvariant(ctx, s, cfg, false); err != nil {
+		original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+		if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
+			return queueHealResult{}, fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+		}
+		return queueHealResult{}, err
+	}
+	remaining, _ := s.UnresolvedBlockers(ctx, target)
+	res.Applied = true
+	res.RemovedBlocker = removed
+	res.RemainingBlocker = remaining
+	res.Summary = fmt.Sprintf("Applied queue heal: removed blocker %s from %s and restored a workable queue.", removed, target.ID)
+	res.NextActions = []string{
+		fmt.Sprintf("docket show %s --format context", target.ID),
+		"docket list --state open --format context",
+	}
+	return res, nil
 }
 
 func pickBlockedStartableLeaf(ctx context.Context, s *local.Store, cfg *ticket.Config) (*ticket.Ticket, []string, error) {

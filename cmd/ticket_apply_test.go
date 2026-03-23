@@ -258,6 +258,122 @@ func TestTicketApplyUsesConfiguredWorkflowStates(t *testing.T) {
 	}
 }
 
+func TestTicketApplyCreateRejectsDisconnectedGraph(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.Counter = 1
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Existing",
+		Description: "Existing anchor ticket",
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+	}); err != nil {
+		t.Fatalf("seed existing ticket: %v", err)
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "operation": "create",
+  "ticket": {
+    "title": "Disconnected",
+    "description": "This ticket is not connected to existing graph."
+  }
+}`
+	specPath := writeSpecFile(t, tmpDir, "disconnected-create.json", spec)
+
+	_, _, err := runRootCommand(t, "ticket", "apply", "--spec", specPath)
+	if err == nil {
+		t.Fatal("expected disconnected create to fail")
+	}
+
+	if got, getErr := s.GetTicket(context.Background(), "TKT-002"); getErr != nil {
+		t.Fatalf("get TKT-002: %v", getErr)
+	} else if got != nil {
+		t.Fatalf("expected no disconnected ticket created, got %#v", got)
+	}
+}
+
+func TestTicketApplyUpdateRollsBackDisconnectedMutation(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.Counter = 2
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	root := &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Root",
+		Description: "Root ticket",
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+	}
+	child := &ticket.Ticket{
+		ID:          "TKT-002",
+		Seq:         2,
+		Title:       "Child",
+		Description: "Child ticket",
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		Parent:      "TKT-001",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+	}
+	if err := s.CreateTicket(context.Background(), root); err != nil {
+		t.Fatalf("seed root: %v", err)
+	}
+	if err := s.CreateTicket(context.Background(), child); err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "operation": "update",
+  "ticket": {
+    "id": "TKT-002",
+    "parent": ""
+  }
+}`
+	specPath := writeSpecFile(t, tmpDir, "disconnect-update.json", spec)
+
+	_, _, err := runRootCommand(t, "ticket", "apply", "--spec", specPath)
+	if err == nil {
+		t.Fatal("expected disconnected update to fail")
+	}
+
+	updated, getErr := s.GetTicket(context.Background(), "TKT-002")
+	if getErr != nil {
+		t.Fatalf("reload TKT-002: %v", getErr)
+	}
+	if updated.Parent != "TKT-001" {
+		t.Fatalf("expected rollback to keep parent TKT-001, got %q", updated.Parent)
+	}
+}
+
 func runRootCommand(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 	out := new(bytes.Buffer)

@@ -44,6 +44,7 @@ func TestScaffoldThenApplyTemplatesWithMinimalEdits(t *testing.T) {
 	entry0 := tickets[0].(map[string]any)
 	entry0["title"] = "Scaffold epic"
 	entry0["description"] = "Minimal backlog scaffold edit for apply integration."
+	entry0["parent"] = "TKT-001"
 	backlogSpecPath := h.writeJSONSpec("scaffold/backlog-spec.json", backlogSpec)
 
 	backlogApplyOut, err := h.run("--automation", "--format", "json", "backlog", "apply", "--spec", backlogSpecPath)

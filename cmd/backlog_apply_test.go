@@ -295,3 +295,58 @@ func TestBacklogApplyWorklistRejectsEmptyInputAndSpecConflict(t *testing.T) {
 		t.Fatal("expected --spec and --worklist conflict to fail")
 	}
 }
+
+func TestBacklogApplyRejectsDisconnectedGraph(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+
+	cfg := ticket.DefaultConfig()
+	cfg.Counter = 1
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Existing",
+		Description: "Existing anchor ticket",
+		State:       ticket.State("backlog"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+	}); err != nil {
+		t.Fatalf("seed existing ticket: %v", err)
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "tickets": [
+    {"ref": "new", "title": "Disconnected", "description": "Not connected to graph"}
+  ]
+}`
+	specPath := writeSpecFile(t, tmpDir, "disconnected-backlog.json", spec)
+
+	_, _, err := runRootCommand(t, "backlog", "apply", "--spec", specPath)
+	if err == nil {
+		t.Fatal("expected disconnected backlog apply to fail")
+	}
+
+	if got, getErr := s.GetTicket(context.Background(), "TKT-002"); getErr != nil {
+		t.Fatalf("get TKT-002: %v", getErr)
+	} else if got != nil {
+		t.Fatalf("expected no disconnected ticket created, got %#v", got)
+	}
+
+	loadedCfg, cfgErr := ticket.LoadConfig(tmpDir)
+	if cfgErr != nil {
+		t.Fatalf("load config after failure: %v", cfgErr)
+	}
+	if loadedCfg.Counter != 1 {
+		t.Fatalf("expected counter rollback to 1, got %d", loadedCfg.Counter)
+	}
+}

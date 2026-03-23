@@ -65,12 +65,29 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		if err != nil {
 			return err
 		}
+		var autoHealResult *queueHealResult
+		if t == nil && shouldAutoHealQueueOnStart() {
+			heal, healErr := executeQueueHeal(ctx, s, cfg, true)
+			if healErr != nil {
+				return healErr
+			}
+			autoHealResult = &heal
+			if heal.Applied {
+				t, err = selectNextTicket(ctx, s, cfg)
+				if err != nil {
+					return err
+				}
+			}
+		}
 		if t == nil {
 			diagnosis, diagErr := workablepkg.DiagnoseEmpty(ctx, s, cfg)
 			if diagErr != nil {
 				return diagErr
 			}
 			message := diagnosis.Summary()
+			if autoHealResult != nil {
+				message = autoHealResult.Summary + " " + message
+			}
 			capabilityDigest := buildStartCapabilityDigest(repo)
 			quickPath := buildLLMQuickPath()
 			agentQuickstart := buildStartAgentQuickstart(repo, "", "")
@@ -87,8 +104,12 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 					"capability_digest":         capabilityDigest,
 					"llm_quick_path":            quickPath,
 					"agent_quickstart":          agentQuickstart,
+					"queue_heal":                autoHealResult,
 				})
 				return nil
+			}
+			if autoHealResult != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "Auto-heal: %s\n", autoHealResult.Summary)
 			}
 			renderStartNoTicketIntro(cmd, message, runtimePolicyMode, runtimePolicyMessage, capabilityDigest, quickPath, agentQuickstart)
 			return nil
@@ -176,7 +197,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 
 		// 3. Provide the Agent Prompt
 		if format == "json" {
-			printJSON(cmd, map[string]interface{}{
+			payload := map[string]interface{}{
 				"ticket":                    t,
 				"model_tier":                decision.SelectedTier,
 				"model_id":                  model.ID,
@@ -193,8 +214,15 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				"learn_replay":              learnReplay,
 				"llm_quick_path":            quickPath,
 				"agent_quickstart":          agentQuickstart,
-			})
+			}
+			if autoHealResult != nil {
+				payload["queue_heal"] = autoHealResult
+			}
+			printJSON(cmd, payload)
 			return nil
+		}
+		if autoHealResult != nil {
+			fmt.Fprintf(cmd.OutOrStdout(), "Auto-heal: %s\n", autoHealResult.Summary)
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "\n=== Agent Prompt ===\n")
@@ -260,19 +288,40 @@ func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cf
 	if err != nil {
 		return err
 	}
+	var autoHealResult *queueHealResult
+	if t == nil && shouldAutoHealQueueOnStart() {
+		heal, healErr := executeQueueHeal(ctx, s, cfg, true)
+		if healErr != nil {
+			return healErr
+		}
+		autoHealResult = &heal
+		if heal.Applied {
+			t, err = selectNextTicket(ctx, s, cfg)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	if t == nil {
 		diagnosis, diagErr := workablepkg.DiagnoseEmpty(ctx, s, cfg)
 		if diagErr != nil {
 			return diagErr
 		}
 		message := diagnosis.Summary()
+		if autoHealResult != nil {
+			message = autoHealResult.Summary + " " + message
+		}
 		if format == "json" {
 			printJSON(cmd, map[string]interface{}{
 				"ticket":             nil,
 				"no_workable_ticket": true,
 				"message":            message,
+				"queue_heal":         autoHealResult,
 			})
 			return nil
+		}
+		if autoHealResult != nil {
+			fmt.Fprintf(cmd.OutOrStdout(), "Auto-heal: %s\n", autoHealResult.Summary)
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), message)
 		return nil
@@ -459,4 +508,22 @@ func init() {
 	startCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
 	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	rootCmd.AddCommand(startCmd)
+}
+
+func shouldAutoHealQueueOnStart() bool {
+	if !isAutomationMode() {
+		return false
+	}
+	raw := strings.TrimSpace(os.Getenv("DOCKET_START_AUTO_HEAL"))
+	if raw == "" {
+		return true
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }

@@ -114,6 +114,10 @@ var ticketApplyCmd = &cobra.Command{
 
 func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.TicketApplySpec, presence ticketApplyPresence, allowEmptyStartable bool) (ticketApplyOutput, error) {
 	s := local.New(repoRoot)
+	beforeComponents, err := currentComponentCount(ctx, ticketRepoRoot(repoRoot))
+	if err != nil {
+		return ticketApplyOutput{}, fmt.Errorf("checking graph health before apply: %w", err)
+	}
 	beforeWorkableCount, err := workableStartableLeafCount(ctx, s, cfg)
 	if err != nil {
 		return ticketApplyOutput{}, err
@@ -147,6 +151,13 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 			updated.UpdatedAt = now
 			if err := s.UpdateTicket(ctx, updated); err != nil {
 				return ticketApplyOutput{}, fmt.Errorf("updating ticket %s: %w", updated.ID, err)
+			}
+			if err := enforceMutationConnectivity(ctx, ticketRepoRoot(repoRoot), beforeComponents); err != nil {
+				original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+				if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
+					return ticketApplyOutput{}, fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+				}
+				return ticketApplyOutput{}, err
 			}
 			if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, allowEmptyStartable, beforeWorkableCount); err != nil {
 				original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
@@ -195,6 +206,12 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 	}
 	if spec.Ticket.State != "" {
 		newTicket.State = ticket.State(spec.Ticket.State)
+	}
+	if err := enforceCreateConnectivity(ctx, s, newTicket); err != nil {
+		if rollbackErr := rollbackCounter(""); rollbackErr != nil {
+			return ticketApplyOutput{}, fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+		}
+		return ticketApplyOutput{}, err
 	}
 	if err := s.CreateTicket(ctx, newTicket); err != nil {
 		if rollbackErr := rollbackCounter(""); rollbackErr != nil {

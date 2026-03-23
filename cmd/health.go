@@ -72,6 +72,9 @@ func enforceCreateConnectivity(ctx context.Context, s *local.Store, t *ticket.Ti
 }
 
 func enforceMutationConnectivity(ctx context.Context, repoRoot string, beforeComponents int) error {
+	if beforeComponents == 0 {
+		return nil
+	}
 	afterComponents, err := currentComponentCount(ctx, repoRoot)
 	if err != nil {
 		return err
@@ -118,8 +121,21 @@ var healthCmd = &cobra.Command{
 
 func buildHealthReport(ctx context.Context, repoRoot string) (healthReport, error) {
 	s := local.New(repoRoot)
+	if err := s.SyncIndex(ctx); err != nil {
+		return healthReport{}, fmt.Errorf("syncing index: %w", err)
+	}
 	tickets, err := s.ListTickets(ctx, store.Filter{IncludeArchived: false})
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
+			return healthReport{
+				OK: true,
+				Stats: healthStats{
+					TotalTickets: 0,
+					Components:   0,
+				},
+				Issues: []healthIssue{},
+			}, nil
+		}
 		return healthReport{}, fmt.Errorf("listing tickets: %w", err)
 	}
 	for i, tk := range tickets {

@@ -494,7 +494,7 @@ func TestFakeRepoHarnessAuthoringApplyHappyPath(t *testing.T) {
 	backlogSpec := map[string]any{
 		"version": "docket.apply/v1",
 		"tickets": []map[string]any{
-			{"ref": "epic", "title": "Epic", "description": "Harness epic"},
+			{"ref": "epic", "title": "Epic", "description": "Harness epic", "parent": "TKT-001"},
 			{"ref": "child-a", "title": "Child A", "description": "Harness child A", "parent_ref": "epic"},
 			{"ref": "child-b", "title": "Child B", "description": "Harness child B", "parent_ref": "epic", "blocked_by": []string{"child-a"}},
 		},

@@ -117,6 +117,10 @@ var backlogApplyCmd = &cobra.Command{
 
 func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Config, spec applyspec.BacklogApplySpec, allowEmptyStartable bool) (backlogApplyOutput, error) {
 	s := local.New(repoRoot)
+	beforeComponents, err := currentComponentCount(ctx, ticketRepoRoot(repoRoot))
+	if err != nil {
+		return backlogApplyOutput{}, fmt.Errorf("checking graph health before apply: %w", err)
+	}
 	beforeWorkableCount, err := workableStartableLeafCount(ctx, s, cfg)
 	if err != nil {
 		return backlogApplyOutput{}, err
@@ -204,6 +208,12 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 			AC:          acceptanceCriteriaFromSpec(entry.AC),
 		}
 
+		if err := enforceCreateConnectivity(ctx, s, t); err != nil {
+			if rbErr := rollback(createdFiles); rbErr != nil {
+				return backlogApplyOutput{}, fmt.Errorf("%v (rollback failed: %v)", err, rbErr)
+			}
+			return backlogApplyOutput{}, err
+		}
 		if err := s.CreateTicket(ctx, t); err != nil {
 			if rbErr := rollback(createdFiles); rbErr != nil {
 				return backlogApplyOutput{}, fmt.Errorf("creating %s failed: %v (rollback failed: %v)", id, err, rbErr)
@@ -211,6 +221,12 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 			return backlogApplyOutput{}, fmt.Errorf("creating %s failed: %w", id, err)
 		}
 		createdFiles = append(createdFiles, artifacts.RepoPath(repoRoot, artifacts.RepoTicketsDir, id+".md"))
+	}
+	if err := enforceMutationConnectivity(ctx, ticketRepoRoot(repoRoot), beforeComponents); err != nil {
+		if rbErr := rollback(createdFiles); rbErr != nil {
+			return backlogApplyOutput{}, fmt.Errorf("%v (rollback failed: %v)", err, rbErr)
+		}
+		return backlogApplyOutput{}, err
 	}
 	if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, allowEmptyStartable, beforeWorkableCount); err != nil {
 		if rbErr := rollback(createdFiles); rbErr != nil {

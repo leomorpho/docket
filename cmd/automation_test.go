@@ -112,7 +112,7 @@ func TestAutomationModeCoreMutationsDeterministicOutput(t *testing.T) {
 		t.Fatalf("unexpected create id: %#v", createRes["id"])
 	}
 
-	spec := `{"version":"docket.apply/v1","operation":"create","ticket":{"title":"From automation","description":"Create via ticket apply in automation mode.","ac":["one"]}}`
+	spec := `{"version":"docket.apply/v1","operation":"create","ticket":{"title":"From automation","description":"Create via ticket apply in automation mode.","blocked_by":["TKT-001"],"ac":["one"]}}`
 	specPath := writeSpecFile(t, tmpDir, "automation-ticket.json", spec)
 	applyOut, applyErrOut, err := runRootCommand(t,
 		"--automation",

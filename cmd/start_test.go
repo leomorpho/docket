@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1040,5 +1041,94 @@ func TestStartCmd_EmptyWorkableSetExplainsBlockedBacklog(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "Top unresolved blockers: TKT-001 x1") {
 		t.Fatalf("expected blocker detail, got:\n%s", b.String())
+	}
+}
+
+func TestShouldAutoHealQueueOnStart_AutomationAndEnvOverride(t *testing.T) {
+	prev := automationMode
+	t.Cleanup(func() { automationMode = prev })
+
+	automationMode = false
+	t.Setenv("DOCKET_START_AUTO_HEAL", "")
+	if shouldAutoHealQueueOnStart() {
+		t.Fatal("expected auto-heal off outside automation mode")
+	}
+
+	automationMode = true
+	t.Setenv("DOCKET_START_AUTO_HEAL", "")
+	if !shouldAutoHealQueueOnStart() {
+		t.Fatal("expected auto-heal on by default in automation mode")
+	}
+
+	t.Setenv("DOCKET_START_AUTO_HEAL", "0")
+	if shouldAutoHealQueueOnStart() {
+		t.Fatal("expected env override to disable auto-heal")
+	}
+}
+
+func TestStartCmd_AutomationAutoHealsBlockedQueue(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	s := local.New(h.repo)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-201",
+			Seq:         201,
+			Title:       "Current blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "agent:test",
+			Description: "blocking ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-202",
+			Seq:         202,
+			Title:       "Blocked startable leaf",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			BlockedBy:   []string{"TKT-201"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "agent:test",
+			Description: "blocked startable ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("seed %s failed: %v", tk.ID, err)
+		}
+	}
+
+	out, err := h.run("--automation", "--format", "json", "start")
+	if err != nil {
+		t.Fatalf("start failed: %v\n%s", err, out)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("unmarshal start output failed: %v\n%s", err, out)
+	}
+	ticketPayload, ok := payload["ticket"].(map[string]any)
+	if !ok || ticketPayload["id"] != "TKT-202" {
+		t.Fatalf("expected auto-heal to unlock and start TKT-202, got %#v", payload["ticket"])
+	}
+	heal, ok := payload["queue_heal"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected queue_heal payload, got %#v", payload["queue_heal"])
+	}
+	if heal["applied"] != true || heal["removed_blocker"] != "TKT-201" {
+		t.Fatalf("unexpected queue_heal payload: %#v", heal)
+	}
+
+	updated, getErr := s.GetTicket(context.Background(), "TKT-202")
+	if getErr != nil {
+		t.Fatalf("load updated ticket failed: %v", getErr)
+	}
+	if len(updated.BlockedBy) != 0 {
+		t.Fatalf("expected auto-heal to remove blockers, got %#v", updated.BlockedBy)
 	}
 }
