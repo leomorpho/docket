@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "states": {
+    "backlog": {
+      "semantics": {
+        "roles": ["intake"],
+        "open": true,
+        "terminal": false,
+        "startable": true,
+        "reviewable": false,
+        "blocks_dependents": true,
+        "next": ["todo", "archived"]
+      },
+      "presentation": {
+        "label": "Backlog",
+        "column": 0
+      }
+    },
+    "todo": {
+      "semantics": {
+        "roles": ["intake"],
+        "open": true,
+        "terminal": false,
+        "startable": true,
+        "reviewable": false,
+        "blocks_dependents": true,
+        "next": ["in-progress", "backlog", "archived"]
+      },
+      "presentation": {
+        "label": "To Do",
+        "column": 1
+      }
+    },
+    "in-progress": {
+      "semantics": {
+        "roles": ["active"],
+        "open": true,
+        "terminal": false,
+        "startable": false,
+        "reviewable": false,
+        "blocks_dependents": true,
+        "next": ["in-review", "todo", "backlog", "archived"]
+      },
+      "presentation": {
+        "label": "In Progress",
+        "column": 2
+      }
+    },
+    "in-review": {
+      "semantics": {
+        "roles": ["review"],
+        "open": true,
+        "terminal": false,
+        "startable": false,
+        "reviewable": true,
+        "blocks_dependents": false,
+        "next": ["done", "in-progress", "archived"]
+      },
+      "presentation": {
+        "label": "In Review",
+        "column": 3
+      }
+    },
+    "done": {
+      "semantics": {
+        "roles": ["completed"],
+        "open": false,
+        "terminal": true,
+        "startable": false,
+        "reviewable": false,
+        "blocks_dependents": false,
+        "next": ["archived", "in-progress"]
+      },
+      "presentation": {
+        "label": "Done",
+        "column": 4
+      }
+    },
+    "archived": {
+      "semantics": {
+        "roles": ["archived"],
+        "open": false,
+        "terminal": true,
+        "startable": false,
+        "reviewable": false,
+        "blocks_dependents": false,
+        "next": ["backlog"]
+      },
+      "presentation": {
+        "label": "Archived",
+        "column": 5
+      }
+    }
+  }
+}

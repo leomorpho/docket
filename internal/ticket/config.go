@@ -1,6 +1,7 @@
 package ticket
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -93,15 +94,13 @@ type Config struct {
 	Semantic        SemanticConfig           `json:"semantic,omitempty"`
 }
 
-// defaultStates is the canonical workflow shipped with docket.
-var defaultStates = map[string]StateConfig{
-	"backlog":     {Label: "Backlog", Open: true, Column: 0, Next: []string{"todo", "archived"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
-	"todo":        {Label: "To Do", Open: true, Column: 1, Next: []string{"in-progress", "backlog", "archived"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
-	"in-progress": {Label: "In Progress", Open: true, Column: 2, Next: []string{"in-review", "todo", "backlog", "archived"}, Roles: []string{"active"}, BlocksDependents: true},
-	"in-review":   {Label: "In Review", Open: true, Column: 3, Next: []string{"done", "in-progress", "archived"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: false},
-	"done":        {Label: "Done", Open: false, Column: 4, Next: []string{"archived", "in-progress"}, Roles: []string{"completed"}, Terminal: true},
-	"archived":    {Label: "Archived", Open: false, Column: 5, Next: []string{"backlog"}, Roles: []string{"archived"}, Terminal: true},
-}
+//go:embed default_workflow_v1.json
+var defaultWorkflowConfigJSON []byte
+
+var canonicalDefaultWorkflow = mustLoadDefaultWorkflowConfig()
+
+// defaultStates is derived from the shipped default workflow definition.
+var defaultStates = statesFromWorkflow(canonicalDefaultWorkflow)
 
 var defaultHandoffSections = []string{
 	"Current state",
@@ -112,15 +111,13 @@ var defaultHandoffSections = []string{
 }
 
 func DefaultConfig() *Config {
-	states := make(map[string]StateConfig, len(defaultStates))
-	for k, v := range defaultStates {
-		states[k] = v
-	}
+	workflow := defaultWorkflowConfig()
+	states := statesFromWorkflow(workflow)
 	return &Config{
 		Counter:         0,
 		Backend:         "local",
 		States:          states,
-		Workflow:        workflowFromStates(states),
+		Workflow:        workflow,
 		Labels:          []string{"bug", "feature", "refactor", "chore", "llm-only", "human-only"},
 		CommitSessions:  false,
 		DefaultState:    "backlog",
@@ -129,6 +126,43 @@ func DefaultConfig() *Config {
 		Backends:        map[string]BackendConfig{},
 		Semantic:        defaultSemanticConfig(),
 	}
+}
+
+func defaultWorkflowConfig() WorkflowConfig {
+	return cloneWorkflowConfig(canonicalDefaultWorkflow)
+}
+
+func mustLoadDefaultWorkflowConfig() WorkflowConfig {
+	workflowCfg, err := parseWorkflow(defaultWorkflowConfigJSON)
+	if err != nil {
+		panic(fmt.Sprintf("invalid embedded default workflow config: %v", err))
+	}
+	if workflowCfg.Version != 1 {
+		panic(fmt.Sprintf("invalid embedded default workflow version: %d", workflowCfg.Version))
+	}
+	return workflowCfg
+}
+
+func cloneWorkflowConfig(in WorkflowConfig) WorkflowConfig {
+	out := WorkflowConfig{
+		Version: in.Version,
+		States:  make(map[string]WorkflowStateConfig, len(in.States)),
+	}
+	for name, state := range in.States {
+		out.States[name] = WorkflowStateConfig{
+			Semantics: WorkflowStateSemantics{
+				Roles:            append([]string(nil), state.Semantics.Roles...),
+				Open:             state.Semantics.Open,
+				Terminal:         state.Semantics.Terminal,
+				Startable:        state.Semantics.Startable,
+				Reviewable:       state.Semantics.Reviewable,
+				BlocksDependents: state.Semantics.BlocksDependents,
+				Next:             append([]string(nil), state.Semantics.Next...),
+			},
+			Presentation: state.Presentation,
+		}
+	}
+	return out
 }
 
 func defaultSemanticConfig() SemanticConfig {

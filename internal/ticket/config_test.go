@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -69,6 +70,28 @@ func TestDefaultConfigStateDefaults(t *testing.T) {
 	}
 	if len(cfg.Workflow.States) != len(cfg.States) {
 		t.Fatalf("workflow states = %d, want %d", len(cfg.Workflow.States), len(cfg.States))
+	}
+}
+
+func TestDefaultConfigUsesShippedWorkflowDefinition(t *testing.T) {
+	cfg := DefaultConfig()
+	workflow := defaultWorkflowConfig()
+	if !reflect.DeepEqual(cfg.Workflow, workflow) {
+		t.Fatalf("DefaultConfig workflow should match shipped workflow definition")
+	}
+	derived := statesFromWorkflow(workflow)
+	if !reflect.DeepEqual(cfg.States, derived) {
+		t.Fatalf("DefaultConfig states should be derived from shipped workflow definition")
+	}
+}
+
+func TestMigrateStateNamesUsesShippedWorkflowDefaultsForKnownStates(t *testing.T) {
+	migrated := migrateStateNames([]string{"backlog", "todo", "in-progress", "in-review", "done", "archived"})
+	expected := statesFromWorkflow(defaultWorkflowConfig())
+	for _, name := range []string{"backlog", "todo", "in-progress", "in-review", "done", "archived"} {
+		if !reflect.DeepEqual(migrated[name], expected[name]) {
+			t.Fatalf("migrateStateNames(%s) should use shipped defaults", name)
+		}
 	}
 }
 
