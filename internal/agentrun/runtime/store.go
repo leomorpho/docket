@@ -98,6 +98,15 @@ func (s *Store) Init(record agentrun.RunRecord, prompt string, inactivity time.D
 	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
+	return s.continueRun(record, prompt, inactivity)
+}
+
+func (s *Store) Continue(record agentrun.RunRecord, prompt string, inactivity time.Duration) error {
+	return s.continueRun(record, prompt, inactivity)
+}
+
+func (s *Store) continueRun(record agentrun.RunRecord, prompt string, inactivity time.Duration) error {
+	dir := s.RunDir(record.TicketID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -173,6 +182,23 @@ func (s *Store) WriteStatus(status StatusSnapshot) error {
 	if existing, ok, err := s.loadStatusRaw(status.TicketID); err == nil && ok {
 		if strings.TrimSpace(status.StartedAt) == "" {
 			status.StartedAt = existing.StartedAt
+		}
+		if existing.LastResultStatus == "stopped" && !existing.Active {
+			status.Active = false
+			status.Hung = false
+			status.LastResultStatus = "stopped"
+			if strings.TrimSpace(existing.LastVisibleText) != "" {
+				status.LastVisibleText = existing.LastVisibleText
+			}
+			if strings.TrimSpace(existing.LastVisibleAt) != "" {
+				status.LastVisibleAt = existing.LastVisibleAt
+			}
+			if strings.TrimSpace(existing.LastEventAt) != "" && strings.TrimSpace(status.LastEventAt) == "" {
+				status.LastEventAt = existing.LastEventAt
+			}
+			if strings.TrimSpace(status.Warning) == "" {
+				status.Warning = existing.Warning
+			}
 		}
 	}
 	return writeJSON(filepath.Join(s.RunDir(status.TicketID), statusFile), status)
@@ -375,13 +401,7 @@ func (s *Store) HardStopRun(ticketID string, now time.Time) error {
 	if !ok {
 		return fmt.Errorf("ticket %s does not have runtime state", ticketID)
 	}
-	if status.PID > 0 && processAlive(status.PID) {
-		_ = syscall.Kill(status.PID, syscall.SIGTERM)
-		time.Sleep(150 * time.Millisecond)
-		if processAlive(status.PID) {
-			_ = syscall.Kill(status.PID, syscall.SIGKILL)
-		}
-	}
+	pid := status.PID
 	status.Active = false
 	status.Hung = false
 	status.LastEventAt = now.UTC().Format(time.RFC3339Nano)
@@ -396,6 +416,13 @@ func (s *Store) HardStopRun(ticketID string, now time.Time) error {
 		cycle.StopAfterCurrent = true
 		cycle.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
 		_ = s.WriteCycleState(cycle)
+	}
+	if pid > 0 && processAlive(pid) {
+		_ = syscall.Kill(pid, syscall.SIGTERM)
+		time.Sleep(150 * time.Millisecond)
+		if processAlive(pid) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
 	}
 	return nil
 }

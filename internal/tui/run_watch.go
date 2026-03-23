@@ -37,13 +37,12 @@ const (
 )
 
 type RunWatchLaunchOption struct {
-	ID            string
-	Label         string
-	Description   string
-	RepoRoot      string
-	Start         func() error
-	QuitOnSuccess bool
-	StayInMenu    bool
+	ID          string
+	Label       string
+	Description string
+	RepoRoot    string
+	Start       func() (string, error)
+	StayInMenu  bool
 }
 
 type runWatchSnapshot struct {
@@ -71,9 +70,9 @@ type runWatchLoadedMsg struct {
 type runWatchDoneMsg struct{}
 type runWatchTickMsg struct{}
 type runWatchLaunchResultMsg struct {
-	err        error
-	quitOnDone bool
-	stayInMenu bool
+	err             error
+	terminalMessage string
+	stayInMenu      bool
 }
 
 type RunWatchModel struct {
@@ -97,6 +96,7 @@ type RunWatchModel struct {
 	showDoneNotice  bool
 	showHelp        bool
 	confirmHardStop bool
+	terminalMessage string
 }
 
 var (
@@ -190,10 +190,15 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scrollOffset = max(0, len(m.snapshot.transcript)-m.bodyViewportHeight())
 		}
 		if len(msg.snapshot.warnings) == 0 && m.snapshot.ticketID == "" {
-			m.statusMessage = "waiting for managed run"
+			if strings.TrimSpace(m.terminalMessage) != "" {
+				m.statusMessage = m.terminalMessage
+			} else {
+				m.statusMessage = "waiting for managed run"
+			}
 		} else if len(msg.snapshot.warnings) == 0 && m.snapshot.cycle.StopAfterCurrent {
 			m.statusMessage = "stop requested after current ticket"
 		} else if len(msg.snapshot.warnings) == 0 {
+			m.terminalMessage = ""
 			m.statusMessage = "watching managed run"
 		}
 		return m, nil
@@ -215,21 +220,24 @@ func (m RunWatchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.launching = false
 		if msg.err != nil {
 			m.statusMessage = "launch failed: " + msg.err.Error()
+			m.terminalMessage = ""
 			m.launchMode = launchModeMenu
 			return m, nil
 		}
-		if msg.quitOnDone {
-			m.showDoneNotice = true
-			return m, tea.Quit
-		}
+		m.showDoneNotice = true
+		m.terminalMessage = strings.TrimSpace(msg.terminalMessage)
 		if msg.stayInMenu {
 			m.launchMode = launchModeMenu
 			m.statusMessage = "action completed"
 		} else {
 			m.launchMode = launchModeWatch
-			m.statusMessage = "watching managed run"
+			if m.terminalMessage != "" {
+				m.statusMessage = m.terminalMessage
+			} else {
+				m.statusMessage = "run finished"
+			}
 		}
-		return m, nil
+		return m, m.loadCmd()
 	case tea.MouseMsg:
 		if m.launchMode != launchModeWatch {
 			return m, nil
@@ -1076,10 +1084,11 @@ func (m RunWatchModel) startLaunchOption(option RunWatchLaunchOption) (tea.Model
 	m.doneCh = doneCh
 	return m, func() tea.Msg {
 		defer close(doneCh)
+		message, err := option.Start()
 		return runWatchLaunchResultMsg{
-			err:        option.Start(),
-			quitOnDone: option.QuitOnSuccess,
-			stayInMenu: option.StayInMenu,
+			err:             err,
+			terminalMessage: message,
+			stayInMenu:      option.StayInMenu,
 		}
 	}
 }
@@ -1105,6 +1114,9 @@ func loadRunWatchSnapshot(store *runruntime.Store, repoRoot string, focusTicketI
 	snapshot.ticketID = ticketID
 	snapshot.status = status
 	snapshot.statusOK = statusOK
+	if statusOK && strings.TrimSpace(status.Warning) != "" {
+		snapshot.warnings = append(snapshot.warnings, "run warning: "+strings.TrimSpace(status.Warning))
+	}
 	if queue, err := loadRunWatchQueue(repoRoot, ticketID, cycle.Completed); err != nil {
 		snapshot.warnings = append(snapshot.warnings, "planned queue unavailable: "+err.Error())
 	} else {

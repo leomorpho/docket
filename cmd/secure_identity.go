@@ -53,7 +53,7 @@ var secureIdentityRecoverCmd = &cobra.Command{
 			return fmt.Errorf("--ticket is required")
 		}
 		mgr := security.NewSessionManager(docketHome)
-		if err := mgr.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 		if err := confirmPrivilegedPrompt(cmd, identityYes, identityTicket, "recover identity metadata"); err != nil {
@@ -89,7 +89,7 @@ var secureIdentityEnrollCmd = &cobra.Command{
 			return err
 		}
 		mgr := security.NewSessionManager(docketHome)
-		if err := mgr.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 		action := fmt.Sprintf("enroll device key %s", identityDeviceID)
@@ -122,7 +122,7 @@ var secureIdentityRevokeCmd = &cobra.Command{
 			return fmt.Errorf("--device-id is required")
 		}
 		mgr := security.NewSessionManager(docketHome)
-		if err := mgr.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 		action := fmt.Sprintf("revoke device key %s", identityDeviceID)
@@ -159,7 +159,7 @@ var secureIdentityRotateCmd = &cobra.Command{
 			return err
 		}
 		mgr := security.NewSessionManager(docketHome)
-		if err := mgr.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 		action := fmt.Sprintf("rotate current device key to %s", identityDeviceID)

@@ -338,6 +338,9 @@ var runStatusCmd = &cobra.Command{
 		if status.LastIntervention != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "\nLast intervention: %s", status.LastIntervention)
 		}
+		if status.Warning != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nWarning: %s", status.Warning)
+		}
 		fmt.Fprintln(cmd.OutOrStdout())
 		return nil
 	},
@@ -507,6 +510,17 @@ func renderPingSummary(cmd *cobra.Command, summary agentrun.PingSummary) error {
 	return nil
 }
 
+func isOperatorStopReason(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case "operator requested hard stop",
+		"operator requested stop after current ticket",
+		"operator requested stop before starting the next ticket":
+		return true
+	default:
+		return false
+	}
+}
+
 func executeTicketRun(cmd *cobra.Command, ticketID string, run func(context.Context) (agentrun.TicketRunSummary, error)) (agentrun.TicketRunSummary, error) {
 	healManagedRuntime(repo)
 	if !runWatch {
@@ -595,20 +609,18 @@ func runWorkspaceWatchDashboard(workspaceRoot string) error {
 func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 	return []tui.RunWatchLaunchOption{
 		{
-			ID:            "single-session",
-			Label:         "Start Next Ticket",
-			Description:   "Pick the next runnable ticket and run it in a persisted Codex session that can be resumed later.",
-			QuitOnSuccess: true,
-			Start: func() error {
+			ID:          "single-session",
+			Label:       "Start Next Ticket",
+			Description: "Pick the next runnable ticket and run it in a persisted Codex session that can be resumed later.",
+			Start: func() (string, error) {
 				return launchManagedSingleRunWithMode(repoRoot, "session")
 			},
 		},
 		{
-			ID:            "auto-session",
-			Label:         "Start Auto Cycle",
-			Description:   "Keep running tickets using persisted Codex sessions so follow-up resumes stay on the same thread.",
-			QuitOnSuccess: true,
-			Start: func() error {
+			ID:          "auto-session",
+			Label:       "Start Auto Cycle",
+			Description: "Keep running tickets using persisted Codex sessions so follow-up resumes stay on the same thread.",
+			Start: func() (string, error) {
 				return launchManagedAutoCycleWithMode(repoRoot, "session")
 			},
 		},
@@ -623,17 +635,17 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 			Label:       "Ping Active Session",
 			Description: "Send a same-thread structured status prompt into the active persisted Codex session.",
 			StayInMenu:  true,
-			Start: func() error {
+			Start: func() (string, error) {
 				ticketID, err := currentManagedRunTicketID(repoRoot)
 				if err != nil {
-					return err
+					return "", err
 				}
 				if ticketID == "" {
-					return fmt.Errorf("no active managed run to ping")
+					return "", fmt.Errorf("no active managed run to ping")
 				}
 				svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), "session")
 				_, err = svc.PingTicket(context.Background(), ticketID)
-				return err
+				return "ping completed", err
 			},
 		},
 		{
@@ -641,13 +653,13 @@ func runWatchLaunchOptions(repoRoot string) []tui.RunWatchLaunchOption {
 			Label:       "Clean Stale Runs",
 			Description: "Remove inactive stale runtime records and clear invalid cycle state.",
 			StayInMenu:  true,
-			Start: func() error {
+			Start: func() (string, error) {
 				store := runruntime.New(repoRoot)
 				if _, err := store.HealRuntimeState(time.Now()); err != nil {
-					return err
+					return "", err
 				}
 				_, err := store.CleanupStaleRuns()
-				return err
+				return "stale runs cleaned", err
 			},
 		},
 	}
@@ -674,23 +686,21 @@ func workspaceRunWatchLaunchOptions(workspaceRoot string, repos []workspace.Repo
 		}
 		options = append(options,
 			tui.RunWatchLaunchOption{
-				ID:            "single-session:" + repoItem.Name,
-				Label:         "Start Next Ticket" + labelSuffix,
-				Description:   "Pick the next runnable ticket in " + descSuffix + " and run it in a persisted Codex session.",
-				RepoRoot:      repoItem.Path,
-				QuitOnSuccess: true,
-				Start: func(repoRoot string) func() error {
-					return func() error { return launchManagedSingleRunWithMode(repoRoot, "session") }
+				ID:          "single-session:" + repoItem.Name,
+				Label:       "Start Next Ticket" + labelSuffix,
+				Description: "Pick the next runnable ticket in " + descSuffix + " and run it in a persisted Codex session.",
+				RepoRoot:    repoItem.Path,
+				Start: func(repoRoot string) func() (string, error) {
+					return func() (string, error) { return launchManagedSingleRunWithMode(repoRoot, "session") }
 				}(repoItem.Path),
 			},
 			tui.RunWatchLaunchOption{
-				ID:            "auto-session:" + repoItem.Name,
-				Label:         "Start Auto Cycle" + labelSuffix,
-				Description:   "Keep running runnable tickets in " + descSuffix + " using persisted Codex sessions.",
-				RepoRoot:      repoItem.Path,
-				QuitOnSuccess: true,
-				Start: func(repoRoot string) func() error {
-					return func() error { return launchManagedAutoCycleWithMode(repoRoot, "session") }
+				ID:          "auto-session:" + repoItem.Name,
+				Label:       "Start Auto Cycle" + labelSuffix,
+				Description: "Keep running runnable tickets in " + descSuffix + " using persisted Codex sessions.",
+				RepoRoot:    repoItem.Path,
+				Start: func(repoRoot string) func() (string, error) {
+					return func() (string, error) { return launchManagedAutoCycleWithMode(repoRoot, "session") }
 				}(repoItem.Path),
 			},
 			tui.RunWatchLaunchOption{
@@ -699,18 +709,18 @@ func workspaceRunWatchLaunchOptions(workspaceRoot string, repos []workspace.Repo
 				Description: "Send a structured status ping into the active run for " + descSuffix + ".",
 				RepoRoot:    repoItem.Path,
 				StayInMenu:  true,
-				Start: func(repoRoot string) func() error {
-					return func() error {
+				Start: func(repoRoot string) func() (string, error) {
+					return func() (string, error) {
 						ticketID, err := currentManagedRunTicketID(repoRoot)
 						if err != nil {
-							return err
+							return "", err
 						}
 						if ticketID == "" {
-							return fmt.Errorf("no active managed run to ping")
+							return "", fmt.Errorf("no active managed run to ping")
 						}
 						svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), "session")
 						_, err = svc.PingTicket(context.Background(), ticketID)
-						return err
+						return "ping completed", err
 					}
 				}(repoItem.Path),
 			},
@@ -720,14 +730,14 @@ func workspaceRunWatchLaunchOptions(workspaceRoot string, repos []workspace.Repo
 				Description: "Remove inactive stale runtime records in " + descSuffix + ".",
 				RepoRoot:    repoItem.Path,
 				StayInMenu:  true,
-				Start: func(repoRoot string) func() error {
-					return func() error {
+				Start: func(repoRoot string) func() (string, error) {
+					return func() (string, error) {
 						store := runruntime.New(repoRoot)
 						if _, err := store.HealRuntimeState(time.Now()); err != nil {
-							return err
+							return "", err
 						}
 						_, err := store.CleanupStaleRuns()
-						return err
+						return "stale runs cleaned", err
 					}
 				}(repoItem.Path),
 			},
@@ -744,48 +754,65 @@ func relativeRepoLabel(workspaceRoot, repoRoot string) string {
 	return rel
 }
 
-func launchManagedSingleRun(repoRoot string) error {
+func launchManagedSingleRun(repoRoot string) (string, error) {
 	return launchManagedSingleRunWithMode(repoRoot, managedRunAdapterMode())
 }
 
-func launchManagedSingleRunWithMode(repoRoot, mode string) error {
+func launchManagedSingleRunWithMode(repoRoot, mode string) (string, error) {
 	ctx := context.Background()
 	healManagedRuntime(repoRoot)
 	store := local.New(repoRoot)
 	if err := store.SyncIndex(ctx); err != nil {
-		return fmt.Errorf("syncing index: %w", err)
+		return "", fmt.Errorf("syncing index: %w", err)
 	}
 	cfg, err := ticket.LoadConfig(repoRoot)
 	if err != nil {
-		return err
+		return "", err
 	}
 	next, err := selectNextTicket(ctx, store, cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if next == nil {
-		return fmt.Errorf("no runnable tickets remain")
+		return "out of tickets", nil
 	}
 	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
 	summary, err := svc.RunTicket(ctx, next.ID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return singleRunSummaryError(summary)
+	if err := singleRunSummaryError(summary); err != nil {
+		return "", err
+	}
+	if isOperatorStopReason(summary.Reason) {
+		return summary.Reason, nil
+	}
+	return fmt.Sprintf("%s finished", summary.TicketID), nil
 }
 
-func launchManagedAutoCycle(repoRoot string) error {
+func launchManagedAutoCycle(repoRoot string) (string, error) {
 	return launchManagedAutoCycleWithMode(repoRoot, managedRunAdapterMode())
 }
 
-func launchManagedAutoCycleWithMode(repoRoot, mode string) error {
+func launchManagedAutoCycleWithMode(repoRoot, mode string) (string, error) {
 	healManagedRuntime(repoRoot)
 	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
 	summary, err := svc.RunNext(context.Background())
 	if err != nil {
-		return err
+		return "", err
 	}
-	return cycleSummaryError(summary)
+	if err := cycleSummaryError(summary); err != nil {
+		return "", err
+	}
+	reason := strings.TrimSpace(summary.StopReason)
+	switch reason {
+	case "", "no runnable tickets remain":
+		return "out of tickets", nil
+	case "operator requested stop after current ticket", "operator requested stop before starting the next ticket":
+		return reason, nil
+	default:
+		return "cycle finished", nil
+	}
 }
 
 func singleRunSummaryError(summary agentrun.TicketRunSummary) error {
@@ -793,6 +820,9 @@ func singleRunSummaryError(summary agentrun.TicketRunSummary) error {
 		return nil
 	}
 	reason := strings.TrimSpace(summary.Reason)
+	if isOperatorStopReason(reason) {
+		return nil
+	}
 	if reason == "" {
 		reason = string(summary.Status)
 	}
@@ -810,7 +840,7 @@ func cycleSummaryError(summary agentrun.CycleSummary) error {
 	}
 	if len(summary.Runs) == 0 {
 		reason := strings.TrimSpace(summary.StopReason)
-		if reason == "" || reason == "no runnable tickets remain" {
+		if reason == "" || reason == "no runnable tickets remain" || isOperatorStopReason(reason) {
 			return nil
 		}
 		return fmt.Errorf("managed run stopped: %s", reason)

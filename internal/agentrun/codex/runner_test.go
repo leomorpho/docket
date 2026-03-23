@@ -17,6 +17,7 @@ func TestRunnerStartsEphemeralCodexExecWithFreshSessionContract(t *testing.T) {
 	scriptPath := filepath.Join(tmp, "codex")
 	script := "#!/bin/sh\n" +
 		"printf 'ARGS:%s\\n' \"$*\" > \"$DOCKET_TEST_LOG\"\n" +
+		"printf 'PWD:%s\\n' \"$PWD\" >> \"$DOCKET_TEST_LOG\"\n" +
 		"printf 'ENV_DOCKET_SESSION_ID:%s\\n' \"$DOCKET_SESSION_ID\" >> \"$DOCKET_TEST_LOG\"\n" +
 		"printf 'ENV_DOCKET_TICKET_ID:%s\\n' \"$DOCKET_TICKET_ID\" >> \"$DOCKET_TEST_LOG\"\n" +
 		"printf 'ENV_DOCKET_RUN_ROLE:%s\\n' \"$DOCKET_RUN_ROLE\" >> \"$DOCKET_TEST_LOG\"\n" +
@@ -31,11 +32,16 @@ func TestRunnerStartsEphemeralCodexExecWithFreshSessionContract(t *testing.T) {
 	t.Setenv("DOCKET_TEST_STDIN", stdinPath)
 
 	runner := NewRunner()
+	repoRoot := filepath.Join(tmp, "repo")
+	worktreePath := filepath.Join(repoRoot, ".worktrees", "TKT-380")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
 	spec := agentrun.RunSpec{
 		TicketID:     "TKT-380",
 		Role:         agentrun.RoleImplementer,
-		RepoRoot:     "/repo",
-		WorktreePath: "/repo/.worktrees/TKT-380",
+		RepoRoot:     repoRoot,
+		WorktreePath: worktreePath,
 		Branch:       "docket/TKT-380",
 		Prompt:       "Use test-driven development.\nWork only ticket TKT-380 in this run.",
 	}
@@ -69,8 +75,13 @@ func TestRunnerStartsEphemeralCodexExecWithFreshSessionContract(t *testing.T) {
 		t.Fatalf("read log: %v", err)
 	}
 	log := string(rawLog)
+	expectedPWD, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		expectedPWD = worktreePath
+	}
 	for _, want := range []string{
-		"-C /repo/.worktrees/TKT-380 exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --ephemeral -",
+		"-C " + worktreePath + " exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --ephemeral -",
+		"PWD:" + expectedPWD,
 		"ENV_DOCKET_TICKET_ID:TKT-380",
 		"ENV_DOCKET_RUN_ROLE:implementer",
 	} {
@@ -100,6 +111,7 @@ func TestSessionRunnerStartsPersistentCodexExecAndCanResume(t *testing.T) {
 	scriptPath := filepath.Join(tmp, "codex")
 	script := "#!/bin/sh\n" +
 		"printf 'ARGS:%s\\n' \"$*\" >> \"$DOCKET_TEST_LOG\"\n" +
+		"printf 'PWD:%s\\n' \"$PWD\" >> \"$DOCKET_TEST_LOG\"\n" +
 		"cat - > \"$DOCKET_TEST_STDIN\"\n" +
 		"printf 'RESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\\n'\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
@@ -111,11 +123,16 @@ func TestSessionRunnerStartsPersistentCodexExecAndCanResume(t *testing.T) {
 	t.Setenv("DOCKET_TEST_STDIN", stdinPath)
 
 	runner := NewSessionRunner()
+	repoRoot := filepath.Join(tmp, "repo")
+	worktreePath := filepath.Join(repoRoot, ".worktrees", "TKT-381")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
 	spec := agentrun.RunSpec{
 		TicketID:     "TKT-381",
 		Role:         agentrun.RoleImplementer,
-		RepoRoot:     "/repo",
-		WorktreePath: "/repo/.worktrees/TKT-381",
+		RepoRoot:     repoRoot,
+		WorktreePath: worktreePath,
 		Branch:       "docket/TKT-381",
 		Prompt:       "continue",
 	}
@@ -153,13 +170,20 @@ func TestSessionRunnerStartsPersistentCodexExecAndCanResume(t *testing.T) {
 		t.Fatalf("read log: %v", err)
 	}
 	log := string(rawLog)
+	expectedPWD, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		expectedPWD = worktreePath
+	}
 	if strings.Contains(log, "--ephemeral") {
 		t.Fatalf("session runner should not use --ephemeral: %s", log)
 	}
-	if !strings.Contains(log, "-C /repo/.worktrees/TKT-381 exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -") {
+	if !strings.Contains(log, "-C "+worktreePath+" exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -") {
 		t.Fatalf("session start args missing in log: %s", log)
 	}
-	if !strings.Contains(log, "-C /repo/.worktrees/TKT-381 exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox thread-123 -") {
+	if !strings.Contains(log, "PWD:"+expectedPWD) {
+		t.Fatalf("session runner should launch from worktree dir: %s", log)
+	}
+	if !strings.Contains(log, "-C "+worktreePath+" exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox thread-123 -") {
 		t.Fatalf("session resume args missing in log: %s", log)
 	}
 }

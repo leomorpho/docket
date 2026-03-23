@@ -540,6 +540,41 @@ func TestRunWatchViewShowsErrorEventsInConversationPane(t *testing.T) {
 	}
 }
 
+func TestLoadRunWatchSnapshotIncludesRuntimeWarning(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-704",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: repoRoot,
+		Branch:       "docket/TKT-704",
+		SessionID:    "session-704",
+	}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:    "TKT-704",
+		SessionID:   "session-704",
+		Active:      true,
+		Warning:     "optional MCP server mcp.instantdb.com rejected authentication; continuing without it",
+		LastEventAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	snapshot, err := loadRunWatchSnapshot(store, repoRoot, "TKT-704")
+	if err != nil {
+		t.Fatalf("loadRunWatchSnapshot() error = %v", err)
+	}
+	if !slices.Contains(snapshot.warnings, "run warning: optional MCP server mcp.instantdb.com rejected authentication; continuing without it") {
+		t.Fatalf("expected runtime warning in snapshot, got %#v", snapshot.warnings)
+	}
+}
+
 func TestRunWatchModelRenderStepBar(t *testing.T) {
 	t.Parallel()
 
@@ -671,9 +706,9 @@ func TestRunWatchModelMenuLaunchInvokesStartCallback(t *testing.T) {
 		{
 			ID:    "single",
 			Label: "Start Next Ticket",
-			Start: func() error {
+			Start: func() (string, error) {
 				called = true
-				return nil
+				return "", nil
 			},
 		},
 	})
@@ -699,15 +734,14 @@ func TestRunWatchModelMenuLaunchInvokesStartCallback(t *testing.T) {
 	}
 }
 
-func TestRunWatchModelMenuLaunchCanQuitAfterSuccessfulRun(t *testing.T) {
+func TestRunWatchModelMenuLaunchShowsTerminalMessageAfterSuccessfulRun(t *testing.T) {
 	t.Parallel()
 
 	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
 		{
-			ID:            "single",
-			Label:         "Start Next Ticket",
-			QuitOnSuccess: true,
-			Start:         func() error { return nil },
+			ID:    "single",
+			Label: "Start Next Ticket",
+			Start: func() (string, error) { return "out of tickets", nil },
 		},
 	})
 
@@ -718,10 +752,17 @@ func TestRunWatchModelMenuLaunchCanQuitAfterSuccessfulRun(t *testing.T) {
 	msg := cmd()
 	updated, nextCmd := gotModel.Update(msg)
 	if nextCmd == nil {
-		t.Fatalf("expected successful launch completion to request quit")
+		t.Fatalf("expected successful launch completion to refresh watch state")
 	}
-	if _, ok := updated.(RunWatchModel); !ok {
+	watching, ok := updated.(RunWatchModel)
+	if !ok {
 		t.Fatalf("expected updated model type, got %T", updated)
+	}
+	if watching.launchMode != launchModeWatch {
+		t.Fatalf("expected watch mode, got %s", watching.launchMode)
+	}
+	if watching.statusMessage != "out of tickets" {
+		t.Fatalf("expected terminal message, got %q", watching.statusMessage)
 	}
 }
 
@@ -835,7 +876,7 @@ func TestRunWatchModelMenuCleanupActionStaysInMenu(t *testing.T) {
 	t.Parallel()
 
 	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
-		{ID: "clean", Label: "Clean Stale Runs", StayInMenu: true, Start: func() error { return nil }},
+		{ID: "clean", Label: "Clean Stale Runs", StayInMenu: true, Start: func() (string, error) { return "stale runs cleaned", nil }},
 	})
 	gotModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -854,9 +895,9 @@ func TestRunWatchModelPingHotkeyInvokesPingAction(t *testing.T) {
 
 	called := false
 	model := NewRunWatchModel(t.TempDir(), "", nil, false, []RunWatchLaunchOption{
-		{ID: "ping", Label: "Ping Active Session", StayInMenu: true, Start: func() error {
+		{ID: "ping", Label: "Ping Active Session", StayInMenu: true, Start: func() (string, error) {
 			called = true
-			return nil
+			return "ping completed", nil
 		}},
 	})
 	model.launchMode = launchModeWatch

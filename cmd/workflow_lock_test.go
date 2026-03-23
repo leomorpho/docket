@@ -132,6 +132,7 @@ func TestWorkflowLockActivateRequiresSecureMode(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("secure lock failed: %v", err)
 	}
+	t.Setenv("DOCKET_KEYSTORE_PASSWORD", "")
 
 	rootCmd.SetArgs([]string{"workflow", "lock", "activate", "--ticket", "TKT-184", "--yes"})
 	err := rootCmd.Execute()

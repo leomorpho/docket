@@ -41,7 +41,7 @@ var workflowLockGenerateCmd = &cobra.Command{
 		}
 
 		session := security.NewSessionManager(docketHome)
-		if err := session.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 
@@ -120,7 +120,7 @@ var workflowLockActivateCmd = &cobra.Command{
 			return fmt.Errorf("--ticket is required")
 		}
 		session := security.NewSessionManager(docketHome)
-		if err := session.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 

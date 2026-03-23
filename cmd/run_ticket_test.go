@@ -334,6 +334,34 @@ func TestRunStatusCmdRendersHumanSummaryFromActiveRuntimeFiles(t *testing.T) {
 	}
 }
 
+func TestRunStatusCmdRendersRuntimeWarning(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-377", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-377", SessionID: "session-377"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID: "TKT-377",
+		Warning:  "optional MCP server mcp.instantdb.com rejected authentication; continuing without it",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-377"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("Warning: optional MCP server mcp.instantdb.com rejected authentication; continuing without it")) {
+		t.Fatalf("expected runtime warning in output, got: %s", out.String())
+	}
+}
+
 func TestTuiRunLogCmdRendersVisibleTranscript(t *testing.T) {
 	originalLocal := time.Local
 	time.Local = time.FixedZone("PDT", -7*60*60)
@@ -444,7 +472,7 @@ func TestRunWatchLaunchOptionsIncludesCleanupAction(t *testing.T) {
 			continue
 		}
 		found = true
-		if err := option.Start(); err != nil {
+		if _, err := option.Start(); err != nil {
 			t.Fatalf("cleanup action failed: %v", err)
 		}
 		break
@@ -505,20 +533,28 @@ func TestSingleRunSummaryError(t *testing.T) {
 	if err == nil || err.Error() != "TKT-2 failed: pre-commit hook failed" {
 		t.Fatalf("unexpected failed summary error: %v", err)
 	}
+
+	if err := singleRunSummaryError(agentrun.TicketRunSummary{
+		TicketID: "TKT-3",
+		Status:   agentrun.StatusFailed,
+		Reason:   "operator requested hard stop",
+	}); err != nil {
+		t.Fatalf("operator stop should not be treated as launch failure: %v", err)
+	}
 }
 
 func TestCycleSummaryError(t *testing.T) {
 	t.Parallel()
 
 	if err := cycleSummaryError(agentrun.CycleSummary{
-		Runs: []agentrun.TicketRunSummary{{TicketID: "TKT-10", Status: agentrun.StatusDone}},
+		Runs:       []agentrun.TicketRunSummary{{TicketID: "TKT-10", Status: agentrun.StatusDone}},
 		StopReason: "operator requested stop after current ticket",
 	}); err != nil {
 		t.Fatalf("successful stop-after-current should not error: %v", err)
 	}
 
 	err := cycleSummaryError(agentrun.CycleSummary{
-		Runs: []agentrun.TicketRunSummary{{TicketID: "TKT-11", Status: agentrun.StatusFailed, Reason: "commit hook failed"}},
+		Runs:       []agentrun.TicketRunSummary{{TicketID: "TKT-11", Status: agentrun.StatusFailed, Reason: "commit hook failed"}},
 		StopReason: "commit hook failed",
 	})
 	if err == nil || err.Error() != "TKT-11 failed: commit hook failed" {
@@ -565,9 +601,57 @@ func TestLaunchManagedSingleRunWithModeReturnsSummaryFailure(t *testing.T) {
 		}
 	}
 
-	err := launchManagedSingleRunWithMode(repoRoot, "session")
+	_, err := launchManagedSingleRunWithMode(repoRoot, "session")
 	if err == nil || err.Error() != "TKT-700 failed: pre-commit hook failed" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLaunchManagedSingleRunWithModeReturnsOperatorStopMessage(t *testing.T) {
+	prev := newRunOrchestratorWithMode
+	t.Cleanup(func() {
+		newRunOrchestratorWithMode = prev
+	})
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-701",
+		Seq:         701,
+		Title:       "single stop",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
+				return agentrun.TicketRunSummary{
+					TicketID: ticketID,
+					Status:   agentrun.StatusFailed,
+					Reason:   "operator requested hard stop",
+				}, nil
+			},
+		}
+	}
+
+	message, err := launchManagedSingleRunWithMode(repoRoot, "session")
+	if err != nil {
+		t.Fatalf("operator stop should not error: %v", err)
+	}
+	if message != "operator requested hard stop" {
+		t.Fatalf("unexpected launch message: %q", message)
 	}
 }
 
@@ -591,7 +675,7 @@ func TestLaunchManagedAutoCycleWithModeReturnsSummaryFailure(t *testing.T) {
 		}
 	}
 
-	err := launchManagedAutoCycleWithMode(repoRoot, "session")
+	_, err := launchManagedAutoCycleWithMode(repoRoot, "session")
 	if err == nil || err.Error() != "TKT-701 failed: commit hook failed" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -617,7 +701,7 @@ func TestLaunchManagedAutoCycleWithModeAllowsOperatorStopAfterCurrent(t *testing
 		}
 	}
 
-	if err := launchManagedAutoCycleWithMode(repoRoot, "session"); err != nil {
+	if _, err := launchManagedAutoCycleWithMode(repoRoot, "session"); err != nil {
 		t.Fatalf("stop-after-current should not error: %v", err)
 	}
 }
@@ -637,7 +721,7 @@ func TestLaunchManagedAutoCycleWithModePreservesUnderlyingError(t *testing.T) {
 		}
 	}
 
-	err := launchManagedAutoCycleWithMode(repoRoot, "session")
+	_, err := launchManagedAutoCycleWithMode(repoRoot, "session")
 	if err == nil || err.Error() != "selector crashed" {
 		t.Fatalf("unexpected error: %v", err)
 	}

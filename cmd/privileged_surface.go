@@ -1,13 +1,35 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/leomorpho/docket/internal/security"
 	"github.com/spf13/cobra"
 )
+
+const autoSecureUnlockTTL = 10 * time.Minute
+
+func ensureSecureSessionActive(repoRoot string) error {
+	session := security.NewSessionManager(docketHome)
+	if err := session.RequireActive(repoRoot); err != nil {
+		if !errors.Is(err, security.ErrSecureModeInactive) {
+			return err
+		}
+		password := strings.TrimSpace(os.Getenv("DOCKET_KEYSTORE_PASSWORD"))
+		if password == "" {
+			return err
+		}
+		if unlockErr := session.Unlock(repoRoot, password, autoSecureUnlockTTL); unlockErr != nil {
+			return unlockErr
+		}
+		return session.RequireActive(repoRoot)
+	}
+	return nil
+}
 
 func requirePrivilegedSurface(cmd *cobra.Command, ticketID, action string, yes bool) error {
 	if strings.Contains(strings.ToLower(action), "-> done") && isLLMActor() {
@@ -17,7 +39,7 @@ func requirePrivilegedSurface(cmd *cobra.Command, ticketID, action string, yes b
 		return fmt.Errorf("--ticket is required for privileged operations")
 	}
 	session := security.NewSessionManager(docketHome)
-	if err := session.RequireActive(repo); err != nil {
+	if err := ensureSecureSessionActive(repo); err != nil {
 		return err
 	}
 	if err := confirmPrivilegedPrompt(cmd, yes, ticketID, action); err != nil {

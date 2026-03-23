@@ -161,6 +161,95 @@ func TestObserverCapturesNestedVisibleJSONMessages(t *testing.T) {
 	}
 }
 
+func TestObserverStoresRuntimeWarningsFromVisibleAndStderrOutput(t *testing.T) {
+	t.Parallel()
+
+	handle := &fakeHandle{
+		stdout: bytes.NewBufferString("{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"error\",\"message\":\"Disabled `js_repl` for this session because the configured Node runtime is unavailable or incompatible.\"}}\nRESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\n"),
+		stderr: bytes.NewBufferString("2026-03-23T01:49:18.452882Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when AuthRequired(AuthRequiredError { www_authenticate_header: \"Bearer error=\\\"invalid_token\\\", error_description=\\\"Missing Authorization header\\\", resource_metadata=\\\"https://mcp.instantdb.com/.well-known/oauth-protected-resource/mcp\\\"\" })\n"),
+		waitCh: make(chan error, 1),
+	}
+	handle.waitCh <- nil
+
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer, SessionID: "session-warning"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	status, ok, err := store.LoadStatus("TKT-381")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.Warning != "optional MCP server mcp.instantdb.com rejected authentication; continuing without it" {
+		t.Fatalf("unexpected warning: %#v", status)
+	}
+	transcript, err := store.LoadTranscript("TKT-381")
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) == 0 {
+		t.Fatalf("expected transcript entries")
+	}
+	if !strings.Contains(transcript[len(transcript)-1].Text, "warning: optional MCP server mcp.instantdb.com rejected authentication; continuing without it") {
+		t.Fatalf("expected warning transcript entry, got %#v", transcript)
+	}
+}
+
+func TestObserverKeepsExistingStableSessionIDWhenResumeReportsDifferentThread(t *testing.T) {
+	t.Parallel()
+
+	handle := &fakeHandle{
+		stdout: bytes.NewBufferString("{\"type\":\"thread.started\",\"thread_id\":\"019d1878-b0a2-7ea1-998f-d8350ea65e66\"}\nRESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\n"),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	handle.waitCh <- nil
+
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer, SessionID: "019d1874-46f8-78f1-ba05-2f912b1ff4fc"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	status, ok, err := store.LoadStatus("TKT-381")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.SessionID != record.SessionID {
+		t.Fatalf("expected existing session id to be preserved, got %#v", status)
+	}
+	transcript, err := store.LoadTranscript("TKT-381")
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) == 0 || !strings.Contains(transcript[0].Text, "mismatched thread id") {
+		t.Fatalf("expected mismatch warning transcript, got %#v", transcript)
+	}
+}
+
 func TestObserverResetsNoProgressCounterWhenFreshVisibleOutputArrives(t *testing.T) {
 	t.Parallel()
 
@@ -249,6 +338,53 @@ func TestObserverFailsWhenProcessExitsAfterResultLine(t *testing.T) {
 	}
 	if obs.Result.Status != agentrun.StatusFailed || !strings.Contains(obs.Result.Reason, "process exited after RESULT line") {
 		t.Fatalf("unexpected observation: %#v", obs)
+	}
+}
+
+func TestObserverTreatsHardStoppedRunAsOperatorStop(t *testing.T) {
+	t.Parallel()
+
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-500", Role: agentrun.RoleImplementer, SessionID: "session-stop"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	handle := &fakeHandle{
+		stdout: bytes.NewReader(nil),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		if err := store.WriteStatus(runruntime.StatusSnapshot{
+			TicketID:         "TKT-500",
+			SessionID:        "session-stop",
+			Active:           false,
+			LastResultStatus: "stopped",
+			LastVisibleText:  "Operator requested hard stop",
+		}); err != nil {
+			panic(err)
+		}
+		handle.waitCh <- errors.New("signal: killed")
+	}()
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Reason != "operator requested hard stop" {
+		t.Fatalf("unexpected hard-stop result: %#v", obs)
+	}
+	status, ok, err := store.LoadStatus("TKT-500")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.LastResultStatus != "stopped" {
+		t.Fatalf("expected stopped runtime status, got %#v", status)
 	}
 }
 

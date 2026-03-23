@@ -137,7 +137,7 @@ func (s *Service) StartImplementer(ctx context.Context, ticketID string) (Starte
 		return StartedRun{}, err
 	}
 	if s.runtime != nil {
-		if err := s.runtime.Init(record, spec.Prompt, s.monitorTimeout()); err != nil {
+		if err := s.runtime.Continue(record, spec.Prompt, s.monitorTimeout()); err != nil {
 			return StartedRun{}, err
 		}
 	}

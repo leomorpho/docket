@@ -180,6 +180,70 @@ func TestStoreInitResetsPreviousActiveRunArtifacts(t *testing.T) {
 	}
 }
 
+func TestStoreContinuePreservesExistingRunArtifacts(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-392",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "codex-session",
+		RepoRoot:     repoRoot,
+		WorktreePath: filepath.Join(repoRoot, "wt"),
+		Branch:       "docket/TKT-392",
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:    "019d1874-46f8-78f1-ba05-2f912b1ff4fc",
+	}
+
+	if err := store.Init(record, "first prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.AppendStdout(record.TicketID, []byte("first-line\n")); err != nil {
+		t.Fatalf("AppendStdout() error = %v", err)
+	}
+	if err := store.AppendTranscript(record.TicketID, TranscriptEntry{
+		At:   time.Now().UTC().Format(time.RFC3339Nano),
+		Text: "STATUS ticket=TKT-392 phase=healthcheck",
+	}); err != nil {
+		t.Fatalf("AppendTranscript() error = %v", err)
+	}
+
+	record.StartedAt = time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano)
+	if err := store.Continue(record, "resume prompt", 2*time.Minute); err != nil {
+		t.Fatalf("Continue() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(store.RunDir(record.TicketID), stdoutFile))
+	if err != nil {
+		t.Fatalf("read stdout file: %v", err)
+	}
+	if !strings.Contains(string(raw), "first-line") {
+		t.Fatalf("expected Continue() to preserve stdout, got %q", string(raw))
+	}
+	transcript, err := store.LoadTranscript(record.TicketID)
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) != 1 || transcript[0].Text != "STATUS ticket=TKT-392 phase=healthcheck" {
+		t.Fatalf("expected transcript preserved, got %#v", transcript)
+	}
+	prompt, err := store.LoadPrompt(record.TicketID)
+	if err != nil {
+		t.Fatalf("LoadPrompt() error = %v", err)
+	}
+	if prompt != "resume prompt" {
+		t.Fatalf("unexpected prompt: %q", prompt)
+	}
+	status, ok, err := store.LoadStatus(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.SessionID != record.SessionID || status.InactivityTimeout != "2m0s" {
+		t.Fatalf("unexpected continued status: %#v", status)
+	}
+}
+
 func TestStoreCycleStateAndStopRequestLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -420,5 +484,43 @@ func TestStoreHardStopRunMarksStoppedAndRequestsCycleStop(t *testing.T) {
 	}
 	if !stopRequested {
 		t.Fatalf("expected cycle stop to be requested")
+	}
+}
+
+func TestWriteStatusPreservesStoppedTerminalState(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-406", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-406", SessionID: "session-406"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{
+		TicketID:         record.TicketID,
+		SessionID:        record.SessionID,
+		Active:           false,
+		LastResultStatus: "stopped",
+		LastVisibleText:  "Operator requested hard stop",
+		LastVisibleAt:    time.Now().UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("WriteStatus(stopped) error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{
+		TicketID:         record.TicketID,
+		SessionID:        record.SessionID,
+		Active:           true,
+		LastResultStatus: string(agentrun.StatusFailed),
+		LastVisibleText:  "process exited without RESULT line",
+	}); err != nil {
+		t.Fatalf("WriteStatus(overwrite) error = %v", err)
+	}
+
+	status, ok, err := store.LoadStatus(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.Active || status.LastResultStatus != "stopped" || status.LastVisibleText != "Operator requested hard stop" {
+		t.Fatalf("expected stopped state to win, got %#v", status)
 	}
 }

@@ -86,6 +86,7 @@ func (r *Runner) start(ctx context.Context, spec agentrun.RunSpec, resumeSession
 	}
 	args = append(args, "-")
 	cmd := r.newCmd(ctx, r.command, args...)
+	cmd.Dir = spec.WorktreePath
 	cmd.Env = append(os.Environ(),
 		"DOCKET_SESSION_ID="+sessionID,
 		"DOCKET_TICKET_ID="+spec.TicketID,

@@ -92,7 +92,7 @@ var secureApproveCmd = &cobra.Command{
 		}
 
 		mgr := security.NewSessionManager(docketHome)
-		if err := mgr.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 
@@ -120,7 +120,7 @@ var secureAnchorSetCmd = &cobra.Command{
 		}
 
 		mgr := security.NewSessionManager(docketHome)
-		if err := mgr.RequireActive(repo); err != nil {
+		if err := ensureSecureSessionActive(repo); err != nil {
 			return err
 		}
 

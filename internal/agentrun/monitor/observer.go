@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 )
@@ -140,7 +141,14 @@ func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.S
 	now := o.now().UTC()
 	status.LastEventAt = now.Format(time.RFC3339Nano)
 	if threadID := codexThreadIDFromLine(line); threadID != "" {
-		status.SessionID = threadID
+		if current := strings.TrimSpace(status.SessionID); current == "" || !isStableThreadID(current) || current == threadID {
+			status.SessionID = threadID
+		} else if o.runtime != nil {
+			_ = o.runtime.AppendTranscript(ticketID, runruntime.TranscriptEntry{
+				At:   now.Format(time.RFC3339Nano),
+				Text: fmt.Sprintf("warning: resumed run reported mismatched thread id %s; keeping existing session %s", threadID, current),
+			})
+		}
 	}
 	status.SessionMessageCount += llmMessageCountFromLine(line)
 	if stream == "stdout" {
@@ -150,7 +158,8 @@ func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.S
 	} else if o.runtime != nil {
 		_ = o.runtime.AppendStderr(ticketID, []byte(line+"\n"))
 	}
-	for _, visible := range visibleTextsFromLine(stream, line) {
+	visibleTexts := visibleTextsFromLine(stream, line)
+	for _, visible := range visibleTexts {
 		status.LastVisibleAt = now.Format(time.RFC3339Nano)
 		status.LastVisibleText = visible
 		o.updateProgressStatus(status, visible)
@@ -161,7 +170,21 @@ func (o *Observer) applyLine(ticketID, stream, line string, status *runruntime.S
 			})
 		}
 	}
+	if warning := runtimeWarningFromLine(stream, line, visibleTexts); warning != "" {
+		if warning != status.Warning && o.runtime != nil {
+			_ = o.runtime.AppendTranscript(ticketID, runruntime.TranscriptEntry{
+				At:   now.Format(time.RFC3339Nano),
+				Text: "warning: " + warning,
+			})
+		}
+		status.Warning = warning
+	}
 	_ = o.writeStatus(*status)
+}
+
+func isStableThreadID(sessionID string) bool {
+	_, err := uuid.Parse(strings.TrimSpace(sessionID))
+	return err == nil
 }
 
 func (o *Observer) writeInitialStatus(input agentrun.ObservationInput, timeout time.Duration) error {
@@ -216,6 +239,12 @@ func (o *Observer) finalizeObservation(input agentrun.ObservationInput, status r
 		status.LastResultStatus = string(agentrun.StatusFailed)
 		return agentrun.Observation{
 			Result: failureResult(input.Record, malformed),
+		}, nil
+	}
+	if stopped := o.operatorStoppedStatus(input.Record.TicketID); stopped {
+		status.LastResultStatus = "stopped"
+		return agentrun.Observation{
+			Result: failureResult(input.Record, "operator requested hard stop"),
 		}, nil
 	}
 	status.LastResultStatus = string(agentrun.StatusFailed)
@@ -467,4 +496,61 @@ func reviewTextFromLine(line string) string {
 		}
 	}
 	return ""
+}
+
+func (o *Observer) operatorStoppedStatus(ticketID string) bool {
+	if o.runtime == nil {
+		return false
+	}
+	status, ok, err := o.runtime.LoadStatus(ticketID)
+	if err != nil || !ok {
+		return false
+	}
+	return !status.Active && status.LastResultStatus == "stopped"
+}
+
+func runtimeWarningFromLine(stream, line string, visibleTexts []string) string {
+	for _, visible := range visibleTexts {
+		if warning := runtimeWarningFromVisibleText(visible); warning != "" {
+			return warning
+		}
+	}
+	if stream != "stderr" {
+		return ""
+	}
+	line = strings.TrimSpace(line)
+	if strings.Contains(line, "Missing Authorization header") {
+		host := quotedURLHost(line)
+		if host == "" {
+			host = "configured MCP server"
+		}
+		return fmt.Sprintf("optional MCP server %s rejected authentication; continuing without it", host)
+	}
+	return ""
+}
+
+func runtimeWarningFromVisibleText(text string) string {
+	text = strings.TrimSpace(text)
+	switch {
+	case text == "":
+		return ""
+	case strings.Contains(text, "Disabled `js_repl` for this session"),
+		strings.Contains(text, "Disabled js_repl for this session"):
+		return text
+	default:
+		return ""
+	}
+}
+
+func quotedURLHost(line string) string {
+	start := strings.Index(line, "https://")
+	if start == -1 {
+		return ""
+	}
+	rest := line[start+len("https://"):]
+	end := strings.IndexAny(rest, "/\"")
+	if end == -1 {
+		return rest
+	}
+	return rest[:end]
 }
