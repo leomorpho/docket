@@ -44,7 +44,8 @@ func TestSelectNextTicket(t *testing.T) {
 
 	// 1. Setup config
 	cfg := ticket.DefaultConfig()
-	// Add in-progress to backlog.next so transitions work in selectNextTicket
+	// Extend the default workflow example so backlog can transition directly
+	// into an active-role state during this test setup.
 	backlog := cfg.States["backlog"]
 	backlog.Next = append(backlog.Next, "in-progress")
 	cfg.States["backlog"] = backlog
@@ -57,8 +58,8 @@ func TestSelectNextTicket(t *testing.T) {
 	// T1: priority 10, backlog
 	// T2: priority 1, backlog (should be picked)
 	// T3: priority 1, backlog, blocked (should be skipped)
-	// T4: in-progress (should be skipped)
-	// T5: in-review (should be skipped)
+	// T4: active-role state in default workflow example (should be skipped)
+	// T5: review-role state in default workflow example (should be skipped)
 
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "backlog", Priority: 10})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "backlog", Priority: 1})

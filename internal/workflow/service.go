@@ -27,7 +27,7 @@ func NewManager(s store.Backend, v vcs.Provider, c claim.Manager) *WorkflowManag
 	}
 }
 
-// StartTask moves a ticket to 'in-progress', claims it, and sets up a worktree.
+// StartTask moves a ticket to the configured active-work state, claims it, and sets up a worktree.
 // Returns the updated ticket and the worktree path where it is claimed.
 func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID string, cfg *ticket.Config) (*ticket.Ticket, string, error) {
 	t, err := m.store.GetTicket(ctx, ticketID)
@@ -98,7 +98,7 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 	return t, claimedPath, nil
 }
 
-// FinishTask moves a ticket to 'in-review' and releases the claim.
+// FinishTask moves a ticket to the configured review state and releases the claim.
 // If the ticket was in a separate worktree, it commits changes and merges back.
 func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
 	t, err := m.store.GetTicket(ctx, ticketID)

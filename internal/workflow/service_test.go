@@ -290,10 +290,10 @@ func TestWorkflowFinishTask(t *testing.T) {
 	}
 
 	if res.State != "in-review" {
-		t.Errorf("expected state in-review, got %s", res.State)
+		t.Errorf("expected default review state in-review, got %s", res.State)
 	}
 	if !res.CompletedAt.IsZero() {
-		t.Error("expected CompletedAt to remain unset at in-review")
+		t.Error("expected CompletedAt to remain unset at review state")
 	}
 	if _, ok := c.claims["TKT-001"]; ok {
 		t.Error("expected claim to be released")
@@ -464,7 +464,7 @@ func TestWorkflowFinishTask_RealGitWorktreeCleanup(t *testing.T) {
 		t.Fatalf("FinishTask failed: %v", err)
 	}
 	if res.State != "in-review" {
-		t.Fatalf("expected in-review state, got %s", res.State)
+		t.Fatalf("expected default review state in-review, got %s", res.State)
 	}
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 		t.Fatalf("expected worktree path removed, got err=%v", err)
