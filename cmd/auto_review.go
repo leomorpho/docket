@@ -34,7 +34,7 @@ func maybeAutoTransitionReviewReady(
 		return t, false
 	}
 
-	if err := enforceManagedRunCommitLinkage(t.ID, reviewState); err != nil {
+	if err := enforceManagedRunCommitLinkage(t.ID, reviewState, cfg); err != nil {
 		fmt.Fprintf(out, "Auto-review skipped for %s: %v\n", t.ID, err)
 		return t, false
 	}

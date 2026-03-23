@@ -141,7 +141,7 @@ var updateCmd = &cobra.Command{
 			isCompletedTarget := cfg.StateHasRole(nextState, "completed")
 			isArchivedTarget := cfg.StateHasRole(nextState, "archived")
 			if isReviewTarget || isCompletedTarget {
-				if err := enforceManagedRunCommitLinkage(t.ID, newState); err != nil {
+				if err := enforceManagedRunCommitLinkage(t.ID, newState, cfg); err != nil {
 					return err
 				}
 				transitionChecks = append(transitionChecks, "managed_run_commit_linkage")
@@ -162,7 +162,7 @@ var updateCmd = &cobra.Command{
 				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
 					return err
 				}
-				if err := runPrivilegedHooks(cmd, t.ID, string(newState)); err != nil {
+				if err := runPrivilegedHooks(cmd, t.ID, string(newState), cfg); err != nil {
 					return err
 				}
 				transitionChecks = append(transitionChecks, "privileged_surface_authorized")
@@ -515,10 +515,15 @@ func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id
 	return out, nil
 }
 
-func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error {
+func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *ticket.Config) error {
+	enforce := cfg != nil && cfg.SecurityEnforcement
 	ns := security.NewRepoNamespaceStore(docketHome)
 	run, ok, err := ns.GetRunManifest(repo, ticketID)
 	if err != nil {
+		if !enforce {
+			warnSecurityEnforcementBypassed(fmt.Sprintf("managed-run linkage check failed for %s but enforcement is disabled: %v", ticketID, err))
+			return nil
+		}
 		return fmt.Errorf("reading run manifest for %s: %w", ticketID, err)
 	}
 	if !ok {
@@ -526,6 +531,10 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error 
 	}
 	if err := ns.VerifyRunContext(repo, ticketID, "", "", "", ""); err != nil {
 		if errors.Is(err, security.ErrRunManifestMissing) {
+			return nil
+		}
+		if !enforce {
+			warnSecurityEnforcementBypassed(fmt.Sprintf("run manifest validation failed for %s but enforcement is disabled: %v", ticketID, err))
 			return nil
 		}
 		return fmt.Errorf("run manifest validation failed for %s: %w", ticketID, err)
@@ -563,6 +572,10 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error 
 		}
 	}
 	if hookErr != nil {
+		if !enforce {
+			warnSecurityEnforcementBypassed(fmt.Sprintf("managed run %s linkage check failed but enforcement is disabled: %v", ticketID, hookErr))
+			return nil
+		}
 		return fmt.Errorf("managed run %s cannot advance to %s: %w", ticketID, target, hookErr)
 	}
 	for _, msg := range advisory {
@@ -571,7 +584,8 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State) error 
 	return nil
 }
 
-func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string) error {
+func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string, cfg *ticket.Config) error {
+	enforce := cfg != nil && cfg.SecurityEnforcement
 	manager := hooks.NewManager()
 	hooks.RegisterCoreHooks(manager)
 	advisory, err := manager.Run(hooks.EventPrivileged, hooks.Context{
@@ -584,6 +598,10 @@ func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string) error 
 		fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
 	}
 	if err != nil {
+		if !enforce {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: privileged hook enforcement disabled (security_enforcement=false): %v\n", err)
+			return nil
+		}
 		return fmt.Errorf("privileged hook failed: %w", err)
 	}
 	return nil

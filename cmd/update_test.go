@@ -84,8 +84,8 @@ func TestUpdateCmd(t *testing.T) {
 	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "done"})
 	if err := rootCmd.Execute(); err == nil {
 		t.Error("expected error for invalid transition todo -> done, got nil")
-	} else if !strings.Contains(err.Error(), "--ticket is required") {
-		t.Fatalf("expected human done transition to require privileged surface, got: %v", err)
+	} else if !strings.Contains(strings.ToLower(err.Error()), "cannot transition") {
+		t.Fatalf("expected invalid transition rejection for todo -> done, got: %v", err)
 	}
 
 	// 3. Labels and Blockers
@@ -129,7 +129,9 @@ func TestUpdateCmd_Handoff(t *testing.T) {
 	format = "human"
 
 	s := local.New(tmpDir)
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	ctx := context.Background()
@@ -174,7 +176,9 @@ func TestUpdateCmd_AllowsInProgressBackToBacklog(t *testing.T) {
 	format = "human"
 
 	s := local.New(tmpDir)
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	ctx := context.Background()
@@ -354,8 +358,16 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	format = "human"
 
 	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	loadedCfg, err := ticket.LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if !loadedCfg.SecurityEnforcement {
+		t.Fatal("expected security_enforcement=true for stale manifest enforcement test")
 	}
 
 	s := local.New(tmpDir)
@@ -408,6 +420,58 @@ func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
 	session := security.NewSessionManager(tmpHome)
 	if err := session.RequireActive(tmpDir); err != nil {
 		t.Fatalf("expected secure session to remain active, got: %v", err)
+	}
+}
+
+func TestUpdateCmd_PrivilegedDoneWarningOnlyByDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = false
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-186B",
+		Seq:         186,
+		Title:       "Privileged transition warning-only",
+		State:       ticket.State("in-review"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "me",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
+		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- y\n\n**AC status:**\n- done",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"update", "TKT-186B", "--state", "done"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected warning-only done transition to proceed, got: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "warning: privileged enforcement is disabled") {
+		t.Fatalf("expected warning-only privileged message, got: %s", errBuf.String())
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-186B")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != "done" {
+		t.Fatalf("expected done state, got %s", got.State)
 	}
 }
 
@@ -585,6 +649,7 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 			},
 		},
 		DefaultState: "queued",
+		SecurityEnforcement: true,
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -688,6 +753,7 @@ func TestUpdateCmd_CustomWorkflowCompletedStateRequiresPrivilegedSurface(t *test
 			},
 		},
 		DefaultState: "queued",
+		SecurityEnforcement: true,
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -741,6 +807,7 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
 
 	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -792,6 +859,68 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	}
 }
 
+func TestUpdateCmd_ManagedRunLinkageWarningOnlyByDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
+
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = false
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-198B",
+		Seq:         198,
+		Title:       "Managed run linkage warning-only",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Handoff:     "handoff",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	ns := security.NewRepoNamespaceStore(tmpHome)
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-198B")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree path failed: %v", err)
+	}
+	if err := ns.RecordRunStart(tmpDir, "TKT-198B", "agent:test", worktreePath, "HEAD", "hash-198B"); err != nil {
+		t.Fatalf("RecordRunStart failed: %v", err)
+	}
+
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"update", "TKT-198B", "--state", "in-review"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected warning-only linkage mode to proceed, got: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "warning: managed run") {
+		t.Fatalf("expected managed-run linkage warning, got: %s", errBuf.String())
+	}
+}
+
 func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
@@ -810,7 +939,9 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 	runGitSession(t, tmpDir, "add", ".")
 	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
 
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
@@ -1046,7 +1177,7 @@ func TestUpdateCmd_ManagedRunInReviewAutostashesDirtyMainCheckout(t *testing.T) 
 	}
 }
 
-func TestUpdateCmd_ManagedRunRejectsStaleRunManifest(t *testing.T) {
+func TestUpdateCmd_ManagedRunWarnsOnStaleRunManifestByDefault(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -1063,7 +1194,9 @@ func TestUpdateCmd_ManagedRunRejectsStaleRunManifest(t *testing.T) {
 	runGitSession(t, tmpDir, "add", ".")
 	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
 
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = false
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
@@ -1117,11 +1250,15 @@ func TestUpdateCmd_ManagedRunRejectsStaleRunManifest(t *testing.T) {
 	runGitSession(t, tmpDir, "add", ".")
 	runGitSession(t, tmpDir, "commit", "-m", "feat: stale manifest\n\nTicket: TKT-209")
 
+	errBuf := new(bytes.Buffer)
 	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(errBuf)
 	rootCmd.SetArgs([]string{"update", "TKT-209", "--state", "in-review"})
-	err = rootCmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "run manifest validation failed") {
-		t.Fatalf("expected stale run manifest rejection, got: %v", err)
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected stale run manifest warning-only behavior, got: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "warning: run manifest validation failed") {
+		t.Fatalf("expected stale run manifest warning, got: %s", errBuf.String())
 	}
 }
 

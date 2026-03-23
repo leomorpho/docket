@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestLockReleaseRequiresSecureSurface(t *testing.T) {
@@ -17,6 +18,11 @@ func TestLockReleaseRequiresSecureSurface(t *testing.T) {
 	docketHome = ""
 	repo = tmpRepo
 	format = "human"
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpRepo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
 
 	if err := upsertLock(tmpRepo, fileLock{
 		TicketID:     "TKT-500",
@@ -52,6 +58,11 @@ func TestLockReleaseAutoUnlocksWithEnvPassword(t *testing.T) {
 	docketHome = ""
 	repo = tmpRepo
 	format = "human"
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpRepo, cfg); err != nil {
+		t.Fatalf("save config failed: %v", err)
+	}
 
 	ks := security.NewFileKeystore(tmpHome)
 	if err := ks.Create("pw-1"); err != nil {
