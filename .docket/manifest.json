@@ -1339,7 +1339,7 @@
     },
     "TKT-251": {
       "title": "Investigate and fix `update --state done` behavior across warning-only and enforced modes",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-174"
     },
@@ -1465,7 +1465,7 @@
     },
     "TKT-272": {
       "title": "Expand adapter installation with a portable-first fallback model",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1501,7 +1501,7 @@
     },
     "TKT-278": {
       "title": "Add bulk roadmap-to-tickets authoring flow for one-line worklists",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-228"
     },
@@ -1716,13 +1716,13 @@
     },
     "TKT-314": {
       "title": "Ship a default workflow config that matches current Docket behavior",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-315": {
       "title": "Implement a shared workflow evaluator that resolves transitions, roles, startability, and dependency blocking from config",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-310"
     },
@@ -1932,25 +1932,25 @@
     },
     "TKT-350": {
       "title": "Add simple opt-in security enforcement switch with warning-only-by-default behavior",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-351": {
       "title": "Default experimental security enforcement to warning-only behavior until explicitly enabled",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-352": {
       "title": "Make privileged transitions and workflow-policy commands respect the opt-in enforcement switch consistently",
-      "state": "backlog",
+      "state": "in-progress",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-353": {
       "title": "Surface whether secure enforcement is warning-only or enabled in start, status, doctor, and secure setup UX",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-174"
     },
@@ -1998,7 +1998,7 @@
     },
     "TKT-361": {
       "title": "Define the repo-shared enforcement setting and where it is stored",
-      "state": "backlog",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-174"
     },
@@ -2052,55 +2052,55 @@
     },
     "TKT-370": {
       "title": "Refactor check status and lock surfaces to derive active-work semantics from workflow roles",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-371": {
       "title": "Refactor wrap-up and auto-review guidance to use config-defined workflow roles and target commands",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-372": {
       "title": "Keep scaffold JSON output pure when global human skill hints are enabled",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-373": {
       "title": "Clean up workflow docs and generated templates for role-based semantics",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-374": {
       "title": "Clean up workflow comments, tests, and examples that imply fixed state names",
-      "state": "todo",
+      "state": "in-review",
       "priority": 3,
       "parent": "TKT-310"
     },
     "TKT-375": {
       "title": "Add one optional reviewer pass with a single capped fix-review loop for completed ticket runs",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-379"
     },
     "TKT-376": {
       "title": "Implement run-next as a serial loop that selects the next runnable ticket and repeats until exhausted",
-      "state": "todo",
+      "state": "in-review",
       "priority": 2,
       "parent": "TKT-379"
     },
     "TKT-377": {
       "title": "Gate successful agent runs on final validation, clean repo state, and ticket transitions",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-378": {
       "title": "Define the run contract, lifecycle states, and machine-readable result format for agent ticket runs",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-379"
     },
@@ -2112,19 +2112,19 @@
     },
     "TKT-380": {
       "title": "Implement a one-ticket Codex runner that creates a fresh worktree and launches a fresh session",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-381": {
       "title": "Add run monitoring, RESULT parsing, and timeout handling for Codex-managed ticket runs",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-382": {
       "title": "Define modular agent-run package boundaries and interfaces before orchestration implementation",
-      "state": "todo",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-379"
     }
