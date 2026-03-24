@@ -76,7 +76,16 @@ func RemoveWorktree(repoRoot, path string) error {
 	if err != nil {
 		return fmt.Errorf("git worktree remove failed: %w\n%s", err, out)
 	}
-	_, _ = runGit(repoRoot, "worktree", "prune")
+	_ = PruneWorktrees(repoRoot)
+	return nil
+}
+
+// PruneWorktrees prunes stale worktree administrative entries.
+func PruneWorktrees(repoRoot string) error {
+	_, err := runGit(repoRoot, "worktree", "prune", "--expire", "now")
+	if err != nil {
+		return fmt.Errorf("git worktree prune failed: %w", err)
+	}
 	return nil
 }
 

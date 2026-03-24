@@ -255,10 +255,10 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	t.Run("reuses current dedicated worktree instead of creating another", func(t *testing.T) {
 		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
 		v := &MockVCS{
-			repoRoot:        "/tmp/repo",
-			currentCheckout: "/tmp/wt-TKT-001",
-			worktreePath:    "/tmp/wt-TKT-001",
-			isPrimary:       false,
+			repoRoot:          "/tmp/repo",
+			currentCheckout:   "/tmp/wt-TKT-001",
+			worktreePath:      "/tmp/wt-TKT-001",
+			isPrimary:         false,
 			createWorktreeErr: errors.New("should not be called"),
 		}
 		c := &MockClaim{claims: make(map[string]string)}
@@ -408,6 +408,50 @@ func TestWorkflowFinishTask_FailsWhenBranchDeletionFails(t *testing.T) {
 	}
 	if _, ok := c.claims["TKT-001"]; !ok {
 		t.Fatal("expected claim to remain when branch deletion fails")
+	}
+}
+
+func TestWorkflowFinishTask_ContinuesWhenWorktreeCleanupPathIsInaccessible(t *testing.T) {
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	v := &MockVCS{removeWorktreeErr: errors.New("permission denied")}
+	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
+	mgr := NewManager(s, v, c)
+	cfg := ticket.DefaultConfig()
+
+	res, err := mgr.FinishTask(context.Background(), "TKT-001", cfg)
+	if err != nil {
+		t.Fatalf("expected recoverable cleanup error to proceed, got: %v", err)
+	}
+	if res.State != "in-review" {
+		t.Fatalf("expected review state in-review, got %s", res.State)
+	}
+	if _, ok := c.claims["TKT-001"]; ok {
+		t.Fatal("expected claim to be released on recoverable cleanup failure")
+	}
+}
+
+func TestWorkflowFinishTask_ContinuesWhenBranchDeleteBlockedByStaleWorktree(t *testing.T) {
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	v := &MockVCS{
+		removeWorktreeErr: errors.New("permission denied"),
+		deleteBranchErr:   errors.New("branch is checked out at /tmp/wt-TKT-001"),
+	}
+	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
+	mgr := NewManager(s, v, c)
+	cfg := ticket.DefaultConfig()
+
+	res, err := mgr.FinishTask(context.Background(), "TKT-001", cfg)
+	if err != nil {
+		t.Fatalf("expected recoverable stale-branch deletion error to proceed, got: %v", err)
+	}
+	if res.State != "in-review" {
+		t.Fatalf("expected review state in-review, got %s", res.State)
+	}
+	if _, ok := c.claims["TKT-001"]; ok {
+		t.Fatal("expected claim to be released when stale branch deletion is recoverable")
+	}
+	if v.deleteCalls < 1 {
+		t.Fatalf("expected delete branch attempt, got %d", v.deleteCalls)
 	}
 }
 

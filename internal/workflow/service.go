@@ -129,6 +129,7 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 	if cl != nil && cl.Worktree != "" && cl.Worktree != repoRoot {
 		branch := "docket/" + t.ID
 		mergedFromFallbackRef := false
+		recoverableCleanupFailure := false
 		// Commit changes in worktree
 		_ = m.vcs.CommitAll(ctx, cl.Worktree, fmt.Sprintf("Auto-commit for %s completion", t.ID))
 
@@ -149,17 +150,34 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 
 		// Cleanup must succeed so merged runs do not leave stale linked worktrees behind.
 		if err := m.vcs.RemoveWorktree(ctx, cl.Worktree); err != nil {
-			return nil, fmt.Errorf("cleanup merged worktree %s: %w", cl.Worktree, err)
+			if !isRecoverableWorktreeCleanupError(err) {
+				return nil, fmt.Errorf("cleanup merged worktree %s: %w", cl.Worktree, err)
+			}
+			recoverableCleanupFailure = true
+			_ = docketgit.PruneWorktrees(repoRoot)
 		}
 		if !mergedFromFallbackRef {
 			if err := m.vcs.DeleteBranch(ctx, branch); err != nil {
+				if recoverableCleanupFailure && isRecoverableBranchDeleteError(err, cl.Worktree) {
+					_ = docketgit.PruneWorktrees(repoRoot)
+					if retryErr := m.vcs.DeleteBranch(ctx, branch); retryErr == nil || isRecoverableBranchDeleteError(retryErr, cl.Worktree) {
+						goto postCleanup
+					}
+				}
 				return nil, fmt.Errorf("delete merged branch %s: %w", branch, err)
 			}
 		} else if exists, _ := docketgit.CommitExists(repoRoot, branch); exists {
 			if err := m.vcs.DeleteBranch(ctx, branch); err != nil {
+				if recoverableCleanupFailure && isRecoverableBranchDeleteError(err, cl.Worktree) {
+					_ = docketgit.PruneWorktrees(repoRoot)
+					if retryErr := m.vcs.DeleteBranch(ctx, branch); retryErr == nil || isRecoverableBranchDeleteError(retryErr, cl.Worktree) {
+						goto postCleanup
+					}
+				}
 				return nil, fmt.Errorf("delete merged branch %s: %w", branch, err)
 			}
 		}
+	postCleanup:
 	}
 
 	// 2. Transition state through command validation.
@@ -237,4 +255,40 @@ func isMissingMergeRefError(err error) bool {
 		}
 	}
 	return false
+}
+
+func isRecoverableWorktreeCleanupError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	markers := []string{
+		"permission denied",
+		"operation not permitted",
+		"no such file or directory",
+		"does not exist",
+		"not a working tree",
+		"unable to access",
+	}
+	for _, marker := range markers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRecoverableBranchDeleteError(err error, worktreePath string) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "checked out at") {
+		return false
+	}
+	wt := strings.ToLower(strings.TrimSpace(worktreePath))
+	if wt == "" {
+		return true
+	}
+	return strings.Contains(msg, wt)
 }
