@@ -145,6 +145,7 @@ func buildCodexHooksCheck(repoRoot string) DoctorCheck {
 	paths := []string{
 		filepath.Join(repoRoot, ".git", "hooks", "pre-commit"),
 		filepath.Join(repoRoot, ".git", "hooks", "commit-msg"),
+		filepath.Join(repoRoot, ".git", "hooks", "post-merge"),
 	}
 	for _, path := range paths {
 		if !fileExists(path) {

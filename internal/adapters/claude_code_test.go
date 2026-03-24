@@ -80,6 +80,9 @@ func TestClaudeAdapterBootstrapStatusReady(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".git", "hooks", "commit-msg"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatalf("write commit-msg failed: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(repo, ".git", "hooks", "post-merge"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write post-merge failed: %v", err)
+	}
 
 	adapter := newClaudeCodeAdapter()
 	if err := adapter.Bootstrap(context.Background(), BootstrapInput{RepoRoot: repo}); err != nil {

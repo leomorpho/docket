@@ -17,6 +17,7 @@ func TestStarterScaffoldLayoutMatchesGoldenContract(t *testing.T) {
 	want := []string{
 		filepath.Join(".docket", "install.json"),
 		filepath.Join(".git", "hooks", "commit-msg"),
+		filepath.Join(".git", "hooks", "post-merge"),
 		filepath.Join(".git", "hooks", "pre-commit"),
 		".gitignore",
 		"CLAUDE.md",

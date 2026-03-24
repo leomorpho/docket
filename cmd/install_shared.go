@@ -32,6 +32,7 @@ func starterScaffoldLayout(repoRoot string) []string {
 	return []string{
 		artifacts.MustRelPath(artifacts.RepoInstallManifest),
 		filepath.Join(".git", "hooks", "commit-msg"),
+		filepath.Join(".git", "hooks", "post-merge"),
 		filepath.Join(".git", "hooks", "pre-commit"),
 		".gitignore",
 		filepath.Base(claudePath(repoRoot)),
@@ -42,6 +43,7 @@ func starterScaffoldManagedArtifacts(repoRoot string) []string {
 	managed := []string{
 		claudePath(repoRoot),
 		commitMsgHookPath(repoRoot),
+		postMergeHookPath(repoRoot),
 		preCommitHookPath(repoRoot),
 	}
 	sort.Strings(managed)
@@ -71,6 +73,10 @@ func preCommitHookPath(repoRoot string) string {
 
 func commitMsgHookPath(repoRoot string) string {
 	return filepath.Join(repoRoot, ".git", "hooks", "commit-msg")
+}
+
+func postMergeHookPath(repoRoot string) string {
+	return filepath.Join(repoRoot, ".git", "hooks", "post-merge")
 }
 
 func installManifestPath(repoRoot string) string {
@@ -177,6 +183,20 @@ exit 0
 `
 }
 
+func postMergeHookScript() string {
+	return `#!/bin/sh
+set -eu
+
+DOCKET_BIN="${DOCKET_BIN:-docket}"
+
+if command -v "$DOCKET_BIN" >/dev/null 2>&1; then
+  "$DOCKET_BIN" __hook-post-merge-review-sync || true
+fi
+
+exit 0
+`
+}
+
 func claudeManagedBlock(repoRoot string) string {
 	cfg, err := ticket.LoadConfig(repoRoot)
 	if err != nil {
@@ -231,6 +251,7 @@ func ensureClaudeManagedBlock(repoRoot string) (bool, error) {
 func writeHook(repoRoot string) (bool, error) {
 	prePath := preCommitHookPath(repoRoot)
 	commitPath := commitMsgHookPath(repoRoot)
+	postMergePath := postMergeHookPath(repoRoot)
 	if err := os.MkdirAll(filepath.Dir(prePath), 0o755); err != nil {
 		return false, err
 	}
@@ -241,6 +262,7 @@ func writeHook(repoRoot string) (bool, error) {
 	}{
 		{path: prePath, script: preCommitHookScript()},
 		{path: commitPath, script: commitMsgHookScript()},
+		{path: postMergePath, script: postMergeHookScript()},
 	}
 	for _, hook := range hooks {
 		if data, err := os.ReadFile(hook.path); err == nil && string(data) == hook.script {

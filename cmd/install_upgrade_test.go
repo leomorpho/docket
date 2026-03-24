@@ -68,6 +68,21 @@ func TestInstallCreatesManagedArtifactsAndIsIdempotent(t *testing.T) {
 	if commitInfo.Mode()&0o111 == 0 {
 		t.Fatalf("commit-msg hook should be executable, mode=%v", commitInfo.Mode())
 	}
+	postMergePath := postMergeHookPath(tmpDir)
+	postMergeData, err := os.ReadFile(postMergePath)
+	if err != nil {
+		t.Fatalf("post-merge hook missing: %v", err)
+	}
+	if !strings.Contains(string(postMergeData), "__hook-post-merge-review-sync") {
+		t.Fatalf("post-merge hook should run review sync")
+	}
+	postMergeInfo, err := os.Stat(postMergePath)
+	if err != nil {
+		t.Fatalf("post-merge hook stat failed: %v", err)
+	}
+	if postMergeInfo.Mode()&0o111 == 0 {
+		t.Fatalf("post-merge hook should be executable, mode=%v", postMergeInfo.Mode())
+	}
 
 	manifestData, err := os.ReadFile(installManifestPath(tmpDir))
 	if err != nil {
