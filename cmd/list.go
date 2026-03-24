@@ -376,6 +376,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listOnlyUnblocked, "unblocked", false, "exclude blocked tickets")
 	listCmd.Flags().BoolVar(&listIncludeArchived, "include-archived", false, "include archived tickets")
 	listCmd.Flags().BoolVar(&listFull, "full", false, "show the full matching ticket graph instead of only workable tickets")
+	listCmd.Flags().BoolVar(&listFull, "all", false, "alias for --full, show the full matching ticket graph instead of only workable tickets")
 	listCmd.Flags().BoolVar(&listWorkspace, "workspace", false, "aggregate tickets across connected Docket repos under the current workspace root")
 
 	rootCmd.AddCommand(listCmd)

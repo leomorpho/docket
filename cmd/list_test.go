@@ -389,10 +389,47 @@ func TestListCmd_WholeShowsFullHierarchy(t *testing.T) {
 	format = "human"
 	listFull = false
 
-	s := local.New(tmpDir)
-	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+	prepareFullHierarchyTickets(t, tmpDir)
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list", "--full"})
+	listState = "open"
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list full failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-001") || !strings.Contains(out.String(), "↳ TKT-002") {
+		t.Fatalf("expected full view to show full hierarchy, got:\n%s", out.String())
+	}
+}
+
+func TestListCmd_AllAliasShowsFullHierarchy(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	listFull = false
+
+	prepareFullHierarchyTickets(t, tmpDir)
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"list", "--all"})
+	listState = "open"
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("list alias failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "TKT-001") || !strings.Contains(out.String(), "↳ TKT-002") {
+		t.Fatalf("expected alias view to show full hierarchy, got:\n%s", out.String())
+	}
+}
+
+func prepareFullHierarchyTickets(t *testing.T, repoDir string) {
+	t.Helper()
+	s := local.New(repoDir)
+	if err := ticket.SaveConfig(repoDir, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("save config failed: %v", err)
 	}
+
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
@@ -406,17 +443,6 @@ func TestListCmd_WholeShowsFullHierarchy(t *testing.T) {
 		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("create child failed: %v", err)
-	}
-
-	out := new(bytes.Buffer)
-	rootCmd.SetOut(out)
-	rootCmd.SetArgs([]string{"list", "--full"})
-	listState = "open"
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("list full failed: %v", err)
-	}
-	if !strings.Contains(out.String(), "TKT-001") || !strings.Contains(out.String(), "↳ TKT-002") {
-		t.Fatalf("expected full view to show full hierarchy, got:\n%s", out.String())
 	}
 }
 
