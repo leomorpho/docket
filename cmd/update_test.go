@@ -718,7 +718,7 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 				Terminal: true,
 			},
 		},
-		DefaultState: "queued",
+		DefaultState:        "queued",
 		SecurityEnforcement: true,
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
@@ -822,7 +822,7 @@ func TestUpdateCmd_CustomWorkflowCompletedStateRequiresPrivilegedSurface(t *test
 				Terminal: true,
 			},
 		},
-		DefaultState: "queued",
+		DefaultState:        "queued",
 		SecurityEnforcement: true,
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
@@ -1140,6 +1140,93 @@ func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
 	}
 	if got == nil || got.State != "in-review" {
 		t.Fatalf("expected main checkout ticket state in-review after merge-back, got %#v", got)
+	}
+}
+
+func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	t.Setenv("DOCKET_AGENT_ID", "test-agent")
+	docketHome = ""
+	repo = tmpDir
+	format = "human"
+
+	runGitSession(t, tmpDir, "init")
+	runGitSession(t, tmpDir, "config", "user.email", "test@example.com")
+	runGitSession(t, tmpDir, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(tmpDir, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: seed")
+
+	cfg := ticket.DefaultConfig()
+	cfg.SecurityEnforcement = true
+	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-496",
+		Seq:         496,
+		Title:       "Missing managed branch fallback",
+		State:       ticket.State("in-progress"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Handoff:     "handoff",
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+	runGitSession(t, tmpDir, "add", ".")
+	runGitSession(t, tmpDir, "commit", "-m", "chore: setup ticket")
+
+	worktreePath := filepath.Join(tmpDir, "wt", "TKT-496")
+	if err := docketgit.CreateWorktree(tmpDir, "TKT-496", "scratch/TKT-496", worktreePath); err != nil {
+		t.Fatalf("CreateWorktree failed: %v", err)
+	}
+
+	ns := security.NewRepoNamespaceStore(tmpHome)
+	if err := ns.RecordRunStart(tmpDir, "TKT-496", "agent:test-agent", worktreePath, "docket/TKT-496", "hash-496"); err != nil {
+		t.Fatalf("RecordRunStart failed: %v", err)
+	}
+	if err := claim.Claim(tmpDir, "TKT-496", worktreePath, "agent:test-agent"); err != nil {
+		t.Fatalf("Claim failed: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(worktreePath, "feature.txt"), []byte("from worktree\n"), 0o644); err != nil {
+		t.Fatalf("write worktree file failed: %v", err)
+	}
+	runGitSession(t, worktreePath, "add", ".")
+	runGitSession(t, worktreePath, "commit", "-m", "feat: worktree fallback\n\nTicket: TKT-496")
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-496", "--state", "in-review"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected in-review transition to recover when manifest branch is missing, got: %v", err)
+	}
+
+	mainStore := local.New(tmpDir)
+	got, err := mainStore.GetTicket(context.Background(), "TKT-496")
+	if err != nil {
+		t.Fatalf("load ticket from main checkout failed: %v", err)
+	}
+	if got == nil || got.State != "in-review" {
+		t.Fatalf("expected main checkout ticket state in-review after fallback merge-back, got %#v", got)
+	}
+
+	featureData, err := os.ReadFile(filepath.Join(tmpDir, "feature.txt"))
+	if err != nil {
+		t.Fatalf("read merged feature file failed: %v", err)
+	}
+	if strings.TrimSpace(string(featureData)) != "from worktree" {
+		t.Fatalf("expected fallback merge to include worktree commit, got %q", string(featureData))
 	}
 }
 

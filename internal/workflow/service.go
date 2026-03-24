@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/leomorpho/docket/internal/claim"
+	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -126,20 +128,37 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 	mergedFromBoundWorktree := cl != nil && cl.Worktree != "" && cl.Worktree != repoRoot && currentAbs != "" && currentAbs == claimedAbs
 	if cl != nil && cl.Worktree != "" && cl.Worktree != repoRoot {
 		branch := "docket/" + t.ID
+		mergedFromFallbackRef := false
 		// Commit changes in worktree
 		_ = m.vcs.CommitAll(ctx, cl.Worktree, fmt.Sprintf("Auto-commit for %s completion", t.ID))
 
 		// Merge back
 		if err := m.vcs.MergeBranch(ctx, branch); err != nil {
-			return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", err, cl.Worktree)
+			if !isMissingMergeRefError(err) {
+				return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", err, cl.Worktree)
+			}
+			mergeRef, refErr := docketgit.HeadSHA(cl.Worktree)
+			if refErr != nil {
+				return nil, fmt.Errorf("merge conflict: %w. Fallback merge from %s HEAD failed: %v", err, cl.Worktree, refErr)
+			}
+			if retryErr := m.vcs.MergeBranch(ctx, mergeRef); retryErr != nil {
+				return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", retryErr, cl.Worktree)
+			}
+			mergedFromFallbackRef = true
 		}
 
 		// Cleanup must succeed so merged runs do not leave stale linked worktrees behind.
 		if err := m.vcs.RemoveWorktree(ctx, cl.Worktree); err != nil {
 			return nil, fmt.Errorf("cleanup merged worktree %s: %w", cl.Worktree, err)
 		}
-		if err := m.vcs.DeleteBranch(ctx, branch); err != nil {
-			return nil, fmt.Errorf("delete merged branch %s: %w", branch, err)
+		if !mergedFromFallbackRef {
+			if err := m.vcs.DeleteBranch(ctx, branch); err != nil {
+				return nil, fmt.Errorf("delete merged branch %s: %w", branch, err)
+			}
+		} else if exists, _ := docketgit.CommitExists(repoRoot, branch); exists {
+			if err := m.vcs.DeleteBranch(ctx, branch); err != nil {
+				return nil, fmt.Errorf("delete merged branch %s: %w", branch, err)
+			}
 		}
 	}
 
@@ -198,4 +217,24 @@ func resolveStartState(t *ticket.Ticket, cfg *ticket.Config) (ticket.State, erro
 		}
 	}
 	return "", fmt.Errorf("cannot transition %s from %s to a configured active state", t.ID, t.State)
+}
+
+func isMissingMergeRefError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	markers := []string{
+		"not something we can merge",
+		"unknown revision",
+		"bad revision",
+		"ambiguous argument",
+		"invalid object name",
+	}
+	for _, marker := range markers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }

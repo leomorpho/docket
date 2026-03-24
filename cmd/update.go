@@ -549,7 +549,8 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *t
 		RunStartedAt: run.StartedAt,
 	})
 	if hookErr != nil {
-		if strings.Contains(strings.ToLower(hookErr.Error()), "no commit on") {
+		shouldRepair := strings.Contains(strings.ToLower(hookErr.Error()), "no commit on") || isMissingGitRefError(hookErr)
+		if shouldRepair {
 			repair, repairErr := docketgit.RepairManagedBranchFromCurrent(repo, run.WorktreePath, run.Branch, ticketID, run.StartedAt)
 			if repairErr != nil {
 				return fmt.Errorf("managed run %s cannot advance to %s: bound branch=%s worktree=%s; auto-repair failed: %w", ticketID, target, run.Branch, run.WorktreePath, repairErr)
@@ -568,6 +569,12 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *t
 			}
 		}
 	}
+	if hookErr != nil && isMissingGitRefError(hookErr) && strings.TrimSpace(run.WorktreePath) != "" {
+		if ok, err := docketgit.HasTicketTrailerSince(run.WorktreePath, "HEAD", ticketID, run.StartedAt); err == nil && ok {
+			fmt.Printf("docket: validated managed run %s against %s HEAD because branch %s is unavailable\n", ticketID, run.WorktreePath, run.Branch)
+			hookErr = nil
+		}
+	}
 	if hookErr != nil {
 		if !enforce {
 			warnSecurityEnforcementBypassed(fmt.Sprintf("managed run %s linkage check failed but enforcement is disabled: %v", ticketID, hookErr))
@@ -579,6 +586,26 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *t
 		fmt.Printf("hook advisory: %s\n", msg)
 	}
 	return nil
+}
+
+func isMissingGitRefError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	markers := []string{
+		"unknown revision",
+		"bad revision",
+		"ambiguous argument",
+		"invalid object name",
+		"needed a single revision",
+	}
+	for _, marker := range markers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string, cfg *ticket.Config) error {
