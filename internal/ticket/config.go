@@ -387,6 +387,7 @@ func LoadConfig(repoRoot string) (*Config, error) {
 	}
 
 	hadWorkflow := hasWorkflow(raw.Workflow)
+	compatibilityMigrated := false
 	if hadWorkflow {
 		workflowCfg, err := parseWorkflow(raw.Workflow)
 		if err != nil {
@@ -400,6 +401,7 @@ func LoadConfig(repoRoot string) (*Config, error) {
 			return nil, fmt.Errorf("corrupt config.json states: %w", err)
 		}
 		cfg.States = normalizeLegacyStateSemantics(raw.States, migrated)
+		compatibilityMigrated = addLegacyStartTransitionCompatibility(cfg.States)
 	}
 
 	cfg.applyDefaults()
@@ -415,11 +417,99 @@ func LoadConfig(repoRoot string) (*Config, error) {
 	}
 
 	// Persist migration if states were in the old array format.
-	if needsMigration(raw.States) {
+	if !hadWorkflow && (needsMigration(raw.States) || compatibilityMigrated) {
 		_ = SaveConfig(repoRoot, cfg) // best-effort; ignore write errors
 	}
 
 	return cfg, nil
+}
+
+func addLegacyStartTransitionCompatibility(states map[string]StateConfig) bool {
+	if len(states) == 0 {
+		return false
+	}
+	activeStates := make([]string, 0, len(states))
+	for name, state := range states {
+		for _, role := range state.Roles {
+			if role == "active" {
+				activeStates = append(activeStates, name)
+				break
+			}
+		}
+	}
+	if len(activeStates) == 0 {
+		return false
+	}
+	sort.Slice(activeStates, func(i, j int) bool {
+		return states[activeStates[i]].Column < states[activeStates[j]].Column
+	})
+
+	changed := false
+	for name, state := range states {
+		if !state.Startable {
+			continue
+		}
+		if hasDirectActiveTransition(state, states) {
+			continue
+		}
+
+		target := firstReachableActiveState(name, states)
+		if target == "" {
+			continue
+		}
+		state.Next = append([]string{target}, state.Next...)
+		states[name] = state
+		changed = true
+	}
+	return changed
+}
+
+func hasDirectActiveTransition(state StateConfig, states map[string]StateConfig) bool {
+	for _, next := range state.Next {
+		nextState, ok := states[next]
+		if !ok {
+			continue
+		}
+		for _, role := range nextState.Roles {
+			if role == "active" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func firstReachableActiveState(from string, states map[string]StateConfig) string {
+	type node struct {
+		name string
+	}
+	queue := []node{{name: from}}
+	seen := map[string]struct{}{from: {}}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		state, ok := states[current.name]
+		if !ok {
+			continue
+		}
+		for _, next := range state.Next {
+			if _, ok := seen[next]; ok {
+				continue
+			}
+			seen[next] = struct{}{}
+			nextState, exists := states[next]
+			if !exists || nextState.Terminal {
+				continue
+			}
+			for _, role := range nextState.Roles {
+				if role == "active" {
+					return next
+				}
+			}
+			queue = append(queue, node{name: next})
+		}
+	}
+	return ""
 }
 
 func normalizeLegacyStateSemantics(raw json.RawMessage, states map[string]StateConfig) map[string]StateConfig {

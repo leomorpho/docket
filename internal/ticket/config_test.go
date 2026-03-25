@@ -637,6 +637,188 @@ func TestLoadConfigLegacyCanonicalMapBackfillsSemanticRoles(t *testing.T) {
 	}
 }
 
+func TestLoadConfigLegacyMapAutoAddsDirectActiveTransitionForStartableState(t *testing.T) {
+	tmpDir := t.TempDir()
+	raw := `{
+  "counter": 1,
+  "backend": "local",
+  "states": {
+    "backlog": {
+      "label": "Backlog",
+      "open": true,
+      "column": 0,
+      "next": ["todo", "archived"],
+      "roles": ["intake"],
+      "startable": true,
+      "terminal": false,
+      "reviewable": false,
+      "blocks_dependents": true
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": ["in-progress", "backlog", "archived"],
+      "roles": ["intake"],
+      "startable": true,
+      "terminal": false,
+      "reviewable": false,
+      "blocks_dependents": true
+    },
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": ["in-review", "todo", "archived"],
+      "roles": ["active"],
+      "startable": false,
+      "terminal": false,
+      "reviewable": false,
+      "blocks_dependents": true
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": ["done", "in-progress", "archived"],
+      "roles": ["review"],
+      "startable": false,
+      "terminal": false,
+      "reviewable": true,
+      "blocks_dependents": true
+    },
+    "done": {
+      "label": "Done",
+      "open": false,
+      "column": 4,
+      "next": ["archived", "in-progress"],
+      "roles": ["completed"],
+      "startable": false,
+      "terminal": true,
+      "reviewable": false,
+      "blocks_dependents": false
+    },
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": ["backlog"],
+      "roles": ["archived"],
+      "startable": false,
+      "terminal": true,
+      "reviewable": false,
+      "blocks_dependents": false
+    }
+  },
+  "labels": ["bug"],
+  "commit_sessions": false
+}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(ConfigPath(tmpDir), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	backlog := cfg.States["backlog"]
+	if len(backlog.Next) == 0 || backlog.Next[0] != "in-progress" {
+		t.Fatalf("expected compatibility migration to prepend in-progress, got %#v", backlog.Next)
+	}
+	targets := cfg.StartTransitionTargets("backlog")
+	if len(targets) == 0 || targets[0] != "in-progress" {
+		t.Fatalf("StartTransitionTargets(backlog) = %#v, want in-progress first", targets)
+	}
+
+	data, err := os.ReadFile(ConfigPath(tmpDir))
+	if err != nil {
+		t.Fatalf("read migrated config: %v", err)
+	}
+	var onDisk Config
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("parse migrated config: %v", err)
+	}
+	if got := onDisk.States["backlog"].Next; len(got) == 0 || got[0] != "in-progress" {
+		t.Fatalf("expected persisted compatibility migration, got %#v", got)
+	}
+}
+
+func TestLoadConfigLegacyMapKeepsExistingDirectActiveTransition(t *testing.T) {
+	tmpDir := t.TempDir()
+	raw := `{
+  "counter": 1,
+  "backend": "local",
+  "states": {
+    "backlog": {
+      "label": "Backlog",
+      "open": true,
+      "column": 0,
+      "next": ["in-progress", "todo", "archived"],
+      "roles": ["intake"],
+      "startable": true
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": ["in-progress", "backlog", "archived"],
+      "roles": ["intake"],
+      "startable": true
+    },
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": ["in-review", "todo", "archived"],
+      "roles": ["active"]
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": ["done", "in-progress", "archived"],
+      "roles": ["review"]
+    },
+    "done": {
+      "label": "Done",
+      "open": false,
+      "column": 4,
+      "next": ["archived", "in-progress"],
+      "roles": ["completed"],
+      "terminal": true
+    },
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": ["backlog"],
+      "roles": ["archived"],
+      "terminal": true
+    }
+  },
+  "labels": ["bug"],
+  "commit_sessions": false
+}`
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".docket"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(ConfigPath(tmpDir), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	got := cfg.States["backlog"].Next
+	if len(got) < 3 || got[0] != "in-progress" || got[1] != "todo" {
+		t.Fatalf("expected backlog next order to remain stable, got %#v", got)
+	}
+}
+
 // TestLoadConfigMigratesUnknownState verifies that unknown state names in the
 // old array format get sensible StateConfig defaults.
 func TestLoadConfigMigratesUnknownState(t *testing.T) {
