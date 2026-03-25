@@ -2034,13 +2034,13 @@
     },
     "TKT-367": {
       "title": "Refactor workflow service start and finish transitions to resolve active and review targets from config roles",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-368": {
       "title": "Refactor update command lifecycle side effects to use config-defined active review and completed roles",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-310"
     },
