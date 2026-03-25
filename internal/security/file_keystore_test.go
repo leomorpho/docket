@@ -3,6 +3,7 @@ package security
 import (
 	"bytes"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -133,5 +134,68 @@ func TestFileKeystoreEncryptsPayload(t *testing.T) {
 	}
 	if bytes.Contains(raw, []byte("device_private_key")) {
 		t.Fatalf("keystore file should not contain plaintext private key payload")
+	}
+}
+
+func TestFileKeystoreWritesProtectorWrappedKeyMetadata(t *testing.T) {
+	home := t.TempDir()
+	ks := NewFileKeystore(home)
+	if err := ks.Create("pass-123"); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(ks.Path())
+	if err != nil {
+		t.Fatalf("read keystore failed: %v", err)
+	}
+	var env map[string]any
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("unmarshal envelope failed: %v", err)
+	}
+	protector, ok := env["protector"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected protector metadata in envelope, got: %#v", env)
+	}
+	if provider, _ := protector["provider"].(string); provider == "" {
+		t.Fatalf("expected non-empty protector provider, got: %#v", protector)
+	}
+	if wrappedKey, _ := protector["wrapped_key"].(string); wrappedKey == "" {
+		t.Fatalf("expected non-empty wrapped key in protector metadata, got: %#v", protector)
+	}
+}
+
+func TestFileKeystoreUnlockRejectsUnsupportedProtectorProvider(t *testing.T) {
+	home := t.TempDir()
+	ks := NewFileKeystore(home)
+	if err := ks.Create("pass-123"); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(ks.Path())
+	if err != nil {
+		t.Fatalf("read keystore failed: %v", err)
+	}
+	var env map[string]any
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("unmarshal envelope failed: %v", err)
+	}
+	protector, ok := env["protector"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected protector metadata in envelope, got: %#v", env)
+	}
+	protector["provider"] = "unsupported-provider"
+	env["protector"] = protector
+	updated, err := json.MarshalIndent(env, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal updated envelope failed: %v", err)
+	}
+	if err := os.WriteFile(ks.Path(), append(updated, '\n'), 0o600); err != nil {
+		t.Fatalf("write mutated envelope failed: %v", err)
+	}
+
+	loaded := NewFileKeystore(home)
+	err = loaded.Unlock("pass-123")
+	if !errors.Is(err, ErrKeystoreMalformed) {
+		t.Fatalf("expected ErrKeystoreMalformed for unsupported protector provider, got: %v", err)
 	}
 }
