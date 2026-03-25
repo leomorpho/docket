@@ -25,15 +25,25 @@ const (
 	kdfIterations    = 200_000
 	derivedKeyLength = 32
 	nonceSize        = 12
+
+	protectorProviderPassphraseV1 = "passphrase-v1"
 )
 
+type protectorEnvelope struct {
+	Provider   string `json:"provider"`
+	Salt       string `json:"salt,omitempty"`
+	Iterations int    `json:"iterations,omitempty"`
+	WrappedKey string `json:"wrapped_key"`
+}
+
 type encryptedEnvelope struct {
-	Version    int    `json:"version"`
-	Salt       string `json:"salt"`
-	Nonce      string `json:"nonce"`
-	Ciphertext string `json:"ciphertext"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	Version    int                `json:"version"`
+	Salt       string             `json:"salt"`
+	Nonce      string             `json:"nonce"`
+	Ciphertext string             `json:"ciphertext"`
+	Protector  *protectorEnvelope `json:"protector,omitempty"`
+	CreatedAt  string             `json:"created_at"`
+	UpdatedAt  string             `json:"updated_at"`
 }
 
 type plaintextStore struct {
@@ -43,13 +53,14 @@ type plaintextStore struct {
 }
 
 type FileKeystore struct {
-	path     string
-	unlocked bool
-	state    plaintextStore
-	created  time.Time
-	updated  time.Time
-	key      []byte
-	salt     []byte
+	path      string
+	unlocked  bool
+	state     plaintextStore
+	created   time.Time
+	updated   time.Time
+	key       []byte
+	salt      []byte // legacy fallback for older envelope format
+	protector *protectorEnvelope
 }
 
 func NewFileKeystore(docketHome string) *FileKeystore {
@@ -85,14 +96,17 @@ func (k *FileKeystore) Create(passphrase string) error {
 		TrustedSigners:   map[string]TrustedSigner{},
 		RepoAnchors:      map[string]RepoAnchor{},
 	}
-	k.salt = make([]byte, kdfSaltBytes)
-	if _, err := rand.Read(k.salt); err != nil {
-		return fmt.Errorf("generating salt: %w", err)
+	dataKey := make([]byte, derivedKeyLength)
+	if _, err := rand.Read(dataKey); err != nil {
+		return fmt.Errorf("generating data key: %w", err)
 	}
-	k.key, err = deriveKey(passphrase, k.salt)
+	protector, err := newPassphraseProtector(passphrase, dataKey)
 	if err != nil {
 		return err
 	}
+	k.key = dataKey
+	k.protector = &protector
+	k.salt = nil
 	now := time.Now().UTC()
 	k.created = now
 	k.updated = now
@@ -121,10 +135,6 @@ func (k *FileKeystore) Unlock(passphrase string) error {
 		return fmt.Errorf("%w: unsupported version %d", ErrKeystoreMalformed, env.Version)
 	}
 
-	salt, err := base64.StdEncoding.DecodeString(env.Salt)
-	if err != nil || len(salt) == 0 {
-		return fmt.Errorf("%w: bad salt", ErrKeystoreMalformed)
-	}
 	nonce, err := base64.StdEncoding.DecodeString(env.Nonce)
 	if err != nil || len(nonce) != nonceSize {
 		return fmt.Errorf("%w: bad nonce", ErrKeystoreMalformed)
@@ -134,9 +144,29 @@ func (k *FileKeystore) Unlock(passphrase string) error {
 		return fmt.Errorf("%w: bad ciphertext", ErrKeystoreMalformed)
 	}
 
-	key, err := deriveKey(passphrase, salt)
-	if err != nil {
-		return err
+	var key []byte
+	switch {
+	case env.Protector != nil:
+		key, err = unwrapProtectedDataKey(passphrase, *env.Protector)
+		if errors.Is(err, ErrWrongPassphrase) {
+			return ErrWrongPassphrase
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrKeystoreMalformed, err)
+		}
+	case env.Salt != "":
+		salt, err := base64.StdEncoding.DecodeString(env.Salt)
+		if err != nil || len(salt) == 0 {
+			return fmt.Errorf("%w: bad salt", ErrKeystoreMalformed)
+		}
+		key, err = deriveKey(passphrase, salt)
+		if err != nil {
+			return err
+		}
+		// Legacy envelopes used the passphrase-derived key directly.
+		k.salt = salt
+	default:
+		return fmt.Errorf("%w: missing protector metadata", ErrKeystoreMalformed)
 	}
 	plaintext, err := decrypt(key, nonce, ciphertext)
 	if err != nil {
@@ -158,8 +188,8 @@ func (k *FileKeystore) Unlock(passphrase string) error {
 	}
 
 	k.state = state
-	k.salt = salt
 	k.key = key
+	k.protector = env.Protector
 	k.created, _ = time.Parse(time.RFC3339, env.CreatedAt)
 	k.updated, _ = time.Parse(time.RFC3339, env.UpdatedAt)
 	if k.created.IsZero() {
@@ -178,9 +208,6 @@ func (k *FileKeystore) Save() error {
 	}
 	if len(k.key) != derivedKeyLength {
 		return fmt.Errorf("keystore encryption key is unavailable")
-	}
-	if len(k.salt) == 0 {
-		return fmt.Errorf("keystore salt is unavailable")
 	}
 
 	payload, err := json.Marshal(k.state)
@@ -204,11 +231,14 @@ func (k *FileKeystore) Save() error {
 
 	env := encryptedEnvelope{
 		Version:    keystoreVersion,
-		Salt:       base64.StdEncoding.EncodeToString(k.salt),
 		Nonce:      base64.StdEncoding.EncodeToString(nonce),
 		Ciphertext: base64.StdEncoding.EncodeToString(ciphertext),
+		Protector:  k.protector,
 		CreatedAt:  k.created.Format(time.RFC3339),
 		UpdatedAt:  k.updated.Format(time.RFC3339),
+	}
+	if env.Protector == nil && len(k.salt) > 0 {
+		env.Salt = base64.StdEncoding.EncodeToString(k.salt)
 	}
 	out, err := json.MarshalIndent(env, "", "  ")
 	if err != nil {
@@ -311,6 +341,67 @@ func deriveKey(passphrase string, salt []byte) ([]byte, error) {
 	return pbkdf2.Key(sha256.New, passphrase, salt, kdfIterations, derivedKeyLength)
 }
 
+func deriveKeyWithIterations(passphrase string, salt []byte, iterations int) ([]byte, error) {
+	if iterations <= 0 {
+		iterations = kdfIterations
+	}
+	return pbkdf2.Key(sha256.New, passphrase, salt, iterations, derivedKeyLength)
+}
+
+func newPassphraseProtector(passphrase string, dataKey []byte) (protectorEnvelope, error) {
+	salt := make([]byte, kdfSaltBytes)
+	if _, err := rand.Read(salt); err != nil {
+		return protectorEnvelope{}, fmt.Errorf("generating protector salt: %w", err)
+	}
+	wrapKey, err := deriveKeyWithIterations(passphrase, salt, kdfIterations)
+	if err != nil {
+		return protectorEnvelope{}, err
+	}
+	wrapNonce := make([]byte, nonceSize)
+	if _, err := rand.Read(wrapNonce); err != nil {
+		return protectorEnvelope{}, fmt.Errorf("generating protector nonce: %w", err)
+	}
+	wrapped, err := encrypt(wrapKey, wrapNonce, dataKey)
+	if err != nil {
+		return protectorEnvelope{}, err
+	}
+	combined := append(append([]byte{}, wrapNonce...), wrapped...)
+	return protectorEnvelope{
+		Provider:   protectorProviderPassphraseV1,
+		Salt:       base64.StdEncoding.EncodeToString(salt),
+		Iterations: kdfIterations,
+		WrappedKey: base64.StdEncoding.EncodeToString(combined),
+	}, nil
+}
+
+func unwrapProtectedDataKey(passphrase string, protector protectorEnvelope) ([]byte, error) {
+	if protector.Provider != protectorProviderPassphraseV1 {
+		return nil, fmt.Errorf("unsupported protector provider %q", protector.Provider)
+	}
+	salt, err := base64.StdEncoding.DecodeString(protector.Salt)
+	if err != nil || len(salt) == 0 {
+		return nil, fmt.Errorf("bad protector salt")
+	}
+	combined, err := base64.StdEncoding.DecodeString(protector.WrappedKey)
+	if err != nil || len(combined) <= nonceSize {
+		return nil, fmt.Errorf("bad wrapped key")
+	}
+	wrapNonce := combined[:nonceSize]
+	wrappedKeyCiphertext := combined[nonceSize:]
+	wrapKey, err := deriveKeyWithIterations(passphrase, salt, protector.Iterations)
+	if err != nil {
+		return nil, err
+	}
+	key, err := decryptRaw(wrapKey, wrapNonce, wrappedKeyCiphertext)
+	if err != nil {
+		return nil, ErrWrongPassphrase
+	}
+	if len(key) != derivedKeyLength {
+		return nil, fmt.Errorf("invalid unwrapped key size")
+	}
+	return key, nil
+}
+
 func encrypt(key, nonce, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -324,6 +415,18 @@ func encrypt(key, nonce, plaintext []byte) ([]byte, error) {
 }
 
 func decrypt(key, nonce, ciphertext []byte) ([]byte, error) {
+	plaintext, err := decryptRaw(key, nonce, ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	// Basic integrity assertion on decrypted payload shape.
+	if len(plaintext) == 0 || !hmac.Equal([]byte{plaintext[0]}, []byte{byte('{')}) {
+		return nil, errors.New("decrypted payload does not look like JSON")
+	}
+	return plaintext, nil
+}
+
+func decryptRaw(key, nonce, ciphertext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -332,14 +435,5 @@ func decrypt(key, nonce, ciphertext []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Basic integrity assertion on decrypted payload shape.
-	if len(plaintext) == 0 || !hmac.Equal([]byte{plaintext[0]}, []byte{byte('{')}) {
-		return nil, errors.New("decrypted payload does not look like JSON")
-	}
-	return plaintext, nil
+	return aead.Open(nil, nonce, ciphertext, nil)
 }
