@@ -185,7 +185,7 @@ func Render(adapterID string, pack Pack) (RenderedArtifact, error) {
 	for _, s := range pack.Skills {
 		skillIDs = append(skillIDs, s.ID)
 	}
-	lines = append(lines, fmt.Sprintf("<!-- docket.skill.ids: %s -->", strings.Join(skillIDs, ",")))
+	lines = append(lines, fmt.Sprintf("<!-- docket.skill.names: %s -->", strings.Join(skillIDs, ",")))
 	lines = append(lines, "", "Use `docket start` to pick up prioritized ticket work.", "", "### Skills")
 	for _, s := range pack.Skills {
 		kind := "required"
@@ -210,28 +210,33 @@ func Render(adapterID string, pack Pack) (RenderedArtifact, error) {
 }
 
 func ExtractSkillIDs(content string) []string {
-	const marker = "<!-- docket.skill.ids:"
+	markers := []string{
+		"<!-- docket.skill.names:",
+		"<!-- docket.skill.ids:", // backward-compatible legacy marker
+	}
 	for _, raw := range strings.Split(content, "\n") {
 		line := strings.TrimSpace(raw)
-		if !strings.HasPrefix(line, marker) {
-			continue
-		}
-		body := strings.TrimPrefix(line, marker)
-		body = strings.TrimSuffix(strings.TrimSpace(body), "-->")
-		body = strings.TrimSpace(body)
-		if body == "" {
-			return nil
-		}
-		parts := strings.Split(body, ",")
-		out := make([]string, 0, len(parts))
-		for _, part := range parts {
-			item := strings.TrimSpace(part)
-			if item == "" {
+		for _, marker := range markers {
+			if !strings.HasPrefix(line, marker) {
 				continue
 			}
-			out = append(out, item)
+			body := strings.TrimPrefix(line, marker)
+			body = strings.TrimSuffix(strings.TrimSpace(body), "-->")
+			body = strings.TrimSpace(body)
+			if body == "" {
+				return nil
+			}
+			parts := strings.Split(body, ",")
+			out := make([]string, 0, len(parts))
+			for _, part := range parts {
+				item := strings.TrimSpace(part)
+				if item == "" {
+					continue
+				}
+				out = append(out, item)
+			}
+			return out
 		}
-		return out
 	}
 	return nil
 }

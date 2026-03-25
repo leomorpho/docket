@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/leomorpho/docket/internal/adapters"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +30,7 @@ var installCmd = &cobra.Command{
 	Long:  installLongDesc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if installSkill {
-			return installGeminiSkill(cmd)
+			return installAdapterSkills(cmd)
 		}
 		if installCursor {
 			return installCursorRules(cmd)
@@ -79,7 +81,7 @@ var installCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(installCmd)
-	installCmd.Flags().BoolVar(&installSkill, "skill", false, "install Docket skill for Gemini CLI")
+	installCmd.Flags().BoolVar(&installSkill, "skill", false, "install Docket skills for Codex, Gemini CLI, and Claude Code")
 	installCmd.Flags().BoolVar(&installCursor, "cursor", false, "install .cursorrules for Cursor")
 	installCmd.Flags().BoolVar(&installVSCode, "vscode", false, "install .vscode/settings.json for VS Code")
 }
@@ -181,56 +183,38 @@ func installVSCodeSettings(cmd *cobra.Command) error {
 	return nil
 }
 
-func installGeminiSkill(cmd *cobra.Command) error {
-	home, err := os.UserHomeDir()
+func installAdapterSkills(cmd *cobra.Command) error {
+	installed, err := installAdapterSkillsForRepo(repo)
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return err
 	}
 
-	skillDir := filepath.Join(home, ".gemini", "skills", "docket")
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
-		return fmt.Errorf("failed to create skill directory %s: %w", skillDir, err)
+	if format == "json" {
+		printJSON(cmd, map[string]any{
+			"installed_adapters": installed,
+		})
+		return nil
 	}
 
-	skillMD := `# Docket Skill
-
-Specialized tool-use instructions for managing tickets via Docket.
-
-## Tools
-
-Docket provides a set of tools via its MCP server. Always prefer these tools over direct file modification.
-
-- **list**: List tickets. Can filter by state names defined in the repo workflow config.
-- **create**: Create a new ticket. Requires 'title'. Optional: 'desc', 'state', 'priority'.
-- **show**: Show details of a specific ticket. Requires 'id'.
-- **update**: Update a ticket's state, title, or priority. Requires 'id'.
-- **comment**: Add a comment to a ticket. Requires 'id' and 'body'.
-- **check**: Run project-specific checks (e.g., tests, lint).
-
-## Critical Directives
-
-- **CRITICAL: Do not edit .docket/tickets/*.md directly.** Always use the 'docket' MCP tools for all modifications. Direct edits bypass validation and can lead to inconsistencies.
-- **Workflow:**
-    1. **list** to find your assigned or next ticket.
-    2. **show** to read the full specification and acceptance criteria.
-    3. **update** the ticket to the repo's configured active work state. This will automatically claim the ticket (TKT-142/143) and may create a dedicated git worktree for your changes.
-    4. If a worktree was created, perform your work within that directory and stay on the managed Docket branch/worktree for the ticket.
-    5. Once finished, ensure all acceptance criteria are met and tests pass.
-    6. **update** the ticket to the repo's configured review state. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
-    7. A human reviewer advances the ticket to the repo's configured completed state after verification.
-
-## Performance & Context
-
-- **Large Payloads (TKT-146):** If your content (description or handoff) is > 1000 characters, do not pass it directly through MCP. Instead, write the content to a temporary file (e.g., in /tmp/ or the project root) and pass the path to the 'content_file' parameter in 'create' or 'update' calls.
-- Use **comment** to document progress or blockers for human review.
-`
-
-	skillPath := filepath.Join(skillDir, "SKILL.md")
-	if err := os.WriteFile(skillPath, []byte(skillMD), 0644); err != nil {
-		return fmt.Errorf("failed to write SKILL.md to %s: %w", skillPath, err)
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "Installed Docket skill for Gemini CLI at: %s\n", skillDir)
-	fmt.Fprintf(cmd.OutOrStdout(), "The agent will now use Docket MCP tools correctly and avoid direct file edits.\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "Installed Docket skills for adapters: %s\n", strings.Join(installed, ", "))
+	fmt.Fprintf(cmd.OutOrStdout(), "  repo skill docs: %s, %s, %s\n",
+		filepath.Join(repo, "AGENTS.md"),
+		filepath.Join(repo, "CLAUDE.md"),
+		filepath.Join(repo, "GEMINI.md"),
+	)
 	return nil
+}
+
+func installAdapterSkillsForRepo(repoRoot string) ([]string, error) {
+	adapterIDs := []string{"codex", "gemini", "claude-code"}
+	registry := adapters.DefaultRegistry()
+	installed := make([]string, 0, len(adapterIDs))
+	for _, adapterID := range adapterIDs {
+		adapter := registry.Resolve(repoRoot, adapterID)
+		if err := adapters.RunInstall(context.Background(), adapter, adapters.InstallInput{RepoRoot: repoRoot}); err != nil {
+			return installed, fmt.Errorf("install skill artifacts for %s: %w", adapterID, err)
+		}
+		installed = append(installed, adapterID)
+	}
+	return installed, nil
 }

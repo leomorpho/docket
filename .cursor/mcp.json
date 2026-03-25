@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "docket": {
+      "args": [
+        "serve",
+        "--mcp"
+      ],
+      "command": "docket"
+    }
+  }
+}

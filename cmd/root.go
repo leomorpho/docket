@@ -25,6 +25,11 @@ var rootCmd = &cobra.Command{
 		}
 		prepareVersionNotice(cmd)
 		repoRoot := ticketRepoRoot(repo)
+		if shouldAutoSyncSkills(cmd, repoRoot) {
+			if err := autoSyncSkills(repoRoot); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+			}
+		}
 
 		// Tamper detection is non-blocking but runs on command startup.
 		if _, err := os.Stat(artifacts.RepoPath(repoRoot, artifacts.RepoConfigJSON)); err != nil {

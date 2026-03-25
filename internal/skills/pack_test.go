@@ -49,8 +49,8 @@ func TestBuildPackValidationAndRendererConsistency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("render %s failed: %v", adapter, err)
 		}
-		if !strings.Contains(rendered.Content, "docket.skill.ids:") {
-			t.Fatalf("%s output missing machine-readable skill ids marker", adapter)
+		if !strings.Contains(rendered.Content, "docket.skill.names:") {
+			t.Fatalf("%s output missing machine-readable skill names marker", adapter)
 		}
 		if !strings.Contains(rendered.Content, "docket.skill.metadata.checksum:") {
 			t.Fatalf("%s output missing metadata checksum marker", adapter)

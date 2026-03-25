@@ -39,6 +39,9 @@ func (codexAdapter) Install(_ context.Context, input InstallInput) error {
 	if err := ensureCodexAgentsFile(repoRoot); err != nil {
 		return err
 	}
+	if err := ensureCodexSkill(repoRoot); err != nil {
+		return err
+	}
 	if err := ensureCodexConfig(repoRoot); err != nil {
 		return err
 	}
@@ -48,6 +51,7 @@ func (codexAdapter) Install(_ context.Context, input InstallInput) error {
 func (codexAdapter) Doctor(_ context.Context, repoRoot string) (DoctorReport, error) {
 	checks := []DoctorCheck{
 		buildCodexAgentsCheck(repoRoot),
+		buildCodexSkillCheck(),
 		buildCodexConfigCheck(repoRoot),
 		buildCodexHooksCheck(repoRoot),
 	}
@@ -83,6 +87,41 @@ func ensureCodexAgentsFile(repoRoot string) error {
 		return err
 	}
 	return upsertManagedSkillBlock(path, block)
+}
+
+func codexSkillPath() (string, error) {
+	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	if codexHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		codexHome = filepath.Join(home, ".codex")
+	}
+	return filepath.Join(codexHome, "skills", "docket", "SKILL.md"), nil
+}
+
+func ensureCodexSkill(repoRoot string) error {
+	path, err := codexSkillPath()
+	if err != nil {
+		return err
+	}
+	block, err := renderSkillPackBlock(repoRoot, "codex")
+	if err != nil {
+		return err
+	}
+	content := strings.Join([]string{
+		"---",
+		`name: "docket"`,
+		`description: "Docket canonical skill pack for ticket-driven workflows."`,
+		"---",
+		"",
+		block,
+	}, "\n")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
 }
 
 func ensureCodexConfig(repoRoot string) error {
@@ -123,6 +162,14 @@ func buildCodexAgentsCheck(repoRoot string) DoctorCheck {
 		return DoctorCheck{Name: "codex_agents", OK: true, Detail: "AGENTS.md detected."}
 	}
 	return DoctorCheck{Name: "codex_agents", OK: false, Detail: "AGENTS.md missing. Run `docket bootstrap --adapter codex`."}
+}
+
+func buildCodexSkillCheck() DoctorCheck {
+	path, err := codexSkillPath()
+	if err == nil && fileExists(path) {
+		return DoctorCheck{Name: "codex_skill", OK: true, Detail: "Codex docket skill is installed."}
+	}
+	return DoctorCheck{Name: "codex_skill", OK: false, Detail: "Codex skill missing. Run `docket bootstrap --adapter codex`."}
 }
 
 func buildCodexConfigCheck(repoRoot string) DoctorCheck {

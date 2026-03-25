@@ -18,6 +18,9 @@ func TestCodexConfigPath(t *testing.T) {
 
 func TestCodexInstallMergesConfigWithoutClobbering(t *testing.T) {
 	repo := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
 	if err := os.WriteFile(filepath.Join(repo, "doombox.json"), []byte(`{"theme":"custom","mcp":"legacy"}`), 0o644); err != nil {
 		t.Fatalf("write doombox.json failed: %v", err)
 	}
@@ -49,10 +52,18 @@ func TestCodexInstallMergesConfigWithoutClobbering(t *testing.T) {
 	if !strings.Contains(strings.ToLower(string(agentsRaw)), "docket") {
 		t.Fatalf("expected AGENTS.md to include docket guidance, got: %s", string(agentsRaw))
 	}
+
+	skillPath := filepath.Join(home, ".codex", "skills", "docket", "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("expected codex skill to be installed at %s: %v", skillPath, err)
+	}
 }
 
 func TestCodexDoctorProvidesRemediationWhenMissing(t *testing.T) {
 	repo := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
 	adapter := newCodexAdapter()
 
 	report, err := adapter.Doctor(context.Background(), repo)
@@ -80,6 +91,9 @@ func TestCodexDoctorProvidesRemediationWhenMissing(t *testing.T) {
 
 func TestCodexBootstrapThenStatusReady(t *testing.T) {
 	repo := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
 	if err := os.MkdirAll(filepath.Join(repo, ".git", "hooks"), 0o755); err != nil {
 		t.Fatalf("mkdir hooks failed: %v", err)
 	}
@@ -103,5 +117,9 @@ func TestCodexBootstrapThenStatusReady(t *testing.T) {
 	}
 	if !status.Ready {
 		t.Fatalf("expected codex status ready, got %+v", status)
+	}
+
+	if _, err := os.Stat(filepath.Join(home, ".codex", "skills", "docket", "SKILL.md")); err != nil {
+		t.Fatalf("expected codex skill file after bootstrap: %v", err)
 	}
 }
