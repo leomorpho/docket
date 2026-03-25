@@ -2046,7 +2046,7 @@
     },
     "TKT-369": {
       "title": "Refactor validation quality rules to derive handoff and activity expectations from workflow roles",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-310"
     },
