@@ -117,7 +117,7 @@ func TestDiagnoseEmptySummarizesBlockedBacklog(t *testing.T) {
 		t.Fatalf("unexpected diagnosis: %#v", got)
 	}
 	summary := got.Summary()
-	if !strings.Contains(summary, "Backlog warning: none are runnable right now") {
+	if !strings.Contains(summary, "Queue warning: none are runnable right now") {
 		t.Fatalf("expected backlog warning summary, got %q", summary)
 	}
 	if !strings.Contains(summary, "Top unresolved blockers: TKT-101 x2") {

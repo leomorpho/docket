@@ -313,7 +313,7 @@ func TestFakeRepoHarnessBlockedBacklogDiagnosisIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list failed: %v\n%s", err, listOut)
 	}
-	if !strings.Contains(listOut, "Backlog warning: none are runnable right now") {
+	if !strings.Contains(listOut, "Queue warning: none are runnable right now") {
 		t.Fatalf("expected blocked backlog diagnosis in list output, got:\n%s", listOut)
 	}
 	if !strings.Contains(listOut, "2 actionable tickets are in startable states, 2 blocked, 1 coordination-only hidden") {
@@ -335,7 +335,7 @@ func TestFakeRepoHarnessBlockedBacklogDiagnosisIntegration(t *testing.T) {
 		t.Fatalf("expected no_workable_ticket=true, got %#v", payload["no_workable_ticket"])
 	}
 	message, _ := payload["message"].(string)
-	if !strings.Contains(message, "Backlog warning: none are runnable right now") {
+	if !strings.Contains(message, "Queue warning: none are runnable right now") {
 		t.Fatalf("expected diagnosis in start json message, got %q", message)
 	}
 	if !strings.Contains(message, "Top unresolved blockers: TKT-910 x2") {

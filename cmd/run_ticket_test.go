@@ -563,7 +563,7 @@ func TestCycleSummaryError(t *testing.T) {
 	}
 
 	if err := cycleSummaryError(agentrun.CycleSummary{
-		StopReason: "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Backlog warning: none are runnable right now; 3 actionable tickets are in startable states, 3 blocked. Top unresolved blockers: TKT-101 x3.",
+		StopReason: "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Queue warning: none are runnable right now; 3 actionable tickets are in startable states, 3 blocked. Top unresolved blockers: TKT-101 x3.",
 	}); err != nil {
 		t.Fatalf("diagnostic no-runnable stop should not error: %v", err)
 	}
@@ -705,7 +705,7 @@ func TestLaunchManagedSingleRunWithModeReturnsDiagnosisWhenNoRunnableTicketExist
 	if err != nil {
 		t.Fatalf("expected diagnostic no-runnable launch result, got error: %v", err)
 	}
-	if !strings.Contains(message, "Backlog warning: none are runnable right now") {
+	if !strings.Contains(message, "Queue warning: none are runnable right now") {
 		t.Fatalf("expected diagnosis message, got %q", message)
 	}
 	if !strings.Contains(message, "Top unresolved blockers: TKT-710 x1") {
@@ -741,9 +741,12 @@ func TestLaunchManagedAutoCycleWithModeReturnsSummaryFailure(t *testing.T) {
 
 func TestLaunchManagedAutoCycleWithModeAllowsOperatorStopAfterCurrent(t *testing.T) {
 	prev := newRunOrchestratorWithMode
+	prevRetryDelay := runWatchRetryDelay
 	t.Cleanup(func() {
 		newRunOrchestratorWithMode = prev
+		runWatchRetryDelay = prevRetryDelay
 	})
+	runWatchRetryDelay = time.Millisecond
 
 	repoRoot := t.TempDir()
 	newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
@@ -761,6 +764,157 @@ func TestLaunchManagedAutoCycleWithModeAllowsOperatorStopAfterCurrent(t *testing
 
 	if _, err := launchManagedAutoCycleWithMode(repoRoot, "session"); err != nil {
 		t.Fatalf("stop-after-current should not error: %v", err)
+	}
+}
+
+func TestLaunchManagedAutoCycleWithModeResumesActiveTicketWhenNoRunnableButStartableRemain(t *testing.T) {
+	prev := newRunOrchestratorWithMode
+	prevRetryDelay := runWatchRetryDelay
+	t.Cleanup(func() {
+		newRunOrchestratorWithMode = prev
+		runWatchRetryDelay = prevRetryDelay
+	})
+	runWatchRetryDelay = time.Millisecond
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-820",
+			Seq:         820,
+			Title:       "Active blocker",
+			State:       ticket.State("in-progress"),
+			Priority:    1,
+			CreatedAt:   now,
+			StartedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		},
+		{
+			ID:          "TKT-821",
+			Seq:         821,
+			Title:       "Blocked todo",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-820"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "human:test",
+			Description: "D",
+			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("CreateTicket(%s) failed: %v", tk.ID, err)
+		}
+	}
+
+	runNextCalls := 0
+	runTicketCalls := 0
+	newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				runNextCalls++
+				return agentrun.CycleSummary{
+					StopReason: "no runnable tickets remain: blocked queue",
+				}, nil
+			},
+			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
+				runTicketCalls++
+				if ticketID != "TKT-820" {
+					t.Fatalf("expected resumable active ticket TKT-820, got %s", ticketID)
+				}
+				next, err := s.GetTicket(ctx, "TKT-821")
+				if err != nil {
+					t.Fatalf("GetTicket(TKT-821) failed: %v", err)
+				}
+				next.State = ticket.State("in-review")
+				next.UpdatedAt = time.Now().UTC()
+				if err := s.UpdateTicket(ctx, next); err != nil {
+					t.Fatalf("UpdateTicket(TKT-821) failed: %v", err)
+				}
+				return agentrun.TicketRunSummary{TicketID: ticketID, Status: agentrun.StatusDone}, nil
+			},
+		}
+	}
+
+	message, err := launchManagedAutoCycleWithMode(repoRoot, "session")
+	if err != nil {
+		t.Fatalf("launchManagedAutoCycleWithMode failed: %v", err)
+	}
+	if runTicketCalls != 1 {
+		t.Fatalf("expected one resumable ticket run, got %d", runTicketCalls)
+	}
+	if runNextCalls != 2 {
+		t.Fatalf("expected two cycle attempts, got %d", runNextCalls)
+	}
+	if !strings.Contains(message, "no runnable tickets remain") {
+		t.Fatalf("expected no-runnable completion message, got %q", message)
+	}
+}
+
+func TestLaunchManagedAutoCycleWithModeRetriesNoRunnableWhenStartableRemain(t *testing.T) {
+	prev := newRunOrchestratorWithMode
+	prevRetryDelay := runWatchRetryDelay
+	t.Cleanup(func() {
+		newRunOrchestratorWithMode = prev
+		runWatchRetryDelay = prevRetryDelay
+	})
+	runWatchRetryDelay = time.Millisecond
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-830",
+		Seq:         830,
+		Title:       "Pending todo",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "D",
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	runNextCalls := 0
+	newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
+		return stubRunOrchestrator{
+			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
+				runNextCalls++
+				if runNextCalls == 1 {
+					return agentrun.CycleSummary{StopReason: "no runnable tickets remain: blocked queue"}, nil
+				}
+				return agentrun.CycleSummary{StopReason: "operator requested stop before starting the next ticket"}, nil
+			},
+			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
+				t.Fatalf("did not expect RunTicket while only retrying no-runnable cycle")
+				return agentrun.TicketRunSummary{}, nil
+			},
+		}
+	}
+
+	message, err := launchManagedAutoCycleWithMode(repoRoot, "session")
+	if err != nil {
+		t.Fatalf("launchManagedAutoCycleWithMode failed: %v", err)
+	}
+	if runNextCalls != 2 {
+		t.Fatalf("expected retry after first no-runnable cycle, got %d calls", runNextCalls)
+	}
+	if message != "operator requested stop before starting the next ticket" {
+		t.Fatalf("unexpected message: %q", message)
 	}
 }
 

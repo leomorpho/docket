@@ -73,7 +73,17 @@ func IsTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 	if IsCoordinationTicket(t) {
 		return false
 	}
-	return len(cfg.StartTransitionTargets(string(t.State))) > 0
+	// A startable non-coordination ticket is workable as long as it has at least
+	// one non-terminal next state. We do not require a direct path to an "active"
+	// role state, because some configs use a multi-hop workflow (e.g. backlog →
+	// todo → in-progress) where the intermediate state lacks the "active" role.
+	for _, next := range stateCfg.Next {
+		nextCfg, exists := cfg.States[next]
+		if exists && !nextCfg.Terminal {
+			return true
+		}
+	}
+	return false
 }
 
 func IsCoordinationTicket(t *ticket.Ticket) bool {

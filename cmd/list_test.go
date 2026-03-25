@@ -217,7 +217,7 @@ func TestListCmd_EmptyWorkableViewExplainsBlockedBacklog(t *testing.T) {
 		t.Fatalf("list failed: %v", err)
 	}
 
-	if !strings.Contains(out.String(), "Backlog warning: none are runnable right now") {
+	if !strings.Contains(out.String(), "Queue warning: none are runnable right now") {
 		t.Fatalf("expected blocked backlog explanation, got:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "Top unresolved blockers: TKT-001 x1") {

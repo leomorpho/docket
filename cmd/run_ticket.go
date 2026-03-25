@@ -19,6 +19,7 @@ import (
 	"github.com/leomorpho/docket/internal/agentrun/selector"
 	runvalidate "github.com/leomorpho/docket/internal/agentrun/validate"
 	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/tui"
@@ -38,6 +39,7 @@ var (
 	runWatch           bool
 	runWatchMouse      bool
 	runWorkspace       bool
+	runWatchRetryDelay = 2 * time.Second
 )
 
 var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
@@ -802,25 +804,84 @@ func launchManagedAutoCycle(repoRoot string) (string, error) {
 func launchManagedAutoCycleWithMode(repoRoot, mode string) (string, error) {
 	healManagedRuntime(repoRoot)
 	svc := newRunOrchestratorWithMode(repoRoot, runReviewEnabled(), mode)
-	summary, err := svc.RunNext(context.Background())
-	if err != nil {
-		return "", err
-	}
-	if err := cycleSummaryError(summary); err != nil {
-		return "", err
-	}
-	reason := strings.TrimSpace(summary.StopReason)
-	switch reason {
-	case "":
-		return "out of tickets", nil
-	case "operator requested stop after current ticket", "operator requested stop before starting the next ticket":
-		return reason, nil
-	default:
-		if isNoRunnableReason(reason) {
+	s := local.New(repoRoot)
+	ctx := context.Background()
+	for {
+		summary, err := svc.RunNext(ctx)
+		if err != nil {
+			return "", err
+		}
+		if err := cycleSummaryError(summary); err != nil {
+			return "", err
+		}
+		reason := strings.TrimSpace(summary.StopReason)
+		switch reason {
+		case "":
+		case "operator requested stop after current ticket", "operator requested stop before starting the next ticket":
+			return reason, nil
+		default:
+			if !isNoRunnableReason(reason) {
+				return "cycle finished", nil
+			}
+		}
+
+		if err := s.SyncIndex(ctx); err != nil {
+			return "", fmt.Errorf("syncing index: %w", err)
+		}
+		cfg, err := ticket.LoadConfig(repoRoot)
+		if err != nil {
+			return "", err
+		}
+		pending, err := countStartableTickets(ctx, s, cfg)
+		if err != nil {
+			return "", err
+		}
+		if pending == 0 {
+			if reason == "" {
+				return "out of tickets", nil
+			}
 			return reason, nil
 		}
-		return "cycle finished", nil
+
+		resume, err := selectResumableActiveTicket(ctx, s, cfg)
+		if err != nil {
+			return "", err
+		}
+		if resume != nil {
+			runSummary, err := svc.RunTicket(ctx, resume.ID)
+			if err != nil {
+				return "", err
+			}
+			if err := singleRunSummaryError(runSummary); err != nil {
+				return "", err
+			}
+			if isOperatorStopReason(runSummary.Reason) {
+				return runSummary.Reason, nil
+			}
+			continue
+		}
+
+		time.Sleep(runWatchRetryDelay)
 	}
+}
+
+func countStartableTickets(ctx context.Context, s *local.Store, cfg *ticket.Config) (int, error) {
+	if cfg == nil {
+		return 0, nil
+	}
+	startable := cfg.StartableStates()
+	if len(startable) == 0 {
+		return 0, nil
+	}
+	filter := store.Filter{States: make([]ticket.State, 0, len(startable))}
+	for _, state := range startable {
+		filter.States = append(filter.States, ticket.State(state))
+	}
+	tickets, err := s.ListTickets(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return len(tickets), nil
 }
 
 func singleRunSummaryError(summary agentrun.TicketRunSummary) error {

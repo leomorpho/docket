@@ -774,7 +774,7 @@ func TestRunWatchModelKeepsTerminalMessageAfterIdleRefresh(t *testing.T) {
 			ID:    "single",
 			Label: "Start Next Ticket",
 			Start: func() (string, error) {
-				return "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Backlog warning: none are runnable right now; 2 actionable tickets are in startable states, 2 blocked. Top unresolved blockers: TKT-101 x2.", nil
+				return "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Queue warning: none are runnable right now; 2 actionable tickets are in startable states, 2 blocked. Top unresolved blockers: TKT-101 x2.", nil
 			},
 		},
 	})
@@ -798,7 +798,7 @@ func TestRunWatchModelKeepsTerminalMessageAfterIdleRefresh(t *testing.T) {
 	if final.statusMessage == "waiting for managed run" {
 		t.Fatalf("expected idle refresh to keep terminal message, got %q", final.statusMessage)
 	}
-	if !strings.Contains(final.statusMessage, "Backlog warning: none are runnable right now") {
+	if !strings.Contains(final.statusMessage, "Queue warning: none are runnable right now") {
 		t.Fatalf("expected preserved backlog diagnosis, got %q", final.statusMessage)
 	}
 	if final.showDoneNotice {

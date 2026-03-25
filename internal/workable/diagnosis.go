@@ -18,6 +18,8 @@ type EmptyDiagnosis struct {
 	ClaimedTickets      int
 	CoordinationTickets int
 	NonTransitionable   int
+	NeedsPromotion      int    // startable leaf tickets with no direct active-role next, but valid non-terminal next states
+	NeedsPromotionNext  string // the next state they should be advanced to
 	TopBlockers         []BlockerCount
 }
 
@@ -55,8 +57,38 @@ func DiagnoseEmpty(ctx context.Context, s *local.Store, cfg *ticket.Config) (Emp
 			diagnosis.CoordinationTickets++
 			continue
 		}
-		if !cfg.States[string(full.State)].Startable || len(cfg.StartTransitionTargets(string(full.State))) == 0 {
+		stateCfg, ok := cfg.States[string(full.State)]
+		if !ok || !stateCfg.Startable {
 			diagnosis.NonTransitionable++
+			continue
+		}
+		// Check whether this ticket has any non-terminal next state.
+		hasNonTerminalNext := false
+		hasDirectActiveNext := len(cfg.StartTransitionTargets(string(full.State))) > 0
+		for _, next := range stateCfg.Next {
+			nextCfg, exists := cfg.States[next]
+			if exists && !nextCfg.Terminal {
+				hasNonTerminalNext = true
+				break
+			}
+		}
+		if !hasNonTerminalNext {
+			diagnosis.NonTransitionable++
+			continue
+		}
+		// Ticket is workable but requires a promotion hop (e.g. backlog → todo → in-progress).
+		if !hasDirectActiveNext {
+			diagnosis.NeedsPromotion++
+			// Record the first non-terminal next state as the promotion target.
+			if diagnosis.NeedsPromotionNext == "" {
+				for _, next := range stateCfg.Next {
+					nextCfg, exists := cfg.States[next]
+					if exists && !nextCfg.Terminal {
+						diagnosis.NeedsPromotionNext = next
+						break
+					}
+				}
+			}
 			continue
 		}
 		diagnosis.StartableTickets++
@@ -107,10 +139,22 @@ func (d EmptyDiagnosis) Summary() string {
 	switch {
 	case len(d.StartableStates) == 0:
 		return base
+	case d.NeedsPromotion > 0 && d.StartableTickets == 0:
+		// The common multi-hop case: backlog tickets exist but need advancing to an
+		// intermediate state (e.g. todo) before they become directly workable.
+		promoteTo := d.NeedsPromotionNext
+		if promoteTo == "" {
+			promoteTo = "<next-state>"
+		}
+		return fmt.Sprintf(
+			"%s Action required: %d leaf ticket(s) are in startable states but require promotion to %q before work can begin. "+
+				"Run: docket list --state %s --format context   then advance tickets with: docket update <TKT-ID> --state %s",
+			base, d.NeedsPromotion, promoteTo, d.StartableStates[0], promoteTo,
+		)
 	case d.StartableTickets == 0 && d.CoordinationTickets > 0:
-		return fmt.Sprintf("%s Backlog warning: only coordination tickets are sitting in startable states (%d coordination tickets); no actionable leaf tickets are startable.", base, d.CoordinationTickets)
+		return fmt.Sprintf("%s Queue warning: only coordination tickets are sitting in startable states (%d coordination tickets); no actionable leaf tickets are startable.", base, d.CoordinationTickets)
 	case d.StartableTickets == 0:
-		return fmt.Sprintf("%s Backlog warning: there are no actionable tickets in startable states. Check ticket state wiring and parent/blocker links.", base)
+		return fmt.Sprintf("%s Queue warning: there are no actionable tickets in startable states. Check ticket state wiring and parent/blocker links.", base)
 	}
 
 	parts := []string{
@@ -127,7 +171,7 @@ func (d EmptyDiagnosis) Summary() string {
 		parts = append(parts, fmt.Sprintf("%d misconfigured without active transitions", d.NonTransitionable))
 	}
 
-	summary := fmt.Sprintf("%s Backlog warning: none are runnable right now; %s.", base, strings.Join(parts, ", "))
+	summary := fmt.Sprintf("%s Queue warning: none are runnable right now; %s.", base, strings.Join(parts, ", "))
 	if len(d.TopBlockers) == 0 {
 		return summary + " Check blocker wiring and in-review handoff policy."
 	}

@@ -73,14 +73,27 @@ func executeQueueHeal(ctx context.Context, s *local.Store, cfg *ticket.Config, a
 	}
 	if target == nil {
 		diagnosis, _ := workablepkg.DiagnoseEmpty(ctx, s, cfg)
+		inspectState := "open"
+		if len(diagnosis.StartableStates) > 0 {
+			inspectState = diagnosis.StartableStates[0]
+		}
+		nextActions := []string{
+			"Create or unblock at least one startable topo:leaf ticket.",
+			fmt.Sprintf("Use `docket list --state %s --full --label topo:leaf` to inspect candidates.", inspectState),
+		}
+		if diagnosis.NeedsPromotion > 0 && diagnosis.NeedsPromotionNext != "" {
+			nextState := diagnosis.NeedsPromotionNext
+			nextActions = []string{
+				fmt.Sprintf("%d leaf ticket(s) in startable state(s) need promotion to %q to become workable.", diagnosis.NeedsPromotion, nextState),
+				fmt.Sprintf("List candidates: docket list --state %s --format context", inspectState),
+				fmt.Sprintf("Advance a ticket: docket update <TKT-ID> --state %s", nextState),
+			}
+		}
 		return queueHealResult{
-			Healthy: false,
-			Applied: false,
-			Summary: diagnosis.Summary(),
-			NextActions: []string{
-				"Create or unblock at least one startable topo:leaf ticket.",
-				"Use `docket list --state backlog --full --label topo:leaf` to inspect candidates.",
-			},
+			Healthy:     false,
+			Applied:     false,
+			Summary:     diagnosis.Summary(),
+			NextActions: nextActions,
 		}, nil
 	}
 

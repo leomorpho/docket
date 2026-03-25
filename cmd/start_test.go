@@ -1036,7 +1036,7 @@ func TestStartCmd_EmptyWorkableSetExplainsBlockedBacklog(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("start failed: %v", err)
 	}
-	if !strings.Contains(b.String(), "Backlog warning: none are runnable right now") {
+	if !strings.Contains(b.String(), "Queue warning: none are runnable right now") {
 		t.Fatalf("expected blocked backlog warning, got:\n%s", b.String())
 	}
 	if !strings.Contains(b.String(), "Top unresolved blockers: TKT-001 x1") {
