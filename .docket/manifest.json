@@ -1944,7 +1944,7 @@
     },
     "TKT-352": {
       "title": "Make privileged transitions and workflow-policy commands respect the opt-in enforcement switch consistently",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 1,
       "parent": "TKT-174"
     },
