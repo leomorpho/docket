@@ -1860,7 +1860,7 @@
     },
     "TKT-338": {
       "title": "Define wrapped-key keystore format and protector abstraction",
-      "state": "in-progress",
+      "state": "in-review",
       "priority": 3,
       "parent": "TKT-337"
     },

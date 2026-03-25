@@ -469,6 +469,99 @@ func TestSelectNextTicket_LegacyCanonicalMapConfigRemainsWorkable(t *testing.T) 
 	}
 }
 
+func TestStartCmd_LegacyMultiHopWorkableMatchesListSelection(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	raw := `{
+  "counter": 1,
+  "backend": "local",
+  "states": {
+    "backlog": {
+      "label": "Backlog",
+      "open": true,
+      "column": 0,
+      "next": ["todo", "archived"],
+      "startable": true
+    },
+    "todo": {
+      "label": "To Do",
+      "open": true,
+      "column": 1,
+      "next": ["in-progress", "backlog", "archived"],
+      "startable": true
+    },
+    "in-progress": {
+      "label": "In Progress",
+      "open": true,
+      "column": 2,
+      "next": ["in-review", "todo", "archived"]
+    },
+    "in-review": {
+      "label": "In Review",
+      "open": true,
+      "column": 3,
+      "next": ["done", "in-progress", "archived"]
+    },
+    "done": {
+      "label": "Done",
+      "open": false,
+      "column": 4,
+      "next": ["archived", "in-progress"]
+    },
+    "archived": {
+      "label": "Archived",
+      "open": false,
+      "column": 5,
+      "next": ["backlog"]
+    }
+  },
+  "labels": ["bug"],
+  "commit_sessions": false
+}`
+	if err := os.WriteFile(filepath.Join(h.repo, ".docket", "config.json"), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	h.seedTicket("TKT-188", 188, ticket.State("backlog"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+
+	listOut, err := h.run("ls", "--format", "json")
+	if err != nil {
+		t.Fatalf("ls failed: %v\n%s", err, listOut)
+	}
+	var listed []map[string]any
+	if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
+		t.Fatalf("unmarshal list output failed: %v\n%s", err, listOut)
+	}
+	found := false
+	for _, item := range listed {
+		if item["id"] == "TKT-188" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ls workable view to include TKT-188, got %#v", listed)
+	}
+
+	startOut, err := h.run("start", "--format", "json")
+	if err != nil {
+		t.Fatalf("start failed: %v\n%s", err, startOut)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(startOut), &payload); err != nil {
+		t.Fatalf("unmarshal start output failed: %v\n%s", err, startOut)
+	}
+	ticketPayload, ok := payload["ticket"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected ticket payload, got %#v", payload)
+	}
+	if ticketPayload["id"] != "TKT-188" {
+		t.Fatalf("expected started ticket TKT-188, got %#v", ticketPayload["id"])
+	}
+	if ticketPayload["state"] != "todo" {
+		t.Fatalf("expected start to promote via multi-hop to todo, got %#v", ticketPayload["state"])
+	}
+}
+
 func TestSelectNextTicket_SkipsClaimedTickets(t *testing.T) {
 	tmpDir := t.TempDir()
 	runGitSession(t, tmpDir, "init")

@@ -234,6 +234,21 @@ func resolveStartState(t *ticket.Ticket, cfg *ticket.Config) (ticket.State, erro
 			return ticket.State(next), nil
 		}
 	}
+	// Keep start behavior aligned with workable ticket selection for multi-hop
+	// workflows (for example backlog -> todo -> in-progress).
+	stateCfg, ok := cfg.States[string(t.State)]
+	if ok {
+		for _, next := range stateCfg.Next {
+			nextCfg, exists := cfg.States[next]
+			if !exists || nextCfg.Terminal {
+				continue
+			}
+			startCmd := UpdateStateCmd{To: ticket.State(next)}
+			if err := startCmd.Validate(t, cfg); err == nil {
+				return ticket.State(next), nil
+			}
+		}
+	}
 	return "", fmt.Errorf("cannot transition %s from %s to a configured active state", t.ID, t.State)
 }
 

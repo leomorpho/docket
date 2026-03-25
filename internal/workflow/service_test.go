@@ -210,6 +210,70 @@ func TestWorkflowStartTask_UsesConfiguredActiveState(t *testing.T) {
 	}
 }
 
+func TestWorkflowStartTask_FallsBackToValidNonTerminalHopWhenNoDirectActiveTarget(t *testing.T) {
+	cfg := &ticket.Config{
+		States: map[string]ticket.StateConfig{
+			"backlog": {
+				Label:            "Backlog",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"todo"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"todo": {
+				Label:            "Todo",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           2,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           3,
+				Next:             []string{"done"},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+			"done": {
+				Label:    "Done",
+				Open:     false,
+				Column:   4,
+				Next:     []string{},
+				Roles:    []string{"completed"},
+				Terminal: true,
+			},
+		},
+		DefaultState: "backlog",
+	}
+
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-002", State: "backlog"}}
+	v := &MockVCS{currentCheckout: "/tmp/repo", isPrimary: true}
+	c := &MockClaim{claims: make(map[string]string)}
+	mgr := NewManager(s, v, c)
+
+	res, _, err := mgr.StartTask(context.Background(), "TKT-002", "agent:1", cfg)
+	if err != nil {
+		t.Fatalf("StartTask failed: %v", err)
+	}
+	if res.State != "todo" {
+		t.Fatalf("expected fallback promotion to todo, got %s", res.State)
+	}
+}
+
 func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	cfg := ticket.DefaultConfig()
 
