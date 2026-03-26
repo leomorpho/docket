@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ func TestRepoLocalGitignoreLinesCoverLegacyAndCanonicalPaths(t *testing.T) {
 	lines := repoLocalGitignoreLines()
 	required := []string{
 		"# docket",
+		".docket/checkpoints/",
 		".docket/index.db",
 		".docket/local/",
 		".docket/locks.json",
@@ -23,6 +25,54 @@ func TestRepoLocalGitignoreLinesCoverLegacyAndCanonicalPaths(t *testing.T) {
 		if !containsLine(lines, want) {
 			t.Fatalf("missing required gitignore line %q from %v", want, lines)
 		}
+	}
+}
+
+func TestEnsureLocalArtifactsGitignoredUntracksLegacyLocalFiles(t *testing.T) {
+	repoRoot := t.TempDir()
+	runGitSession(t, repoRoot, "init")
+	runGitSession(t, repoRoot, "config", "user.email", "test@example.com")
+	runGitSession(t, repoRoot, "config", "user.name", "Test User")
+
+	checkpointPath := filepath.Join(repoRoot, ".docket", "checkpoints", "TKT-001-20260312T205245Z.json")
+	if err := os.MkdirAll(filepath.Dir(checkpointPath), 0o755); err != nil {
+		t.Fatalf("mkdir checkpoints: %v", err)
+	}
+	if err := os.WriteFile(checkpointPath, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+	runGitSession(t, repoRoot, "add", ".")
+	runGitSession(t, repoRoot, "commit", "-m", "seed tracked checkpoint")
+
+	if err := ensureLocalArtifactsGitignored(repoRoot); err != nil {
+		t.Fatalf("ensureLocalArtifactsGitignored: %v", err)
+	}
+
+	gitignoreData, err := os.ReadFile(filepath.Join(repoRoot, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	if !strings.Contains(string(gitignoreData), ".docket/checkpoints/\n") {
+		t.Fatalf("expected checkpoints ignore rule, got:\n%s", string(gitignoreData))
+	}
+
+	cmd := exec.Command("git", "-C", repoRoot, "ls-files", "--", ".docket/checkpoints")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git ls-files failed: %v\n%s", err, string(out))
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("expected checkpoint files to be untracked, got:\n%s", string(out))
+	}
+}
+
+func TestEnsureLocalArtifactsGitignoredSkipsNonGitWorktree(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir pseudo git dir: %v", err)
+	}
+	if err := ensureLocalArtifactsGitignored(repoRoot); err != nil {
+		t.Fatalf("ensureLocalArtifactsGitignored on pseudo repo: %v", err)
 	}
 }
 

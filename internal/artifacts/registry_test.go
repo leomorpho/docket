@@ -24,6 +24,7 @@ func TestRegistryCoversCoreManagedArtifacts(t *testing.T) {
 		{RepoConfigJSON, RootRepo, PolicyTracked, MigrationStable, ".docket/config.json"},
 		{RepoConfigYAML, RootRepo, PolicyTracked, MigrationStable, ".docket/config.yaml"},
 		{RepoTicketsDir, RootRepo, PolicyTracked, MigrationStable, ".docket/tickets"},
+		{RepoCheckpoints, RootRepo, PolicyLocalOnly, MigrationStable, ".docket/checkpoints"},
 		{RepoIndexDB, RootRepo, PolicyLocalOnly, MigrationMigrateToLocal, ".docket/index.db"},
 		{RepoInstallManifest, RootRepo, PolicyTracked, MigrationRegenerate, ".docket/install.json"},
 		{RepoLifecycleEvents, RootRepo, PolicyLocalOnly, MigrationMigrateToLocal, ".docket/runtime/lifecycle-events.jsonl"},
@@ -89,6 +90,7 @@ func TestRegistryHelpersResolvePathsAndIgnorePatterns(t *testing.T) {
 
 	ignores := RepoLocalIgnorePatterns()
 	for _, want := range []string{
+		".docket/checkpoints/",
 		".docket/index.db",
 		".docket/locks.json",
 		".docket/runtime/",

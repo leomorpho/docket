@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,7 +20,10 @@ func repoLocalGitignoreLines() []string {
 
 func ensureLocalArtifactsGitignored(repoRoot string) error {
 	_, err := reconcileGitignoreFile(filepath.Join(repoRoot, ".gitignore"), repoLocalGitignoreLines())
-	return err
+	if err != nil {
+		return err
+	}
+	return untrackManagedLocalArtifacts(repoRoot)
 }
 
 func reconcileGitignoreFile(path string, required []string) (bool, error) {
@@ -85,4 +90,42 @@ func uniqueStrings(items []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func untrackManagedLocalArtifacts(repoRoot string) error {
+	if !isGitWorkTree(repoRoot) {
+		return nil
+	}
+	pathspecs := managedGitignorePathspecs()
+	if len(pathspecs) == 0 {
+		return nil
+	}
+
+	args := append([]string{"-C", repoRoot, "rm", "-r", "--cached", "--ignore-unmatch", "--quiet", "--"}, pathspecs...)
+	cmd := exec.Command("git", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("untracking local-only artifacts: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func managedGitignorePathspecs() []string {
+	lines := repoLocalGitignoreLines()
+	pathspecs := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		pathspecs = append(pathspecs, line)
+	}
+	return pathspecs
+}
+
+func isGitWorkTree(repoRoot string) bool {
+	out, err := exec.Command("git", "-C", repoRoot, "rev-parse", "--is-inside-work-tree").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
 }
