@@ -5,6 +5,21 @@ A git-native ticket system built for human + LLM agentic workflows.
 Not JIRA. Not a markdown checklist. A structured, append-only, auditable issue tracker
 that lives in your repo and works as a first-class tool for AI agents.
 
+## Current Direction
+
+The intended product direction is now documented in [docs/north-star.md](./docs/north-star.md).
+
+In short: Docket is moving toward a ticketing + orchestration runtime for agentic development, with the main focus on:
+
+- groomed runnable tickets
+- serial autorun first
+- compact run artifacts
+- Docket-owned validation and state transitions
+
+The execution order for that shift is documented in [docs/recommended-order.md](./docs/recommended-order.md).
+
+Some current implementation surfaces still reflect older security/governance experiments. Those documents remain useful as references for current behavior, but they are not the primary product direction.
+
 ## What it does
 
 - Tracks tickets as markdown files with YAML frontmatter at `.docket/tickets/TKT-XXX.md`

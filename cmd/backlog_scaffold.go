@@ -29,7 +29,6 @@ var backlogScaffoldCmd = &cobra.Command{
 					"title":       "Dependent child task",
 					"description": "Child task that depends on root.",
 					"parent_ref":  "root",
-					"blocked_by":  []string{"root"},
 					"priority":    2,
 					"state":       "backlog",
 					"labels":      []string{"feature"},

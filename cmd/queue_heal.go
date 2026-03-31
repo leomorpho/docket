@@ -163,6 +163,10 @@ func pickBlockedStartableLeaf(ctx context.Context, s *local.Store, cfg *ticket.C
 	if err != nil {
 		return nil, nil, err
 	}
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	type candidate struct {
 		ticket    *ticket.Ticket
@@ -175,7 +179,7 @@ func pickBlockedStartableLeaf(ctx context.Context, s *local.Store, cfg *ticket.C
 		if err != nil {
 			return nil, nil, err
 		}
-		if !workablepkg.IsTicket(cfg, full) {
+		if !workablepkg.IsLeafWorkItem(cfg, idx, full) {
 			continue
 		}
 		unresolved, err := s.UnresolvedBlockers(ctx, full)

@@ -211,13 +211,24 @@ func (s *Store) hasUnresolvedBlockers(ctx context.Context, t *ticket.Ticket, cfg
 }
 
 func (s *Store) unresolvedBlockers(ctx context.Context, t *ticket.Ticket, cfg *ticket.Config) ([]string, error) {
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var unresolved []string
 	for _, blockerID := range t.BlockedBy {
 		blocker, err := s.GetTicket(ctx, blockerID)
 		if err != nil {
 			return nil, err
 		}
-		if blocker == nil || cfg.BlocksDependents(blocker.State) {
+		if blocker == nil {
+			unresolved = append(unresolved, blockerID)
+			continue
+		}
+		if !isExecutionBlockerTicket(idx, blocker) {
+			continue
+		}
+		if cfg.BlocksDependents(blocker.State) {
 			unresolved = append(unresolved, blockerID)
 		}
 	}

@@ -72,3 +72,35 @@ func TestIsValidState(t *testing.T) {
 		})
 	}
 }
+
+func TestIsCoordinationTicket(t *testing.T) {
+	tests := []struct {
+		name     string
+		ticket   *Ticket
+		expected bool
+	}{
+		{
+			name:     "epic label",
+			ticket:   &Ticket{Labels: []string{"Epic"}},
+			expected: true,
+		},
+		{
+			name:     "program title prefix",
+			ticket:   &Ticket{Title: "Program: Coordination"},
+			expected: true,
+		},
+		{
+			name:     "ordinary leaf",
+			ticket:   &Ticket{Title: "Implement leaf work", Labels: []string{"feature"}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsCoordinationTicket(tt.ticket); got != tt.expected {
+				t.Fatalf("IsCoordinationTicket() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}

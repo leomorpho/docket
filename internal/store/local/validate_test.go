@@ -33,7 +33,7 @@ func TestValidateFile(t *testing.T) {
 			{Description: "Has AC item one", Done: false},
 			{Description: "Has AC item two", Done: false},
 		},
-		Handoff:     "Has handoff",
+		Handoff: "Has handoff",
 	}
 	s.CreateTicket(ctx, t1)
 
@@ -204,6 +204,74 @@ func TestValidateFile_HandoffSectionsConfigDriven(t *testing.T) {
 		if e.Field == "handoff" && strings.Contains(strings.ToLower(e.Message), "risks") {
 			t.Fatalf("did not expect Risks to be required after config update: %v", errs)
 		}
+	}
+}
+
+func TestValidateFile_RejectsNonLeafExecutionBlocker(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	parent := &ticket.Ticket{
+		ID:          "TKT-001",
+		Seq:         1,
+		Title:       "Parent",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		Labels:      []string{"epic"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Parent ticket with children",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}
+	child := &ticket.Ticket{
+		ID:          "TKT-002",
+		Seq:         2,
+		Title:       "Child",
+		Parent:      "TKT-001",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Child ticket",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}
+	blocked := &ticket.Ticket{
+		ID:          "TKT-003",
+		Seq:         3,
+		Title:       "Blocked leaf",
+		State:       ticket.State("todo"),
+		Priority:    1,
+		BlockedBy:   []string{"TKT-001"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Blocked ticket",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}
+
+	for _, tk := range []*ticket.Ticket{parent, child, blocked} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	errs, _, err := s.ValidateFile("TKT-003")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	found := false
+	for _, item := range errs {
+		if item.Field == "blocked_by[0]" && strings.Contains(item.Message, "must be a leaf ticket") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected non-leaf blocker validation error, got %v", errs)
 	}
 }
 
@@ -384,7 +452,7 @@ func TestValidate(t *testing.T) {
 	t1 := &ticket.Ticket{
 		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "This is a long description so it passes validation quality checks easily and without any issues.",
-		AC: []ticket.AcceptanceCriterion{{Description: "A"}},
+		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
 	}
 	s.CreateTicket(ctx, t1)
 

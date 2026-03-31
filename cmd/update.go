@@ -338,6 +338,9 @@ var updateCmd = &cobra.Command{
 			fmt.Fprintln(cmd.OutOrStdout(), "No fields updated.")
 			return nil
 		}
+		if err := enforceLeafExecutionBlockers(ctx, s, t.BlockedBy); err != nil {
+			return err
+		}
 
 		t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 

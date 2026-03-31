@@ -220,6 +220,71 @@ func TestStoreUpdate_UsesConfiguredLifecycleRolesForTimestamps(t *testing.T) {
 	}
 }
 
+func TestUnresolvedBlockers_IgnoresNonLeafAndCoordinationTickets(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-001",
+			Seq:         1,
+			Title:       "Epic parent",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			Labels:      []string{"epic"},
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Parent ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-002",
+			Seq:         2,
+			Title:       "Child",
+			Parent:      "TKT-001",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Child ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-003",
+			Seq:         3,
+			Title:       "Blocked leaf",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			BlockedBy:   []string{"TKT-001"},
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Blocked ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	target, err := s.GetTicket(ctx, "TKT-003")
+	if err != nil {
+		t.Fatalf("get target: %v", err)
+	}
+	unresolved, err := s.UnresolvedBlockers(ctx, target)
+	if err != nil {
+		t.Fatalf("UnresolvedBlockers failed: %v", err)
+	}
+	if len(unresolved) != 0 {
+		t.Fatalf("expected non-leaf blocker to be ignored, got %v", unresolved)
+	}
+}
+
 func TestStoreFilter(t *testing.T) {
 	tmpDir := t.TempDir()
 	s := New(tmpDir)

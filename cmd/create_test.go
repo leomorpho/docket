@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -153,6 +154,60 @@ func TestCreateCmd_WarnsOnShortDescription(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "under 50 characters") {
 		t.Fatalf("expected short-description warning, got: %s", errOut.String())
+	}
+}
+
+func TestCreateCmd_RejectsNonLeafExecutionBlocker(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-001",
+			Seq:         1,
+			Title:       "Parent blocker",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Parent blocker",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-002",
+			Seq:         2,
+			Title:       "Child",
+			Parent:      "TKT-001",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Child ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"create", "--title", "Blocked leaf", "--blocked-by", "TKT-001", "--desc", "Likely paths: cmd/create.go. Verify commands: go test ./cmd -run TestCreateCmd_RejectsNonLeafExecutionBlocker -count=1. Out of scope: unrelated runtime behavior.", "--ac", "leaf blocker validation"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected create to reject non-leaf blocker")
+	}
+	if !strings.Contains(err.Error(), "must be a leaf ticket") {
+		t.Fatalf("expected leaf-blocker error, got %v", err)
 	}
 }
 

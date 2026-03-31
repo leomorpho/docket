@@ -171,6 +171,82 @@ func TestUpdateCmd_Handoff(t *testing.T) {
 	}
 }
 
+func TestUpdateCmd_RejectsNonLeafExecutionBlocker(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-001",
+			Seq:         1,
+			Title:       "Parent blocker",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Parent blocker",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-002",
+			Seq:         2,
+			Title:       "Child under blocker",
+			Parent:      "TKT-001",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Child ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-003",
+			Seq:         3,
+			Title:       "Target",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Target ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"update", "TKT-003", "--blocked-by", "TKT-001"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected update to reject non-leaf blocker")
+	}
+	if !strings.Contains(err.Error(), "must be a leaf ticket") {
+		t.Fatalf("expected leaf-blocker error, got %v", err)
+	}
+
+	updated, getErr := s.GetTicket(ctx, "TKT-003")
+	if getErr != nil {
+		t.Fatalf("get target: %v", getErr)
+	}
+	if len(updated.BlockedBy) != 0 {
+		t.Fatalf("expected target blockers unchanged, got %v", updated.BlockedBy)
+	}
+}
+
 func TestUpdateCmd_AllowsInProgressBackToBacklog(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

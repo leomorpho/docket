@@ -557,8 +557,8 @@ func TestStartCmd_LegacyMultiHopWorkableMatchesListSelection(t *testing.T) {
 	if ticketPayload["id"] != "TKT-188" {
 		t.Fatalf("expected started ticket TKT-188, got %#v", ticketPayload["id"])
 	}
-	if ticketPayload["state"] != "todo" {
-		t.Fatalf("expected start to promote via multi-hop to todo, got %#v", ticketPayload["state"])
+	if ticketPayload["state"] != "in-progress" {
+		t.Fatalf("expected start to promote directly to the active state in-progress, got %#v", ticketPayload["state"])
 	}
 }
 

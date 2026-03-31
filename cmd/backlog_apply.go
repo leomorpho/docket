@@ -133,6 +133,7 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 
 	now := time.Now().UTC().Truncate(time.Second)
 	actor := detectActor()
+	plannedParentIDs, plannedParentRefs := plannedBacklogParentTargets(spec)
 	createdIDs := map[string]string{}
 	createdOrder := make([]string, 0, len(spec.Tickets))
 	createdFiles := make([]string, 0, len(spec.Tickets))
@@ -170,8 +171,20 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 				continue
 			}
 			if tktIDPattern.MatchString(d) {
+				if _, ok := plannedParentIDs[d]; ok {
+					if err := rollback(createdFiles); err != nil {
+						return backlogApplyOutput{}, fmt.Errorf("execution blocker %q must be a leaf ticket and rollback failed: %v", d, err)
+					}
+					return backlogApplyOutput{}, fmt.Errorf("execution blocker %q must be a leaf ticket and cannot be a coordination ticket", d)
+				}
 				blockedBy = append(blockedBy, d)
 				continue
+			}
+			if _, ok := plannedParentRefs[d]; ok {
+				if err := rollback(createdFiles); err != nil {
+					return backlogApplyOutput{}, fmt.Errorf("execution blocker %q must be a leaf ticket and rollback failed: %v", d, err)
+				}
+				return backlogApplyOutput{}, fmt.Errorf("execution blocker %q must be a leaf ticket and cannot be a coordination ticket", d)
 			}
 			mapped, ok := createdIDs[d]
 			if !ok {
@@ -214,6 +227,12 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 			}
 			return backlogApplyOutput{}, err
 		}
+		if err := enforceLeafExecutionBlockers(ctx, s, t.BlockedBy); err != nil {
+			if rbErr := rollback(createdFiles); rbErr != nil {
+				return backlogApplyOutput{}, fmt.Errorf("%v (rollback failed: %v)", err, rbErr)
+			}
+			return backlogApplyOutput{}, err
+		}
 		if err := s.CreateTicket(ctx, t); err != nil {
 			if rbErr := rollback(createdFiles); rbErr != nil {
 				return backlogApplyOutput{}, fmt.Errorf("creating %s failed: %v (rollback failed: %v)", id, err, rbErr)
@@ -243,6 +262,20 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 			fmt.Sprintf("docket show %s", createdOrder[0]),
 		},
 	}, nil
+}
+
+func plannedBacklogParentTargets(spec applyspec.BacklogApplySpec) (map[string]struct{}, map[string]struct{}) {
+	ids := make(map[string]struct{})
+	refs := make(map[string]struct{})
+	for _, entry := range spec.Tickets {
+		if parentID := strings.TrimSpace(entry.Parent); parentID != "" {
+			ids[parentID] = struct{}{}
+		}
+		if parentRef := strings.TrimSpace(entry.ParentRef); parentRef != "" {
+			refs[parentRef] = struct{}{}
+		}
+	}
+	return ids, refs
 }
 
 func buildBacklogSpecFromWorklist(cmd *cobra.Command, path, parent string) (applyspec.BacklogApplySpec, error) {

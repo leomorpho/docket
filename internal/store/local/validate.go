@@ -111,10 +111,25 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 			errs = append(errs, store.ValidationError{Field: "parent", Message: fmt.Sprintf("referenced parent ticket %q does not exist", t.Parent)})
 		}
 	}
+	idx, idxErr := s.BuildRelationshipIndex(context.Background())
+	if idxErr != nil {
+		return nil, nil, idxErr
+	}
 	for i, bid := range t.BlockedBy {
 		bPath := s.ticketPath(bid)
 		if _, err := os.Stat(bPath); os.IsNotExist(err) {
 			errs = append(errs, store.ValidationError{Field: fmt.Sprintf("blocked_by[%d]", i), Message: fmt.Sprintf("referenced ticket %q does not exist", bid)})
+			continue
+		}
+		blocker, err := s.GetTicket(context.Background(), bid)
+		if err != nil {
+			return nil, nil, err
+		}
+		if blocker != nil && !isExecutionBlockerTicket(idx, blocker) {
+			errs = append(errs, store.ValidationError{
+				Field:   fmt.Sprintf("blocked_by[%d]", i),
+				Message: fmt.Sprintf("execution blocker %q must be a leaf ticket and cannot be a coordination ticket", bid),
+			})
 		}
 	}
 

@@ -148,6 +148,9 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 			if err != nil {
 				return ticketApplyOutput{}, err
 			}
+			if err := enforceLeafExecutionBlockers(ctx, s, updated.BlockedBy); err != nil {
+				return ticketApplyOutput{}, err
+			}
 			updated.UpdatedAt = now
 			if err := s.UpdateTicket(ctx, updated); err != nil {
 				return ticketApplyOutput{}, fmt.Errorf("updating ticket %s: %w", updated.ID, err)
@@ -206,6 +209,12 @@ func executeTicketApply(ctx context.Context, repoRoot string, cfg *ticket.Config
 	}
 	if spec.Ticket.State != "" {
 		newTicket.State = ticket.State(spec.Ticket.State)
+	}
+	if err := enforceLeafExecutionBlockers(ctx, s, newTicket.BlockedBy); err != nil {
+		if rollbackErr := rollbackCounter(""); rollbackErr != nil {
+			return ticketApplyOutput{}, fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
+		}
+		return ticketApplyOutput{}, err
 	}
 	if err := enforceCreateConnectivity(ctx, s, newTicket); err != nil {
 		if rollbackErr := rollbackCounter(""); rollbackErr != nil {

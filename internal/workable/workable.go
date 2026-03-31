@@ -40,6 +40,10 @@ func Tickets(ctx context.Context, s *local.Store, cfg *ticket.Config, f store.Fi
 	if err != nil {
 		return nil, err
 	}
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	out := make([]*ticket.Ticket, 0, len(tickets))
 	for _, t := range tickets {
@@ -47,7 +51,7 @@ func Tickets(ctx context.Context, s *local.Store, cfg *ticket.Config, f store.Fi
 		if err != nil {
 			return nil, err
 		}
-		if full == nil || !IsTicket(cfg, full) {
+		if full == nil || !IsLeafWorkItem(cfg, idx, full) {
 			continue
 		}
 		blocked, err := blockedByClaim(s.RepoRoot, cfg, full)
@@ -70,7 +74,7 @@ func IsTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 	if !ok || !stateCfg.Startable {
 		return false
 	}
-	if IsCoordinationTicket(t) {
+	if ticket.IsCoordinationTicket(t) {
 		return false
 	}
 	// A startable non-coordination ticket is workable as long as it has at least
@@ -86,17 +90,15 @@ func IsTicket(cfg *ticket.Config, t *ticket.Ticket) bool {
 	return false
 }
 
-func IsCoordinationTicket(t *ticket.Ticket) bool {
-	for _, l := range t.Labels {
-		label := strings.ToLower(strings.TrimSpace(l))
-		if label == "epic" || label == "program" || label == "topo:coordination" {
-			return true
-		}
+func IsLeafWorkItem(cfg *ticket.Config, idx *local.RelationshipIndex, t *ticket.Ticket) bool {
+	if idx == nil || !IsTicket(cfg, t) {
+		return false
 	}
-	title := strings.TrimSpace(t.Title)
-	return strings.HasPrefix(title, "[Epic]") ||
-		strings.HasPrefix(title, "Epic:") ||
-		strings.HasPrefix(title, "Program:")
+	return len(idx.Children[t.ID]) == 0
+}
+
+func IsCoordinationTicket(t *ticket.Ticket) bool {
+	return ticket.IsCoordinationTicket(t)
 }
 
 func blockedByClaim(repoRoot string, cfg *ticket.Config, t *ticket.Ticket) (bool, error) {

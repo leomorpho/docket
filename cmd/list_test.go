@@ -459,13 +459,19 @@ func TestListCmd_DefaultHidesBlockedBranch(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID: "TKT-099", Seq: 99, Title: "Active blocker", State: ticket.State("in-progress"), Priority: 1,
+		CreatedAt: now.Add(-time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+	}); err != nil {
+		t.Fatalf("create blocker failed: %v", err)
+	}
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
 		ID: "TKT-001", Seq: 1, Title: "Blocked epic", State: ticket.State("todo"), Priority: 1, Labels: []string{"epic"}, BlockedBy: []string{"TKT-099"},
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("create epic failed: %v", err)
 	}
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "Blocked child", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2, BlockedBy: []string{"TKT-001"},
+		ID: "TKT-002", Seq: 2, Title: "Blocked child", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2, BlockedBy: []string{"TKT-099"},
 		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("create child failed: %v", err)

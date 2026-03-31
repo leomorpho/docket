@@ -148,6 +148,9 @@ var createCmd = &cobra.Command{
 		}
 
 		// 6. Create ticket
+		if err := enforceLeafExecutionBlockers(ctx, s, t.BlockedBy); err != nil {
+			return err
+		}
 		if err := enforceCreateConnectivity(ctx, s, t); err != nil {
 			return err
 		}

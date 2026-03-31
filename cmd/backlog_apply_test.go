@@ -25,7 +25,7 @@ func TestBacklogApplyCreatesStableIDMapping(t *testing.T) {
   "version": "docket.apply/v1",
   "tickets": [
     {"ref": "epic", "title": "Epic", "description": "Root epic", "labels": ["feature"]},
-    {"ref": "child-a", "title": "Child A", "description": "First child", "parent_ref": "epic", "blocked_by": ["epic"]},
+    {"ref": "child-a", "title": "Child A", "description": "First child", "parent_ref": "epic"},
     {"ref": "child-b", "title": "Child B", "description": "Second child", "parent_ref": "epic", "blocked_by": ["child-a"]}
   ]
 }`
@@ -59,8 +59,37 @@ func TestBacklogApplyCreatesStableIDMapping(t *testing.T) {
 	if childA.Parent != "TKT-001" {
 		t.Fatalf("expected child A parent TKT-001, got %q", childA.Parent)
 	}
+	if len(childA.BlockedBy) != 0 {
+		t.Fatalf("expected child A to have no blockers, got %#v", childA.BlockedBy)
+	}
 	if len(childB.BlockedBy) != 1 || childB.BlockedBy[0] != "TKT-002" {
 		t.Fatalf("expected child B blocked_by TKT-002, got %#v", childB.BlockedBy)
+	}
+}
+
+func TestBacklogApplyRejectsNonLeafExecutionBlocker(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "tickets": [
+    {"ref": "epic", "title": "Epic", "description": "Root epic"},
+    {"ref": "child-a", "title": "Child A", "description": "First child", "parent_ref": "epic", "blocked_by": ["epic"]}
+  ]
+}`
+	specPath := writeSpecFile(t, tmpDir, "non-leaf-blocker.json", spec)
+
+	_, _, err := runRootCommand(t, "backlog", "apply", "--spec", specPath)
+	if err == nil {
+		t.Fatal("expected backlog apply to reject non-leaf blocker")
+	}
+	if !strings.Contains(err.Error(), "must be a leaf ticket") {
+		t.Fatalf("expected leaf-blocker error, got %v", err)
 	}
 }
 

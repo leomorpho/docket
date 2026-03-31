@@ -1,6 +1,9 @@
 package ticket
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type State string
 
@@ -88,4 +91,22 @@ func (ac AcceptanceCriterion) IsUserFacing() bool {
 		}
 	}
 	return false
+}
+
+// IsCoordinationTicket identifies structural tickets that should not be worked
+// directly by the runtime.
+func IsCoordinationTicket(t *Ticket) bool {
+	if t == nil {
+		return false
+	}
+	for _, l := range t.Labels {
+		label := strings.ToLower(strings.TrimSpace(l))
+		if label == "epic" || label == "program" || label == "topo:coordination" {
+			return true
+		}
+	}
+	title := strings.TrimSpace(t.Title)
+	return strings.HasPrefix(title, "[Epic]") ||
+		strings.HasPrefix(title, "Epic:") ||
+		strings.HasPrefix(title, "Program:")
 }

@@ -307,6 +307,69 @@ func TestTicketApplyCreateRejectsDisconnectedGraph(t *testing.T) {
 	}
 }
 
+func TestTicketApplyRejectsNonLeafExecutionBlocker(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "json"
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-001",
+			Seq:         1,
+			Title:       "Parent blocker",
+			Description: "Parent blocker",
+			State:       ticket.State("backlog"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-002",
+			Seq:         2,
+			Title:       "Child",
+			Description: "Child ticket",
+			Parent:      "TKT-001",
+			State:       ticket.State("backlog"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	spec := `{
+  "version": "docket.apply/v1",
+  "operation": "create",
+  "ticket": {
+    "title": "Blocked leaf",
+    "description": "Blocked by parent ticket",
+    "blocked_by": ["TKT-001"],
+    "ac": ["single"]
+  }
+}`
+	specPath := writeSpecFile(t, tmpDir, "non-leaf-blocker-ticket-apply.json", spec)
+
+	_, _, err := runRootCommand(t, "ticket", "apply", "--spec", specPath)
+	if err == nil {
+		t.Fatal("expected ticket apply to reject non-leaf blocker")
+	}
+	if !strings.Contains(err.Error(), "must be a leaf ticket") {
+		t.Fatalf("expected leaf-blocker error, got %v", err)
+	}
+}
+
 func TestTicketApplyUpdateRollsBackDisconnectedMutation(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

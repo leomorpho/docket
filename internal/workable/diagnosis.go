@@ -43,6 +43,10 @@ func DiagnoseEmpty(ctx context.Context, s *local.Store, cfg *ticket.Config) (Emp
 	if err != nil {
 		return EmptyDiagnosis{}, err
 	}
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return EmptyDiagnosis{}, err
+	}
 
 	blockerCounts := map[string]int{}
 	for _, item := range tickets {
@@ -53,7 +57,7 @@ func DiagnoseEmpty(ctx context.Context, s *local.Store, cfg *ticket.Config) (Emp
 		if full == nil {
 			continue
 		}
-		if IsCoordinationTicket(full) {
+		if ticket.IsCoordinationTicket(full) || !localIsLeaf(idx, full.ID) {
 			diagnosis.CoordinationTickets++
 			continue
 		}
@@ -128,6 +132,10 @@ func DiagnoseEmpty(ctx context.Context, s *local.Store, cfg *ticket.Config) (Emp
 		diagnosis.TopBlockers = diagnosis.TopBlockers[:3]
 	}
 	return diagnosis, nil
+}
+
+func localIsLeaf(idx *local.RelationshipIndex, id string) bool {
+	return idx != nil && len(idx.Children[id]) == 0
 }
 
 func (d EmptyDiagnosis) Summary() string {

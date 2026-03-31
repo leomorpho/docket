@@ -193,6 +193,56 @@ func TestServiceNextSkipsCoordinationTickets(t *testing.T) {
 	}
 }
 
+func TestServiceNextSkipsNonLeafParents(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-211",
+			Seq:         211,
+			Title:       "Parent ticket",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Parent ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+		{
+			ID:          "TKT-212",
+			Seq:         212,
+			Title:       "Child ticket",
+			Parent:      "TKT-211",
+			State:       ticket.State("todo"),
+			Priority:    2,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Child ticket",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
+	} {
+		if err := store.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if !selection.Found || selection.TicketID != "TKT-212" {
+		t.Fatalf("unexpected selection: %#v", selection)
+	}
+}
+
 func TestServiceNextExplainsBlockedBacklogWhenNothingRunnable(t *testing.T) {
 	t.Parallel()
 

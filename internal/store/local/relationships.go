@@ -36,7 +36,7 @@ func (s *Store) BuildRelationshipIndex(ctx context.Context) (*RelationshipIndex,
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Double-check if it was built while we were waiting for the lock
 	if s.relIdx != nil {
 		return s.relIdx, nil
@@ -161,4 +161,26 @@ func (s *Store) ParentDepth(ctx context.Context, id string) (int, error) {
 		return 0, err
 	}
 	return idx.ComputeDepth(id), nil
+}
+
+func (s *Store) IsLeafTicket(ctx context.Context, id string) (bool, error) {
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return false, err
+	}
+	return isLeafTicket(idx, s.normalizeTicketLookupID(id)), nil
+}
+
+func isLeafTicket(idx *RelationshipIndex, id string) bool {
+	if idx == nil || id == "" {
+		return false
+	}
+	return len(idx.Children[id]) == 0
+}
+
+func isExecutionBlockerTicket(idx *RelationshipIndex, t *ticket.Ticket) bool {
+	if t == nil || ticket.IsCoordinationTicket(t) {
+		return false
+	}
+	return isLeafTicket(idx, t.ID)
 }
