@@ -16,12 +16,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/workable ./internal/agentrun/selector -count=1`.
   Note: Added red queue-truth regressions in `cmd/queue_truthfulness_test.go` plus zero-ready unit baselines in `internal/workable` and `internal/agentrun/selector`; the new `cmd` tests intentionally fail today because `doctor` skips queue truth without `topo:*` labels and `status` still omits runnable-queue state.
 
-- [ ] NS-02 — Remove the label-gated queue-invariant loophole so queue health is always evaluated against real runnable work: implement the production fix for the failing tests from `NS-01` by changing `cmd/queue_invariant.go` and related diagnostics so queue invariants are not silently skipped when labels are absent.  
+- [x] NS-02 — Remove the label-gated queue-invariant loophole so queue health is always evaluated against real runnable work: implement the production fix for the failing tests from `NS-01` by changing `cmd/queue_invariant.go` and related diagnostics so queue invariants are not silently skipped when labels are absent.  
   Code paths: `cmd/queue_invariant.go`, `cmd/doctor.go`, `internal/workable/diagnosis.go`.  
   TDD: use the failing tests from `NS-01`; add targeted unit tests if the invariant logic needs narrower coverage.  
   Tests must cover: no `topo:*` labels present; a repo with no runnable tickets; a repo with one runnable ticket; error messaging that explains why no ticket is runnable.  
   Acceptance criteria: queue invariants are checked against the actual backlog state, not against optional topology labels; `doctor` cannot pass when the runtime has no runnable tickets.  
   Verify with `go test ./cmd ./internal/workable -count=1`.
+  Note: Removed the `topo:*` enforcement gate from `cmd/queue_invariant.go`, so `doctor` and update-time invariant checks now always evaluate actual runnable work. Added `TestDoctorReportsQueueInvariantFailureWithoutTopologyLabels` to lock in the unlabeled-backlog case; targeted invariant tests and `go test ./internal/workable -count=1` pass, while the broader `cmd` queue-truth/status assertions remain for `NS-03`.
 
 - [ ] NS-03 — Align `status` and selector output with the same runnable-work definition used by `workable.go`: implement the remaining queue-truthfulness fixes so `cmd/status.go` and `internal/agentrun/selector/service.go` report the same runnable candidates as `internal/workable/workable.go`.  
   Code paths: `cmd/status.go`, `internal/agentrun/selector/service.go`, `internal/workable/workable.go`, `internal/workable/diagnosis.go`.  

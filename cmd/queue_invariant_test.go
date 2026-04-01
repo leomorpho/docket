@@ -78,3 +78,62 @@ func TestDoctorReportsQueueInvariantFailure(t *testing.T) {
 		t.Fatalf("expected queue_invariant FAIL, got %#v", payload.Checks)
 	}
 }
+
+func TestDoctorReportsQueueInvariantFailureWithoutTopologyLabels(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	s := local.New(h.repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, item := range []*ticket.Ticket{
+		{
+			ID:          "TKT-131",
+			Seq:         131,
+			Title:       "Active blocker without topo labels",
+			State:       ticket.State("running"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "agent:test",
+			Description: "Likely paths: cmd/queue_invariant.go and cmd/doctor.go. Verify commands: go test ./cmd -run QueueInvariant -count=1. Out of scope: topology-label policy. This fixture satisfies the runnable contract except for the unresolved blocker relationship.",
+			AC: []ticket.AcceptanceCriterion{
+				{Description: "doctor evaluates actual runnable work"},
+				{Description: "topology labels are not required for queue truth"},
+			},
+		},
+		{
+			ID:          "TKT-132",
+			Seq:         132,
+			Title:       "Blocked ready leaf without topo labels",
+			State:       ticket.State("ready"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-131"},
+			CreatedAt:   now.Add(time.Minute),
+			UpdatedAt:   now.Add(time.Minute),
+			CreatedBy:   "agent:test",
+			Description: "Likely paths: cmd/queue_invariant.go and internal/workable/diagnosis.go. Verify commands: go test ./cmd -run QueueInvariant -count=1. Out of scope: selector/status alignment. This fixture is intentionally groomed so only the blocker keeps it from being runnable.",
+			AC: []ticket.AcceptanceCriterion{
+				{Description: "doctor still fails when no runnable work exists"},
+				{Description: "diagnosis names the blocking ticket"},
+			},
+		},
+	} {
+		item := *item
+		if err := s.CreateTicket(context.Background(), &item); err != nil {
+			t.Fatalf("seed %s failed: %v", item.ID, err)
+		}
+	}
+
+	out, err := h.run("doctor", "--format", "json")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\n%s", err, out)
+	}
+	var payload doctorReport
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("unmarshal doctor payload failed: %v\n%s", err, out)
+	}
+	if statusByName(payload.Checks, "queue_invariant") != "FAIL" {
+		t.Fatalf("expected queue_invariant FAIL without topology labels, got %#v", payload.Checks)
+	}
+	if !strings.Contains(queueTruthDoctorDetail(payload.Checks), "TKT-131") {
+		t.Fatalf("expected queue invariant detail to explain the blocker, got %#v", payload.Checks)
+	}
+}

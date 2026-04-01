@@ -25,14 +25,7 @@ func (e *queueInvariantError) Error() string {
 }
 
 func enforceStartableLeafInvariant(ctx context.Context, s *local.Store, cfg *ticket.Config, allow bool) error {
-	if allow {
-		return nil
-	}
-	enforce, err := shouldEnforceQueueInvariant(ctx, s, cfg)
-	if err != nil {
-		return err
-	}
-	if !enforce {
+	if allow || s == nil || cfg == nil {
 		return nil
 	}
 	workable, err := workableTickets(ctx, s, cfg, store.Filter{})
@@ -67,14 +60,7 @@ func workableStartableLeafCount(ctx context.Context, s *local.Store, cfg *ticket
 }
 
 func enforceStartableLeafInvariantDelta(ctx context.Context, s *local.Store, cfg *ticket.Config, allow bool, beforeCount int) error {
-	if allow || beforeCount <= 0 {
-		return nil
-	}
-	enforce, err := shouldEnforceQueueInvariant(ctx, s, cfg)
-	if err != nil {
-		return err
-	}
-	if !enforce {
+	if allow || beforeCount <= 0 || s == nil || cfg == nil {
 		return nil
 	}
 	afterCount, err := workableStartableLeafCount(ctx, s, cfg)
@@ -89,45 +75,6 @@ func enforceStartableLeafInvariantDelta(ctx context.Context, s *local.Store, cfg
 		return fmt.Errorf("diagnosing empty workable queue: %w", err)
 	}
 	return &queueInvariantError{Diagnosis: diagnosis}
-}
-
-func shouldEnforceQueueInvariant(ctx context.Context, s *local.Store, cfg *ticket.Config) (bool, error) {
-	if s == nil || cfg == nil {
-		return false, nil
-	}
-	if err := s.SyncIndex(ctx); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
-			return false, nil
-		}
-		return false, fmt.Errorf("syncing ticket index: %w", err)
-	}
-	filter := store.Filter{States: make([]ticket.State, 0, len(cfg.OpenStates()))}
-	for _, st := range cfg.OpenStates() {
-		filter.States = append(filter.States, ticket.State(st))
-	}
-	tickets, err := s.ListTickets(ctx, filter)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
-			return false, nil
-		}
-		return false, fmt.Errorf("listing tickets for queue invariant policy: %w", err)
-	}
-	for _, t := range tickets {
-		full, err := s.GetTicket(ctx, t.ID)
-		if err != nil {
-			return false, fmt.Errorf("loading ticket %s for queue invariant policy: %w", t.ID, err)
-		}
-		if full == nil {
-			continue
-		}
-		for _, label := range full.Labels {
-			trimmed := strings.ToLower(strings.TrimSpace(label))
-			if trimmed == "topo:leaf" || trimmed == "topo:coordination" {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
 }
 
 func addAllowEmptyStartableLeafFlag(cmd *cobra.Command, value *bool) {
