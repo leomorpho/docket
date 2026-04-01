@@ -870,7 +870,7 @@
     },
     "TKT-172": {
       "title": "[Epic] Harden local trust, workflow governance, and agent execution",
-      "state": "draft",
+      "state": "archived",
       "priority": 1
     },
     "TKT-173": {
@@ -881,13 +881,13 @@
     },
     "TKT-174": {
       "title": "[Epic] Govern workflow policy and privileged state transitions",
-      "state": "draft",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-175": {
       "title": "[Epic] Add repo-native signed state and rollback recovery",
-      "state": "draft",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-172"
     },
@@ -900,8 +900,7 @@
     "TKT-177": {
       "title": "[Epic] Improve AI orchestration, context discipline, and docs",
       "state": "draft",
-      "priority": 2,
-      "parent": "TKT-172"
+      "priority": 2
     },
     "TKT-178": {
       "title": "Require DOCKET_HOME and define the Docket home contract",
@@ -1001,7 +1000,7 @@
     },
     "TKT-194": {
       "title": "Build repair and re-anchor tooling from Git history and valid signed events",
-      "state": "draft",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-175"
     },
@@ -1061,7 +1060,7 @@
     },
     "TKT-204": {
       "title": "Phase 2: Add human-approval and scoped-replay controls atop baseline learning engine",
-      "state": "draft",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-177"
     },
@@ -1079,7 +1078,7 @@
     },
     "TKT-207": {
       "title": "Spike: design a ticket-scope security audit hook and artifact",
-      "state": "draft",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-177"
     },
@@ -1693,8 +1692,7 @@
     "TKT-310": {
       "title": "[Epic] Make workflow graph config-defined with fixed semantic roles",
       "state": "draft",
-      "priority": 1,
-      "parent": "TKT-174"
+      "priority": 1
     },
     "TKT-311": {
       "title": "[Epic] Secure approval and activation of editable workflow policy",
@@ -1796,13 +1794,13 @@
       "title": "Add fallback behavior for repositories missing explicit workflow config",
       "state": "draft",
       "priority": 2,
-      "parent": "TKT-311"
+      "parent": "TKT-310"
     },
     "TKT-328": {
-      "title": "Document human-editable workflow config, semantic state roles, dependency semantics, and secure approval",
+      "title": "Document human-editable workflow config, semantic state roles, and dependency semantics",
       "state": "draft",
       "priority": 2,
-      "parent": "TKT-311"
+      "parent": "TKT-310"
     },
     "TKT-329": {
       "title": "Refactor ticket-apply and backlog-apply validation to accept config-defined workflow states",
@@ -1814,7 +1812,7 @@
       "title": "Write and refresh the default workflow config artifact from init, bootstrap, and install entrypoints",
       "state": "draft",
       "priority": 1,
-      "parent": "TKT-311"
+      "parent": "TKT-310"
     },
     "TKT-331": {
       "title": "Add an explicit operator command flow to approve and activate workflow policy changes",
@@ -1823,10 +1821,10 @@
       "parent": "TKT-311"
     },
     "TKT-332": {
-      "title": "Add doctor and status diagnostics for workflow config validity, approval status, active-policy mismatch, and enforcement mode",
+      "title": "Add doctor and status diagnostics for workflow config validity, resolved source, and mismatch reporting",
       "state": "draft",
       "priority": 1,
-      "parent": "TKT-311"
+      "parent": "TKT-310"
     },
     "TKT-333": {
       "title": "Invalidate caches and indexed readiness when workflow config changes",
@@ -1838,7 +1836,7 @@
       "title": "Add a compatibility matrix for old repos, default workflow config, and custom workflow config",
       "state": "draft",
       "priority": 2,
-      "parent": "TKT-311"
+      "parent": "TKT-310"
     },
     "TKT-335": {
       "title": "Update start, help, and user guidance surfaces to describe workflow roles instead of hardcoded state names",
