@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	selectorpkg "github.com/leomorpho/docket/internal/agentrun/selector"
@@ -15,78 +14,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var statusParallel bool
-
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	Aliases: []string{"st"},
-	Short:   "Show runtime ticket state and parallel work safety",
+	Short:   "Show runtime ticket state and runnable queue status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer func() {
-			statusParallel = false
-			if f := cmd.Flags().Lookup("parallel"); f != nil {
-				f.Changed = false
-			}
-		}()
 		securityMode, _ := securityEnforcementSurface(repo)
-		if !statusParallel {
-			fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
-			queueLine, err := buildQueueStatusLine(context.Background(), repo)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), queueLine)
-			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for active-work ticket matrix.")
-			fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
-			renderHookStatusSurface(cmd.OutOrStdout())
-			return nil
-		}
-
-		s := local.New(repo)
-		cfg, err := ticket.LoadConfig(repo)
+		fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
+		queueLine, err := buildQueueStatusLine(context.Background(), repo)
 		if err != nil {
 			return err
 		}
-		tickets, err := s.ListTickets(context.Background(), store.Filter{IncludeArchived: true})
-		if err != nil {
-			return err
-		}
-		activeTickets := tickets[:0]
-		for _, t := range tickets {
-			if cfg.StateHasRole(string(t.State), "active") {
-				activeTickets = append(activeTickets, t)
-			}
-		}
-		tickets = activeTickets
-		relations, _ := loadRelations(repo)
-		lockState, _ := refreshLockClaims(repo)
-		lockByID := map[string]map[string]bool{}
-		for _, l := range lockState.Locks {
-			files := map[string]bool{}
-			for _, f := range l.Files {
-				files[f] = true
-			}
-			lockByID[l.TicketID] = files
-		}
-
-		ids := make([]string, 0, len(tickets))
-		for _, t := range tickets {
-			ids = append(ids, t.ID)
-		}
-		sort.Strings(ids)
-		fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: parallel matrix (safe/risky):")
+		fmt.Fprintln(cmd.OutOrStdout(), queueLine)
 		fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
-		for i := 0; i < len(ids); i++ {
-			for j := i + 1; j < len(ids); j++ {
-				a, b := ids[i], ids[j]
-				reason := parallelReason(a, b, relations.Relations, lockByID)
-				if reason == "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "  safe:  %s <-> %s\n", a, b)
-				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), "  risky: %s <-> %s (%s)\n", a, b, reason)
-				}
-			}
-		}
+		renderHookStatusSurface(cmd.OutOrStdout())
 		return nil
 	},
 }
@@ -177,27 +118,6 @@ func recentBlockingHookEvents(repoRoot string, limit int) []string {
 	return out
 }
 
-func parallelReason(a, b string, relations []relationEntry, lockByID map[string]map[string]bool) string {
-	for _, r := range relations {
-		if r.Relation == "parallel-safe" && ((r.From == a && r.To == b) || (r.From == b && r.To == a)) {
-			return ""
-		}
-		if r.Relation == "blocks" && ((r.From == a && r.To == b) || (r.From == b && r.To == a)) {
-			return "relation blocks"
-		}
-		if r.Relation == "depends-on" && ((r.From == a && r.To == b) || (r.From == b && r.To == a)) {
-			return "relation depends-on"
-		}
-	}
-	for f := range lockByID[a] {
-		if lockByID[b][f] {
-			return "file overlap"
-		}
-	}
-	return ""
-}
-
 func init() {
-	statusCmd.Flags().BoolVar(&statusParallel, "parallel", false, "show parallel safety matrix")
 	rootCmd.AddCommand(statusCmd)
 }

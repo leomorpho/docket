@@ -17,6 +17,8 @@ import (
 	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type fakeRepoHarness struct {
@@ -130,7 +132,31 @@ func (h *fakeRepoHarness) run(args ...string) (string, error) {
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)
 	err := rootCmd.Execute()
+	resetHelpFlagState(rootCmd)
 	return out.String(), err
+}
+
+func resetHelpFlagState(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	resetHelpFlag(cmd.Flags())
+	resetHelpFlag(cmd.PersistentFlags())
+	for _, child := range cmd.Commands() {
+		resetHelpFlagState(child)
+	}
+}
+
+func resetHelpFlag(flagSet interface {
+	Lookup(string) *pflag.Flag
+}) {
+	if flagSet == nil {
+		return
+	}
+	if f := flagSet.Lookup("help"); f != nil {
+		_ = f.Value.Set("false")
+		f.Changed = false
+	}
 }
 
 func (h *fakeRepoHarness) writeFixture(name string, data []byte) string {

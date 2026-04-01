@@ -223,12 +223,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd -run 'Test(HelpJSON|Root)' -count=1`.
   Note: Added red north-star copy assertions in `cmd/root_test.go` and `cmd/helpjson_test.go` that require the primary CLI description to lead with backlog/grooming/validation/serial-autorun language and omit the old git-native/security/review/parallel framing. The scoped verify run now fails on those new assertions and still surfaces the pre-existing `TestHelpJSONStatusManifestOmitsParallelFlag` manifest regression.
 
-- [ ] NS-29 — Reposition CLI entry-point copy around executable backlog runtime semantics: implement the copy changes proven by `NS-28` so the CLI leads with grooming, validation, and serial autorun.  
+- [x] NS-29 — Reposition CLI entry-point copy around executable backlog runtime semantics: implement the copy changes proven by `NS-28` so the CLI leads with grooming, validation, and serial autorun.  
   Code paths: `cmd/root.go`, `cmd/helpjson.go`, any related discovery/help surfaces under `cmd/`.  
   TDD: implement against the red tests from `NS-28`; add smaller tests if discovery output also needs coverage.  
   Tests must cover: root help; help JSON; discovery output consistent with the new runtime story.  
   Acceptance criteria: a new CLI user immediately sees the north-star product instead of the historical tracker/security framing.  
   Verify with `go test ./cmd -count=1`.
+  Note: Updated the root CLI summary/long help to lead with executable backlog grooming, validation, runnable work, and serial autorun, which also fixes the `help-json` description because it reuses `rootCmd.Short`. Removed the retired `status --parallel` discovery surface so `status` help, runtime output, and the help manifest all present the same serial-first story, and hardened the fake repo harness to reset Cobra help-flag state between invocations so the status help tests do not leak into later runs. Scoped regressions pass with `go test ./cmd -run 'Test(HelpJSON|Root|StatusAndDoctor|StatusHelp|StatusRejectsParallelFlag|StatusReportsOnlyRunnableLeafFromSharedQueueDefinition|StatusIncludesQuietHookReadinessWhenHealthy|StatusIncludesHookPolicyAndRecentBlockingEventsWhenDegraded|StatusReportsEnabledSecurityEnforcement)' -count=1`; the broad `go test ./cmd -count=1` verify still fails in pre-existing unrelated lanes (`TestLinkRejectsParallelSafeRelation`, several `update`/queue-invariant tests, and the unimplemented `run-cleanup` command).
 
 - [ ] NS-30 — Rewrite top-level README and docs index copy so repository entry points match the runtime product story: update the top docs surfaces after the CLI wording is fixed.  
   Code paths: `README.md`, `docs/README.md`, and any top-level docs index sections linked from those files.  

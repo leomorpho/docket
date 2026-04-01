@@ -17,8 +17,10 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "docket",
-	Short: "git-native ticket system for AI-assisted development",
-	Long:  `A git-native ticket system built for human + LLM agentic workflows.`,
+	Short: "Executable backlog runtime for grooming, validation, runnable work, and serial autorun",
+	Long: `Executable backlog runtime for grooming, validation, runnable work, and serial autorun.
+
+Docket keeps a backlog groomed into runnable work, validates ticket readiness, and drives serial autorun through the next executable ticket.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		prepareVersionNotice(cmd)
 		repoRoot := ticketRepoRoot(repo)
