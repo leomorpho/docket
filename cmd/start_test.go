@@ -13,6 +13,7 @@ import (
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/claim"
+	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -1280,4 +1281,108 @@ func TestStartCmd_ResumesActiveTicketWhenNoWorkableStartable(t *testing.T) {
 	if !ok || ticketPayload["id"] != "TKT-399" {
 		t.Fatalf("expected resumed ticket TKT-399, got %#v", payload["ticket"])
 	}
+}
+
+func TestStartCmd_UsesRepoLocalRunManifestWhenDOCKETHOMEPointsElsewhere(t *testing.T) {
+	tmpRepo := t.TempDir()
+	tmpHome := filepath.Join(t.TempDir(), "docket-home")
+	t.Setenv("DOCKET_HOME", tmpHome)
+	docketHome = ""
+	repo = tmpRepo
+	format = "json"
+
+	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	s := local.New(tmpRepo)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-401",
+		Seq:         401,
+		Title:       "Active managed ticket",
+		State:       ticket.State("running"),
+		Priority:    1,
+		CreatedAt:   now,
+		StartedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:test",
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
+	}); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	worktreePath := filepath.Join(tmpRepo, "wt", "TKT-401")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("mkdir worktree failed: %v", err)
+	}
+	repoLocalNamespace := runstate.New(defaultRuntimeNamespaceRoot(tmpRepo))
+	if err := repoLocalNamespace.RecordRunStart(tmpRepo, "TKT-401", "agent:test", worktreePath, "docket/TKT-401", "workflow-401"); err != nil {
+		t.Fatalf("RecordRunStart failed: %v", err)
+	}
+
+	t.Setenv("DOCKET_HOME", filepath.Join(t.TempDir(), "external-docket-home"))
+	docketHome = ""
+
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetErr(b)
+	rootCmd.SetArgs([]string{"start", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("start failed: %v\n%s", err, b.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(b.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload failed: %v\n%s", err, b.String())
+	}
+	if payload["resume_mode"] != "active" {
+		t.Fatalf("expected resume_mode=active, got %#v", payload["resume_mode"])
+	}
+	if got := payload["managed_run_worktree"]; got != worktreePath {
+		t.Fatalf("expected start to use repo-local managed-run worktree %q even when DOCKET_HOME differs, got %#v", worktreePath, got)
+	}
+}
+
+func TestStartLifecycleUsesRuntimeNamingForRunManifestFailures(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	h.seedTicket("TKT-917", 917, ticket.State("ready"), updateRunnableAC())
+
+	repoID, err := runstate.GetOrCreateRepoID(h.repo)
+	if err != nil {
+		t.Fatalf("GetOrCreateRepoID failed: %v", err)
+	}
+	blockedNamespaceRoot := t.TempDir()
+	repoNamespaceDir := filepath.Join(blockedNamespaceRoot, "repos", repoID)
+	if err := os.MkdirAll(repoNamespaceDir, 0o755); err != nil {
+		t.Fatalf("mkdir blocked namespace dir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoNamespaceDir, "runs"), []byte("not a directory\n"), 0o644); err != nil {
+		t.Fatalf("write blocked runs path failed: %v", err)
+	}
+	t.Setenv("DOCKET_HOME", blockedNamespaceRoot)
+	docketHome = ""
+
+	out, err := h.run("start")
+	if err == nil {
+		t.Fatalf("expected start to fail when runtime namespace root is invalid, output:\n%s", out)
+	}
+
+	events, loadErr := lifecycle.Load(h.repo)
+	if loadErr != nil {
+		t.Fatalf("load lifecycle events failed: %v", loadErr)
+	}
+	for _, ev := range events {
+		if ev.Type != lifecycle.EventToolFailure {
+			continue
+		}
+		tool, _ := ev.Payload["tool"].(string)
+		if strings.HasPrefix(tool, "security.") {
+			t.Fatalf("expected runtime-facing lifecycle tool names without legacy security prefix, got %q", tool)
+		}
+		if !strings.HasPrefix(tool, "runtime.") {
+			t.Fatalf("expected runtime-prefixed lifecycle tool name for manifest persistence failure, got %q", tool)
+		}
+		return
+	}
+	t.Fatalf("expected lifecycle tool.failure event after start failure, output:\n%s", out)
 }

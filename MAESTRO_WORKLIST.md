@@ -120,12 +120,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go run . list --state ready --format context`, `go run . doctor`, and `go run . status`.
   Note: Promoted six existing ready-contract leaf tickets into the queue: `TKT-296`, `TKT-298`, `TKT-299`, `TKT-301`, `TKT-303`, and `TKT-304`. `go run . list --state ready --format context` now shows all six, `go run . doctor` reports `PASS queue_invariant`, and `go run . status` reports `TKT-304` as the next runnable ticket with three runnable leaves available.
 
-- [ ] NS-15 — Add failing tests that capture the remaining repo-local runtime namespace drift: write red tests proving that managed-run state lookup still varies with `DOCKET_HOME` or still emits legacy `security.*` names in runtime-facing output.  
+- [x] NS-15 — Add failing tests that capture the remaining repo-local runtime namespace drift: write red tests proving that managed-run state lookup still varies with `DOCKET_HOME` or still emits legacy `security.*` names in runtime-facing output.  
   Code paths: `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, `internal/runstate/`.  
   TDD: tests only in this task.  
   Tests must cover: repo-local runtime state with and without `DOCKET_HOME`; user-facing start/status output; runtime event naming or routing labels that still reference security concepts.  
   Acceptance criteria: the remaining namespace-language debt is captured in executable tests before cleanup.  
   Verify with `go test ./cmd ./internal/runstate -count=1`.
+  Note: Added red namespace-language regressions in `cmd/runtime_namespace_test.go`, `cmd/start_test.go`, and `cmd/status_doctor_split_test.go`. The targeted `go test ./cmd -run 'Test(RuntimeNamespaceRootPrefersRepoLocalNamespace|StartCmd_UsesRepoLocalRunManifestWhenDOCKETHOMEPointsElsewhere|StartLifecycleUsesRuntimeNamingForRunManifestFailures|StatusAndDoctorOutputScopesStayDistinct)' -count=1` run now fails for the intended reasons: `runtimeNamespaceRoot` still honors `DOCKET_HOME`, `start` still loses repo-local manifests when `DOCKET_HOME` points elsewhere, lifecycle tool failures still emit `security.record_run_start`, and `status` still prints `Security enforcement:`. `go test ./internal/runstate -count=1` passes with no test files; the exact combined verify command still hangs in the pre-existing long-running `cmd` lane before returning.
 
 - [ ] NS-16 — Remove `DOCKET_HOME` fallback and security-naming residue from the normal runtime path: implement the cleanup proven by `NS-15` so runtime state is fully repo-local and normal user-facing output stops leaking the removed security model.  
   Code paths: `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, `internal/runstate/`.  

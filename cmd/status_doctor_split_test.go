@@ -39,6 +39,9 @@ func TestStatusAndDoctorOutputScopesStayDistinct(t *testing.T) {
 	if strings.Contains(strings.ToLower(statusOut), "parallel") {
 		t.Fatalf("status output should stay serial-first and omit parallel guidance, got:\n%s", statusOut)
 	}
+	if strings.Contains(statusOut, "Security enforcement:") {
+		t.Fatalf("status output should stay on runtime state and omit legacy security framing, got:\n%s", statusOut)
+	}
 
 	doctorOut, err := h.run("doctor")
 	if err != nil {
