@@ -572,7 +572,7 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-440", "--state", "building"})
+	rootCmd.SetArgs([]string{"update", "TKT-440", "--state", "building", "--allow-empty-startable-leaf"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected queued -> building transition to succeed, got: %v", err)
 	}

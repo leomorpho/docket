@@ -93,7 +93,7 @@ type Entry struct {
 
 var registry = map[Key]Entry{
 	RepoAdapter:             {Key: RepoAdapter, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/adapter", Policy: PolicyTracked, Migration: MigrationStable},
-	RepoCheckpoints:         {Key: RepoCheckpoints, Category: CategoryRuntime, Root: RootRepo, Kind: KindDir, RelPath: ".docket/checkpoints", Policy: PolicyLocalOnly, Migration: MigrationStable, IgnorePattern: ".docket/checkpoints/"},
+	RepoCheckpoints:         {Key: RepoCheckpoints, Category: CategoryRuntime, Root: RootRepo, Kind: KindDir, RelPath: ".docket/checkpoints", CanonicalRelPath: ".docket/local/checkpoints", Policy: PolicyLocalOnly, Migration: MigrationStable, IgnorePattern: ".docket/checkpoints/"},
 	RepoAgentRunsDir:        {Key: RepoAgentRunsDir, Category: CategoryRuntime, Root: RootRepo, Kind: KindDir, RelPath: ".docket/runtime/agent-runs", CanonicalRelPath: ".docket/local/runtime/agent-runs", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/runtime/"},
 	RepoConfigJSON:          {Key: RepoConfigJSON, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/config.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoConfigYAML:          {Key: RepoConfigYAML, Category: CategoryConfig, Root: RootRepo, Kind: KindFile, RelPath: ".docket/config.yaml", Policy: PolicyTracked, Migration: MigrationStable},
