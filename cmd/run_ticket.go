@@ -344,6 +344,7 @@ var runStatusCmd = &cobra.Command{
 			}
 			return nil
 		}
+		showBrief := briefOK && !status.Active
 		if format == "json" {
 			payload := map[string]any{
 				"ticket_id":               status.TicketID,
@@ -373,7 +374,7 @@ var runStatusCmd = &cobra.Command{
 				"warning":                 status.Warning,
 				"recoverable":             isRecoverableManagedRunStatus(status),
 			}
-			if briefOK {
+			if showBrief {
 				payload["brief"] = brief
 			}
 			printJSON(cmd, payload)
@@ -411,7 +412,7 @@ var runStatusCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "\nResume with: docket run-resume %s", status.TicketID)
 		}
 		fmt.Fprintln(cmd.OutOrStdout())
-		if briefOK {
+		if showBrief {
 			renderRunBriefHuman(cmd, brief)
 		}
 		return nil

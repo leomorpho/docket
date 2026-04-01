@@ -248,6 +248,7 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Tests must cover: ticket selection order; transition to `validated`; durable run artifacts; honest queue/status reporting under real usage; no hidden security/review/parallel assumptions resurfacing.  
   Acceptance criteria: the first real serial run is completed with all discovered defects converted into regressions and fixed.  
   Verify with `go test ./... -count=1 -timeout 120s`, `go run . doctor`, `go run . status`, and a documented serial `go run . start` or equivalent autorun session.
+  Note: Dogfooded a real managed run on `TKT-304`, reproduced a stale-status defect where `run-status` kept rendering the previous failed durable brief during a fresh active rerun, and fixed it with new human/JSON regressions in `cmd/run_ticket_test.go`. `NS-31` stays open because the broad verify lane is still red (`go test ./... -count=1 -timeout 120s` fails in pre-existing `cmd/update*` queue-invariant cases plus `internal/agentrun/monitor`, and `go run . doctor` still reports missing `claude-code` bootstrap artifacts).
 
 - [ ] NS-32 — Repeat the dogfood cycle until at least five groomed leaf tickets have been processed cleanly enough to trust the serial runtime: keep running, fixing, and re-verifying until the repo proves the north-star workflow on its own backlog rather than just on isolated tests.  
   Code paths: the live backlog, runtime surfaces, and any package that fails under real use; each new defect still requires a regression test before the fix.  

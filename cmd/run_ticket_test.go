@@ -450,6 +450,114 @@ func TestRunStatusCmdFallsBackToPersistedRunBrief(t *testing.T) {
 	}
 }
 
+func TestRunStatusCmdSuppressesPersistedBriefWhileRunIsActive(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-378A", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-378A", SessionID: "session-378A"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteBrief(runruntime.RunBrief{
+		TicketID:         "TKT-378A",
+		Outcome:          "failed",
+		Summary:          "Managed run failed validation before closeout.",
+		ValidationErrors: []string{"feature.txt missing"},
+		ResumeNext:       "Inspect the validation failures, repair the worktree, and rerun the ticket.",
+		UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:            "TKT-378A",
+		SessionID:           "session-378A",
+		Active:              true,
+		LastVisibleText:     "STATUS ticket=TKT-378A phase=analysis",
+		LastEventAt:         time.Now().UTC().Format(time.RFC3339Nano),
+		SessionMessageCount: 3,
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-378A"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TKT-378A: active=true hung=false",
+		"Last visible: STATUS ticket=TKT-378A phase=analysis",
+		"Session messages: 3",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{
+		"Last outcome:",
+		"Summary: Managed run failed validation before closeout.",
+		"Validation errors:",
+		"Resume next:",
+	} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("did not expect %q in active run output, got:\n%s", unwanted, got)
+		}
+	}
+}
+
+func TestRunStatusCmdOmitsPersistedBriefFromJSONWhileRunIsActive(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-378AJ", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-378AJ", SessionID: "session-378AJ"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteBrief(runruntime.RunBrief{
+		TicketID:   "TKT-378AJ",
+		Outcome:    "failed",
+		Summary:    "Managed run failed validation before closeout.",
+		SessionID:  "session-378AJ",
+		ResumeNext: "Inspect the validation failures, repair the worktree, and rerun the ticket.",
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:        "TKT-378AJ",
+		SessionID:       "session-378AJ",
+		Active:          true,
+		LastVisibleText: "PLAN ticket=TKT-378AJ steps=4",
+		LastEventAt:     time.Now().UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "json"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-378AJ", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal json: %v\n%s", err, out.String())
+	}
+	if payload["active"] != true {
+		t.Fatalf("expected active=true, got %#v", payload)
+	}
+	if _, ok := payload["brief"]; ok {
+		t.Fatalf("did not expect stale brief in active status payload, got %#v", payload)
+	}
+}
+
 func TestRunStatusCmdShowsRecoverableFailureMetadataFromDurableBriefAfterCleanup(t *testing.T) {
 	prevRepo := repo
 	prevFormat := format
