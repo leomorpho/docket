@@ -19,6 +19,10 @@ var acAddCmd = &cobra.Command{
 	Short: "Add an acceptance criterion to a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			resetACAddGlobals()
+			resetACAddFlagChanges(cmd)
+		}()
 		if strings.TrimSpace(acAddDesc) == "" {
 			return fmt.Errorf("--desc is required")
 		}
@@ -49,6 +53,19 @@ var acAddCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func resetACAddGlobals() {
+	acAddDesc = ""
+	acAddRun = ""
+}
+
+func resetACAddFlagChanges(cmd *cobra.Command) {
+	for _, name := range []string{"desc", "run"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 func init() {

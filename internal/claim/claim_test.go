@@ -127,7 +127,11 @@ func TestGetClaimsDir(t *testing.T) {
 	c := exec.Command("git", "-C", repoRoot, "init")
 	_ = c.Run()
 
-	expected := filepath.Join(repoRoot, ".git", "docket", "claims")
+	expectedRoot := repoRoot
+	if resolved, err := filepath.EvalSymlinks(repoRoot); err == nil {
+		expectedRoot = resolved
+	}
+	expected := filepath.Join(expectedRoot, ".git", "docket", "claims")
 	actual, err := GetClaimsDir(repoRoot)
 	if err != nil {
 		t.Fatalf("GetClaimsDir failed: %v", err)

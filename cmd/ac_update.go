@@ -21,6 +21,10 @@ var acUpdateCmd = &cobra.Command{
 	Short: "Update an acceptance criterion",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			resetACUpdateGlobals()
+			resetACUpdateFlagChanges(cmd)
+		}()
 		id := args[0]
 		if strings.TrimSpace(acUpdateStep) == "" {
 			return fmt.Errorf("--step is required")
@@ -55,6 +59,20 @@ var acUpdateCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Updated AC %d on %s.\n", idx+1, id)
 		return nil
 	},
+}
+
+func resetACUpdateGlobals() {
+	acUpdateStep = ""
+	acUpdateDesc = ""
+	acUpdateRun = ""
+}
+
+func resetACUpdateFlagChanges(cmd *cobra.Command) {
+	for _, name := range []string{"step", "desc", "run"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 func init() {

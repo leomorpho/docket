@@ -36,12 +36,23 @@ func seedInvariantTicket(t *testing.T, repoRoot, id string, seq int, state ticke
 	}
 }
 
-func TestUpdateRejectsEmptyStartableLeafInvariant(t *testing.T) {
+func TestUpdateAllowsConsumingLastStartableLeafIntoActiveState(t *testing.T) {
 	h := newFakeRepoHarness(t)
 	seedInvariantTicket(t, h.repo, "TKT-101", 101, ticket.State("ready"), nil)
 	seedInvariantTicket(t, h.repo, "TKT-102", 102, ticket.State("ready"), []string{"TKT-101"})
 
 	out, err := h.run("update", "TKT-101", "--state", "running")
+	if err != nil {
+		t.Fatalf("expected start transition to consume the last ready leaf without rejection, err=%v output=%s", err, out)
+	}
+}
+
+func TestUpdateRejectsEmptyStartableLeafInvariantOnNonActiveMutation(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	seedInvariantTicket(t, h.repo, "TKT-111", 111, ticket.State("ready"), nil)
+	seedInvariantTicket(t, h.repo, "TKT-112", 112, ticket.State("draft"), nil)
+
+	out, err := h.run("update", "TKT-111", "--blocked-by", "TKT-112")
 	if err == nil {
 		t.Fatalf("expected invariant rejection, got success output:\n%s", out)
 	}
@@ -52,10 +63,10 @@ func TestUpdateRejectsEmptyStartableLeafInvariant(t *testing.T) {
 
 func TestUpdateAllowsEmptyStartableLeafWithOverride(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	seedInvariantTicket(t, h.repo, "TKT-111", 111, ticket.State("ready"), nil)
-	seedInvariantTicket(t, h.repo, "TKT-112", 112, ticket.State("ready"), []string{"TKT-111"})
+	seedInvariantTicket(t, h.repo, "TKT-121", 121, ticket.State("ready"), nil)
+	seedInvariantTicket(t, h.repo, "TKT-122", 122, ticket.State("draft"), nil)
 
-	out, err := h.run("update", "TKT-111", "--state", "running", "--allow-empty-startable-leaf")
+	out, err := h.run("update", "TKT-121", "--blocked-by", "TKT-122", "--allow-empty-startable-leaf")
 	if err != nil {
 		t.Fatalf("expected override success, err=%v output=%s", err, out)
 	}
@@ -63,8 +74,8 @@ func TestUpdateAllowsEmptyStartableLeafWithOverride(t *testing.T) {
 
 func TestDoctorReportsQueueInvariantFailure(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	seedInvariantTicket(t, h.repo, "TKT-121", 121, ticket.State("running"), nil)
-	seedInvariantTicket(t, h.repo, "TKT-122", 122, ticket.State("ready"), []string{"TKT-121"})
+	seedInvariantTicket(t, h.repo, "TKT-131", 131, ticket.State("running"), nil)
+	seedInvariantTicket(t, h.repo, "TKT-132", 132, ticket.State("ready"), []string{"TKT-131"})
 
 	out, err := h.run("doctor", "--format", "json")
 	if err != nil {
@@ -85,8 +96,8 @@ func TestDoctorReportsQueueInvariantFailureWithoutTopologyLabels(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, item := range []*ticket.Ticket{
 		{
-			ID:          "TKT-131",
-			Seq:         131,
+			ID:          "TKT-141",
+			Seq:         141,
 			Title:       "Active blocker without topo labels",
 			State:       ticket.State("running"),
 			Priority:    1,
@@ -100,12 +111,12 @@ func TestDoctorReportsQueueInvariantFailureWithoutTopologyLabels(t *testing.T) {
 			},
 		},
 		{
-			ID:          "TKT-132",
-			Seq:         132,
+			ID:          "TKT-142",
+			Seq:         142,
 			Title:       "Blocked ready leaf without topo labels",
 			State:       ticket.State("ready"),
 			Priority:    2,
-			BlockedBy:   []string{"TKT-131"},
+			BlockedBy:   []string{"TKT-141"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "agent:test",
@@ -133,7 +144,7 @@ func TestDoctorReportsQueueInvariantFailureWithoutTopologyLabels(t *testing.T) {
 	if statusByName(payload.Checks, "queue_invariant") != "FAIL" {
 		t.Fatalf("expected queue_invariant FAIL without topology labels, got %#v", payload.Checks)
 	}
-	if !strings.Contains(queueTruthDoctorDetail(payload.Checks), "TKT-131") {
+	if !strings.Contains(queueTruthDoctorDetail(payload.Checks), "TKT-141") {
 		t.Fatalf("expected queue invariant detail to explain the blocker, got %#v", payload.Checks)
 	}
 }

@@ -63,3 +63,51 @@ func TestGitRepoUtils(t *testing.T) {
 		t.Errorf("expected 'hello', got %q", content)
 	}
 }
+
+func TestGetGitCommonDirAndSharedRepoRootUseDotGitMetadataWithoutGitBinary(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", tmpDir}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("root\n"), 0o644); err != nil {
+		t.Fatalf("write seed failed: %v", err)
+	}
+	runGit("add", "README.md")
+	runGit("commit", "-m", "seed")
+
+	worktreePath := filepath.Join(tmpDir, "worktrees", "TKT-001")
+	runGit("worktree", "add", "-b", "docket/TKT-001", worktreePath)
+	wantRoot := normalizeRepoPath(tmpDir)
+
+	t.Setenv("PATH", filepath.Join(tmpDir, "missing-bin"))
+
+	commonMain, err := GetGitCommonDir(tmpDir)
+	if err != nil {
+		t.Fatalf("GetGitCommonDir(main) failed without git binary: %v", err)
+	}
+	if got, want := SharedRepoRoot(tmpDir), wantRoot; got != want {
+		t.Fatalf("SharedRepoRoot(main) = %q, want %q", got, want)
+	}
+
+	commonWorktree, err := GetGitCommonDir(worktreePath)
+	if err != nil {
+		t.Fatalf("GetGitCommonDir(worktree) failed without git binary: %v", err)
+	}
+	if got, want := SharedRepoRoot(worktreePath), wantRoot; got != want {
+		t.Fatalf("SharedRepoRoot(worktree) = %q, want %q", got, want)
+	}
+	if commonMain != commonWorktree {
+		t.Fatalf("expected shared common dir for main and worktree, got %q vs %q", commonMain, commonWorktree)
+	}
+	if !strings.HasSuffix(commonMain, ".git") {
+		t.Fatalf("expected common dir to end in .git, got %q", commonMain)
+	}
+}

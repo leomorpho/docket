@@ -173,6 +173,70 @@ func TestACRunCommandAndDryRun(t *testing.T) {
 	}
 }
 
+func TestACAddDoesNotLeakRunFlagBetweenInvocations(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo = tmpDir
+	format = "human"
+
+	s := local.New(tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-010",
+			Seq:         10,
+			Title:       "AC run source",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "me",
+			Description: "desc",
+		},
+		{
+			ID:          "TKT-011",
+			Seq:         11,
+			Title:       "AC run target",
+			State:       ticket.State("todo"),
+			Priority:    1,
+			CreatedAt:   now.Add(time.Second),
+			UpdatedAt:   now.Add(time.Second),
+			CreatedBy:   "me",
+			Description: "desc",
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("create ticket %s: %v", tk.ID, err)
+		}
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "add", "TKT-010", "--desc", "Runnable AC", "--run", "echo seeded"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("seed ac add failed: %v", err)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "add", "TKT-011", "--desc", "Manual AC"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("manual ac add failed: %v", err)
+	}
+
+	tk, err := s.GetTicket(context.Background(), "TKT-011")
+	if err != nil {
+		t.Fatalf("get ticket: %v", err)
+	}
+	if got := strings.TrimSpace(tk.AC[0].Run); got != "" {
+		t.Fatalf("expected blank run command on second add, got %q", got)
+	}
+
+	rootCmd.SetOut(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"ac", "check", "TKT-011"})
+	err = rootCmd.Execute()
+	if !errors.Is(err, errACIncomplete) {
+		t.Fatalf("expected manual AC to remain incomplete, got: %v", err)
+	}
+}
+
 func TestACUpdateAndRemove(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir

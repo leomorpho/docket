@@ -22,6 +22,10 @@ var acCompleteCmd = &cobra.Command{
 	Short: "Mark an acceptance criterion as complete",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			resetACCompleteGlobals()
+			resetACCompleteFlagChanges(cmd)
+		}()
 		id := args[0]
 		if strings.TrimSpace(acCompleteStep) == "" {
 			return fmt.Errorf("--step is required")
@@ -59,6 +63,19 @@ var acCompleteCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func resetACCompleteGlobals() {
+	acCompleteStep = ""
+	acCompleteEvidence = ""
+}
+
+func resetACCompleteFlagChanges(cmd *cobra.Command) {
+	for _, name := range []string{"step", "evidence"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 func resolveACStep(t *ticket.Ticket, step string) (int, error) {

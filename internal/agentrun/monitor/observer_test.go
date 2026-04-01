@@ -405,7 +405,8 @@ func TestObserverTreatsHardStoppedRunAsOperatorStop(t *testing.T) {
 		t.Fatalf("Observe() error = %v", err)
 	}
 	if obs.Result.Reason != "operator requested hard stop" {
-		t.Fatalf("unexpected hard-stop result: %#v", obs)
+		status, ok, loadErr := store.LoadStatus("TKT-500")
+		t.Fatalf("unexpected hard-stop result: %#v (status ok=%v err=%v status=%#v)", obs, ok, loadErr, status)
 	}
 	status, ok, err := store.LoadStatus("TKT-500")
 	if err != nil || !ok {
@@ -413,6 +414,45 @@ func TestObserverTreatsHardStoppedRunAsOperatorStop(t *testing.T) {
 	}
 	if status.LastResultStatus != "stopped" {
 		t.Fatalf("expected stopped runtime status, got %#v", status)
+	}
+}
+
+func TestObserverTreatsDelayedHardStoppedRunAsOperatorStop(t *testing.T) {
+	store := runruntime.New(t.TempDir())
+	record := agentrun.RunRecord{TicketID: "TKT-501", Role: agentrun.RoleImplementer, SessionID: "session-stop-delayed"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	handle := &fakeHandle{
+		stdout: bytes.NewReader(nil),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		handle.waitCh <- errors.New("signal: killed")
+		time.Sleep(400 * time.Millisecond)
+		if err := store.WriteStatus(runruntime.StatusSnapshot{
+			TicketID:         "TKT-501",
+			SessionID:        "session-stop-delayed",
+			Active:           false,
+			LastResultStatus: "stopped",
+			LastVisibleText:  "Operator requested hard stop",
+		}); err != nil {
+			panic(err)
+		}
+	}()
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Reason != "operator requested hard stop" {
+		t.Fatalf("unexpected delayed hard-stop result: %#v", obs)
 	}
 }
 

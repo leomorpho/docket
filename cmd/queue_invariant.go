@@ -77,6 +77,26 @@ func enforceStartableLeafInvariantDelta(ctx context.Context, s *local.Store, cfg
 	return &queueInvariantError{Diagnosis: diagnosis}
 }
 
+func allowsEmptyStartableLeafAfterStateTransition(cfg *ticket.Config, from, to ticket.State) bool {
+	if cfg == nil {
+		return false
+	}
+	fromCfg, ok := cfg.States[string(from)]
+	if !ok || !fromCfg.Startable {
+		return false
+	}
+	toCfg, ok := cfg.States[string(to)]
+	if !ok || toCfg.Startable {
+		return false
+	}
+	for _, role := range []string{"active", "review", "completed"} {
+		if cfg.StateHasRole(string(to), role) {
+			return true
+		}
+	}
+	return false
+}
+
 func addAllowEmptyStartableLeafFlag(cmd *cobra.Command, value *bool) {
 	cmd.Flags().BoolVar(value, "allow-empty-startable-leaf", false, "allow updates that temporarily leave zero workable startable leaf tickets (emergency override)")
 }

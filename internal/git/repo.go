@@ -2,14 +2,82 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
+
+var gitCommonDirCache sync.Map
+
+func normalizeRepoPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
+func resolveCommonDirFromDotGit(repoRoot string) (string, bool, error) {
+	repoRoot = normalizeRepoPath(repoRoot)
+	if repoRoot == "" {
+		return "", false, nil
+	}
+	gitPath := filepath.Join(repoRoot, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return "", false, nil
+	}
+	if info.IsDir() {
+		return normalizeRepoPath(gitPath), true, nil
+	}
+
+	raw, err := os.ReadFile(gitPath)
+	if err != nil {
+		return "", false, err
+	}
+	line := strings.TrimSpace(string(raw))
+	if !strings.HasPrefix(strings.ToLower(line), "gitdir:") {
+		return "", false, nil
+	}
+	gitDir := strings.TrimSpace(line[len("gitdir:"):])
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repoRoot, gitDir)
+	}
+	gitDir = normalizeRepoPath(gitDir)
+	commonDir := gitDir
+	if rawCommon, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
+		commonDir = strings.TrimSpace(string(rawCommon))
+		if !filepath.IsAbs(commonDir) {
+			commonDir = filepath.Join(gitDir, commonDir)
+		}
+	} else if strings.Contains(filepath.ToSlash(gitDir), "/.git/worktrees/") {
+		commonDir = filepath.Dir(filepath.Dir(gitDir))
+	}
+	return normalizeRepoPath(commonDir), true, nil
+}
 
 // GetGitCommonDir returns the absolute path to the shared .git common directory.
 // In a normal repo, this is the same as the .git directory.
 // In a worktree, this points to the main repository's .git directory.
 func GetGitCommonDir(repoRoot string) (string, error) {
+	repoRoot = normalizeRepoPath(repoRoot)
+	if cached, ok := gitCommonDirCache.Load(repoRoot); ok {
+		return cached.(string), nil
+	}
+	if commonDir, ok, err := resolveCommonDirFromDotGit(repoRoot); err != nil {
+		return "", fmt.Errorf("reading .git metadata: %w", err)
+	} else if ok {
+		gitCommonDirCache.Store(repoRoot, commonDir)
+		return commonDir, nil
+	}
+
 	out, err := runGit(repoRoot, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", fmt.Errorf("getting git common dir: %w", err)
@@ -17,10 +85,14 @@ func GetGitCommonDir(repoRoot string) (string, error) {
 
 	rel := strings.TrimSpace(out)
 	if filepath.IsAbs(rel) {
+		rel = normalizeRepoPath(rel)
+		gitCommonDirCache.Store(repoRoot, rel)
 		return rel, nil
 	}
 
-	return filepath.Abs(filepath.Join(repoRoot, rel))
+	commonDir := normalizeRepoPath(filepath.Join(repoRoot, rel))
+	gitCommonDirCache.Store(repoRoot, commonDir)
+	return commonDir, nil
 }
 
 // GetRepoRoot returns the absolute path to the root of the git repository.
@@ -36,24 +108,12 @@ func GetRepoRoot(repoRoot string) (string, error) {
 // metadata. In a normal checkout this is the repo root; in a git worktree it is
 // the main checkout that owns the shared git common dir.
 func SharedRepoRoot(repoRoot string) string {
-	repoRoot = strings.TrimSpace(repoRoot)
+	repoRoot = normalizeRepoPath(repoRoot)
 	if repoRoot == "" {
 		return ""
 	}
 	if commonDir, err := GetGitCommonDir(repoRoot); err == nil && strings.TrimSpace(commonDir) != "" {
-		if absRoot, absErr := filepath.Abs(filepath.Dir(commonDir)); absErr == nil {
-			if resolved, resolveErr := filepath.EvalSymlinks(absRoot); resolveErr == nil {
-				return resolved
-			}
-			return absRoot
-		}
-		return filepath.Dir(commonDir)
-	}
-	if absRoot, err := filepath.Abs(repoRoot); err == nil {
-		if resolved, resolveErr := filepath.EvalSymlinks(absRoot); resolveErr == nil {
-			return resolved
-		}
-		return absRoot
+		return normalizeRepoPath(filepath.Dir(commonDir))
 	}
 	return repoRoot
 }

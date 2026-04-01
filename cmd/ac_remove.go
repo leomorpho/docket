@@ -20,6 +20,10 @@ var acRemoveCmd = &cobra.Command{
 	Short: "Remove an acceptance criterion",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			resetACRemoveGlobals()
+			resetACRemoveFlagChanges(cmd)
+		}()
 		id := args[0]
 		if strings.TrimSpace(acRemoveStep) == "" {
 			return fmt.Errorf("--step is required")
@@ -49,6 +53,19 @@ var acRemoveCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Removed AC %d on %s.\n", idx+1, id)
 		return nil
 	},
+}
+
+func resetACRemoveGlobals() {
+	acRemoveStep = ""
+	acRemoveYes = false
+}
+
+func resetACRemoveFlagChanges(cmd *cobra.Command) {
+	for _, name := range []string{"step", "yes"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 }
 
 func init() {

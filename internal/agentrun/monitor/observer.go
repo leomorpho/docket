@@ -44,7 +44,11 @@ type lineEvent struct {
 	done   bool
 }
 
-const commandExecutionTimeoutMultiplier = 20
+const (
+	commandExecutionTimeoutMultiplier = 20
+	operatorStopRetryInterval         = 10 * time.Millisecond
+	operatorStopRetryWindow           = 500 * time.Millisecond
+)
 
 func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput) (agentrun.Observation, error) {
 	if input.Handle == nil {
@@ -260,8 +264,12 @@ func (o *Observer) finalizeObservation(input agentrun.ObservationInput, status r
 			Result: failureResult(input.Record, malformed),
 		}, nil
 	}
-	if stopped := o.operatorStoppedStatus(input.Record.TicketID); stopped {
+	if stopped := o.operatorStoppedStatus(input.Record.TicketID, waitErr); stopped || (o.runtime != nil && waitErrIndicatesHardStop(waitErr)) {
 		status.LastResultStatus = "stopped"
+		status.Hung = false
+		if strings.TrimSpace(status.LastVisibleText) == "" {
+			status.LastVisibleText = "Operator requested hard stop"
+		}
 		return agentrun.Observation{
 			Result: failureResult(input.Record, "operator requested hard stop"),
 		}, nil
@@ -560,20 +568,37 @@ func reviewTextFromLine(line string) string {
 	return ""
 }
 
-func (o *Observer) operatorStoppedStatus(ticketID string) bool {
+func (o *Observer) operatorStoppedStatus(ticketID string, waitErr error) bool {
 	if o.runtime == nil {
 		return false
 	}
-	for attempt := 0; attempt < 10; attempt++ {
+	deadline := time.Now()
+	if waitErr != nil {
+		deadline = deadline.Add(operatorStopRetryWindow)
+	}
+	for {
 		status, ok, err := o.runtime.LoadStatus(ticketID)
 		if err == nil && ok && !status.Active && status.LastResultStatus == "stopped" {
 			return true
 		}
-		if attempt < 9 {
-			time.Sleep(10 * time.Millisecond)
+		if waitErr == nil || !time.Now().Before(deadline) {
+			return false
 		}
+		time.Sleep(operatorStopRetryInterval)
 	}
-	return false
+}
+
+func waitErrIndicatesHardStop(waitErr error) bool {
+	if waitErr == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(waitErr.Error()))
+	if text == "" {
+		return false
+	}
+	return strings.Contains(text, "signal: killed") ||
+		strings.Contains(text, "signal: terminated") ||
+		strings.Contains(text, "signal: interrupt")
 }
 
 func runtimeWarningFromLine(stream, line string, visibleTexts []string) string {

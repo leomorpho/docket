@@ -363,7 +363,8 @@ var updateCmd = &cobra.Command{
 				fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s depth is %d (>3)\n", t.ID, depth)
 			}
 		}
-		if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, updateAllowEmptyStartable, beforeWorkableCount); err != nil {
+		allowEmptyAfterMutation := updateAllowEmptyStartable || allowsEmptyStartableLeafAfterStateTransition(cfg, original.State, t.State)
+		if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, allowEmptyAfterMutation, beforeWorkableCount); err != nil {
 			original.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 			if rollbackErr := s.UpdateTicket(ctx, &original); rollbackErr != nil {
 				return fmt.Errorf("%v; rollback failed: %w", err, rollbackErr)
