@@ -1235,6 +1235,173 @@ func TestServiceRunTicketLeavesRecoverableRuntimeForStuckResult(t *testing.T) {
 	}
 }
 
+func TestServiceRunTicketPersistsValidationFailureArtifactAfterRuntimeCleanup(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-395",
+		Seq:         395,
+		Title:       "Durable validation failure",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: runnableOrchestrationDescription("feature.txt", "README.md"),
+		AC:          runnableOrchestrationAC(),
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
+	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	runtimeStore := runruntime.New(repoRoot)
+	monitorStub := &fakeMonitor{queue: []agentrun.Observation{
+		{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-395", Role: agentrun.RoleImplementer, CommitSHA: "deadbeef", Tests: "passed"}},
+	}}
+	validator := runvalidate.New(runvalidate.Dependencies{
+		RepoRoot: repoRoot,
+		Store:    store,
+		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
+	})
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflowSvc,
+		Namespace: namespace,
+		Adapter:   &recordingAdapter{},
+		Monitor:   monitorStub,
+		Validator: validator,
+		Runtime:   runtimeStore,
+	})
+
+	summary, err := service.RunTicket(context.Background(), "TKT-395")
+	if err != nil {
+		t.Fatalf("RunTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusFailed {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	if err := runtimeStore.Cleanup("TKT-395"); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	brief, ok, err := runtimeStore.LoadBrief("TKT-395")
+	if err != nil || !ok {
+		t.Fatalf("expected durable validation-failure brief after cleanup, ok=%v err=%v", ok, err)
+	}
+	if brief.Outcome != string(agentrun.StatusFailed) {
+		t.Fatalf("unexpected brief outcome: %#v", brief)
+	}
+	if brief.SessionID != "session-380" {
+		t.Fatalf("brief session id = %q, want session-380", brief.SessionID)
+	}
+	if len(brief.ValidationErrors) == 0 {
+		t.Fatalf("expected validation errors in brief, got %#v", brief)
+	}
+	if strings.TrimSpace(brief.ResumeNext) == "" {
+		t.Fatalf("expected durable next-step guidance in brief, got %#v", brief)
+	}
+}
+
+func TestServiceResumeTicketUsesDurableRecoverableArtifactAfterRuntimeCleanup(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-396",
+		Seq:         396,
+		Title:       "Recover after cleanup",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: runnableOrchestrationDescription("feature.txt", "README.md"),
+		AC:          runnableOrchestrationAC(),
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
+	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	runtimeStore := runruntime.New(repoRoot)
+	adapter := &recordingResumableAdapter{}
+	monitorStub := &fakeMonitor{queue: []agentrun.Observation{
+		{Result: agentrun.Result{Status: agentrun.StatusStuck, TicketID: "TKT-396", Role: agentrun.RoleImplementer, Reason: "waiting on operator input"}},
+	}}
+	validator := runvalidate.New(runvalidate.Dependencies{
+		RepoRoot: repoRoot,
+		Store:    store,
+		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
+	})
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflowSvc,
+		Namespace: namespace,
+		Adapter:   adapter,
+		Monitor:   monitorStub,
+		Validator: validator,
+		Runtime:   runtimeStore,
+	})
+
+	first, err := service.RunTicket(context.Background(), "TKT-396")
+	if err != nil {
+		t.Fatalf("RunTicket() error = %v", err)
+	}
+	if first.Status != agentrun.StatusStuck {
+		t.Fatalf("unexpected first summary: %#v", first)
+	}
+
+	cl, err := claim.GetClaim(repoRoot, "TKT-396")
+	if err != nil || cl == nil {
+		t.Fatalf("expected claim-bound worktree, claim=%#v err=%v", cl, err)
+	}
+	if err := os.WriteFile(filepath.Join(cl.Worktree, "feature.txt"), []byte("ok\n"), 0o644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	runGit(t, cl.Worktree, "add", ".")
+	runGit(t, cl.Worktree, "commit", "-m", "feat: resume after cleanup\n\nTicket: TKT-396")
+	sha := strings.TrimSpace(runGitOutput(t, cl.Worktree, "rev-parse", "HEAD"))
+
+	if err := runtimeStore.Cleanup("TKT-396"); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	monitorStub.mu.Lock()
+	monitorStub.queue = []agentrun.Observation{
+		{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-396", Role: agentrun.RoleImplementer, CommitSHA: sha, Tests: "passed"}},
+	}
+	monitorStub.mu.Unlock()
+
+	second, err := service.ResumeTicket(context.Background(), "TKT-396")
+	if err != nil {
+		t.Fatalf("ResumeTicket() error = %v", err)
+	}
+	if second.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected resume summary: %#v", second)
+	}
+	if adapter.resumedSessionID != "session-380" {
+		t.Fatalf("Resume() used session %q, want session-380", adapter.resumedSessionID)
+	}
+}
+
 func TestServicePingTicketUsesSameSessionAndAppendsTranscript(t *testing.T) {
 	t.Parallel()
 

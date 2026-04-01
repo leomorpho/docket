@@ -450,6 +450,113 @@ func TestRunStatusCmdFallsBackToPersistedRunBrief(t *testing.T) {
 	}
 }
 
+func TestRunStatusCmdShowsRecoverableFailureMetadataFromDurableBriefAfterCleanup(t *testing.T) {
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-378R", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-378R", SessionID: "session-378R"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteBrief(runruntime.RunBrief{
+		TicketID:          "TKT-378R",
+		Outcome:           "failed",
+		Summary:           "Managed run failed validation before closeout.",
+		SessionID:         "session-378R",
+		ValidationErrors:  []string{"feature.txt missing", "tests failed"},
+		ResumeNext:        "Inspect the validation failures, repair the worktree, and rerun the ticket.",
+		CloseoutCommitSHA: "",
+		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if err := store.Cleanup("TKT-378R"); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-378R"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TKT-378R: no active run",
+		"Last outcome: failed",
+		"Session: session-378R",
+		"Recoverable: true",
+		"Resume with: docket run-resume TKT-378R",
+		"Resume next: Inspect the validation failures, repair the worktree, and rerun the ticket.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunStatusCmdRendersRecoverableBriefMetadataInJSONAfterCleanup(t *testing.T) {
+	prevRepo := repo
+	prevFormat := format
+	t.Cleanup(func() {
+		repo = prevRepo
+		format = prevFormat
+	})
+
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-378J", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-378J", SessionID: "session-378J"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteBrief(runruntime.RunBrief{
+		TicketID:   "TKT-378J",
+		Outcome:    "stuck",
+		Summary:    "Managed run reported stuck and left the ticket in its active state.",
+		SessionID:  "session-378J",
+		ResumeNext: "Inspect the run status, address the blocker, and resume the managed run when ready.",
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if err := store.Cleanup("TKT-378J"); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "json"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-378J", "--format", "json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal json: %v\n%s", err, out.String())
+	}
+	if payload["recoverable"] != true {
+		t.Fatalf("expected recoverable=true, got %#v", payload)
+	}
+	if payload["session_id"] != "session-378J" {
+		t.Fatalf("expected session_id in payload, got %#v", payload)
+	}
+	if payload["resume_command"] != "docket run-resume TKT-378J" {
+		t.Fatalf("expected resume command in payload, got %#v", payload)
+	}
+}
+
 func TestRunStatusCmdShowsDurableSuccessBriefAfterRuntimeCleanup(t *testing.T) {
 	repoRoot := t.TempDir()
 	store := runruntime.New(repoRoot)

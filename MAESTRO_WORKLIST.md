@@ -197,12 +197,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1`.
   Note: Added a durable `Docket-Run-Summary` block to managed closeout merge commits and expanded `run-status` brief rendering so persisted success briefs show the ticket and closeout commit after runtime cleanup. Targeted regressions for `internal/agentrun/validate` and `cmd/run_ticket` now pass; the broader `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1` sweep still hits pre-existing unrelated `cmd` failures in update/workflow-migrate coverage.
 
-- [ ] NS-26 — Add failing tests for durable failure-path and stuck-run artifacts: write red tests proving that validation failures and stuck runs must leave recoverable repo-local state with visible next-step guidance even after ephemeral runtime cleanup.  
+- [x] NS-26 — Add failing tests for durable failure-path and stuck-run artifacts: write red tests proving that validation failures and stuck runs must leave recoverable repo-local state with visible next-step guidance even after ephemeral runtime cleanup.  
   Code paths: `internal/agentrun/orchestrate/service.go`, `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `cmd/run_ticket.go`.  
   TDD: tests only in this task.  
   Tests must cover: validation failure brief; stuck run recoverable status; resume metadata visible through `run-status`; failure artifact survives cleanup.  
   Acceptance criteria: failure-path durability is locked down before implementation changes are made.  
   Verify with `go test ./internal/agentrun/... ./cmd -count=1`.
+  Note: Added red regressions in `internal/agentrun/orchestrate/service_test.go` and `cmd/run_ticket_test.go` that require validation failures to persist a durable post-cleanup brief, require stuck runs to remain resumable after runtime cleanup, and require `run-status` to surface session/recovery metadata from the surviving durable artifact. Focused `go test` runs fail on those new assertions; the broader `go test ./internal/agentrun/... ./cmd -count=1` sweep surfaces the new orchestrate failures and then stalls in the long-running pre-existing `cmd` lane.
 
 - [ ] NS-27 — Implement durable failure-path and stuck-run artifacts so resume flows are honest after cleanup: complete the production changes required by `NS-26`.  
   Code paths: `internal/agentrun/orchestrate/service.go`, `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `cmd/run_ticket.go`.  
