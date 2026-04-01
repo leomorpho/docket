@@ -15,7 +15,7 @@ func shouldAutoSyncSkills(cmd *cobra.Command, repoRoot string) bool {
 		return false
 	}
 	switch cmd.Name() {
-	case "help", "completion", "install", "bootstrap":
+	case "help", "completion", "install", "bootstrap", "run-cleanup":
 		return false
 	}
 	if len(cmd.Name()) >= 6 && cmd.Name()[:6] == "__hook" {

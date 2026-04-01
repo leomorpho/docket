@@ -170,12 +170,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
   Note: Added red dry-run reconciliation coverage in `cmd/run_cleanup_test.go` for a future `run-cleanup --dry-run` command, covering human and JSON reporting for orphan run dirs, stale recoverable statuses, missing durable briefs, and legacy `done` checkpoints while snapshotting runtime/checkpoint trees to prove zero mutation in dry-run mode. Scoped `go test ./cmd -run 'TestRunCleanupDryRun' -count=1` now fails on the missing `run-cleanup` command as intended, while `go test ./internal/runstate ./internal/agentrun/runtime -count=1` passes; the broader combined `cmd` verify lane still hangs in the pre-existing long-running `cmd` suite.
 
-- [ ] NS-22 — Implement runtime artifact reconciliation reporting and dry-run output: build the non-mutating scan/report behavior defined in `NS-21`.  
+- [x] NS-22 — Implement runtime artifact reconciliation reporting and dry-run output: build the non-mutating scan/report behavior defined in `NS-21`.  
   Code paths: `internal/runstate/`, `internal/agentrun/runtime/store.go`, `cmd/doctor.go` or new maintenance command.  
   TDD: implement against the failing tests from `NS-21`; add narrower unit tests for scanning helpers if needed.  
   Tests must cover: discovery of each artifact problem type; stable dry-run output; no mutation to runtime/checkpoint files in report mode.  
   Acceptance criteria: operators can see stale runtime damage clearly before repairing it.  
   Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
+  Note: Added a new root `run-cleanup --dry-run` command backed by a read-only runtime scanner plus namespace manifest enumeration, so dry-run human and JSON output now report orphan run dirs, stale recoverable statuses, missing durable briefs, and legacy checkpoint states without mutating runtime artifacts. Added `internal/agentrun/runtime/reconcile_test.go` for direct scanner coverage; scoped `go test ./cmd -run 'TestRunCleanupDryRun' -count=1`, `go test ./internal/agentrun/runtime -run 'TestStoreScanReconciliationIssuesDetectsRuntimeDamage' -count=1`, and `go test ./internal/runstate ./internal/agentrun/runtime -count=1` pass. The exact broad verify command still hangs in the pre-existing long-running `cmd` lane, but `go run . --format json run-cleanup --dry-run` now executes successfully against the real repo and surfaces actionable runtime damage.
 
 - [ ] NS-23 — Implement runtime artifact repair/apply mode so stale artifacts can be archived or cleaned safely: add the mutating half of the reconciliation path, including idempotent cleanup behavior.  
   Code paths: same as `NS-22`, plus any archive/prune helpers.  

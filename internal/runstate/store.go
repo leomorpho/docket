@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -227,6 +228,63 @@ func (s *Store) GetRunManifest(repoRoot, ticketID string) (RunManifest, bool, er
 		return RunManifest{}, false, err
 	}
 	return rec, true, nil
+}
+
+func (s *Store) ListRunManifests() ([]RunManifest, error) {
+	if strings.TrimSpace(s.root) == "" {
+		return nil, nil
+	}
+	repoEntries, err := os.ReadDir(artifacts.HomePath(s.root, artifacts.HomeReposDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	manifests := make([]RunManifest, 0)
+	for _, repoEntry := range repoEntries {
+		if !repoEntry.IsDir() || !repoIDPattern.MatchString(repoEntry.Name()) {
+			continue
+		}
+		runsDir := filepath.Join(artifacts.HomePath(s.root, artifacts.HomeReposDir), repoEntry.Name(), "runs")
+		runEntries, err := os.ReadDir(runsDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		for _, runEntry := range runEntries {
+			if runEntry.IsDir() || !strings.HasSuffix(runEntry.Name(), ".json") {
+				continue
+			}
+			ticketID := strings.TrimSuffix(runEntry.Name(), ".json")
+			path := filepath.Join(runsDir, runEntry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, err
+			}
+			var rec RunManifest
+			if err := json.Unmarshal(data, &rec); err != nil {
+				return nil, err
+			}
+			if err := validateRunManifest(repoEntry.Name(), ticketID, rec); err != nil {
+				return nil, err
+			}
+			manifests = append(manifests, rec)
+		}
+	}
+	sort.Slice(manifests, func(i, j int) bool {
+		if manifests[i].TicketID != manifests[j].TicketID {
+			return manifests[i].TicketID < manifests[j].TicketID
+		}
+		if manifests[i].StartedAt != manifests[j].StartedAt {
+			return manifests[i].StartedAt < manifests[j].StartedAt
+		}
+		return manifests[i].RepoID < manifests[j].RepoID
+	})
+	return manifests, nil
 }
 
 func validateRunManifest(expectedRepoID, expectedTicketID string, rec RunManifest) error {
