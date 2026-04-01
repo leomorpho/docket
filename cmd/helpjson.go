@@ -106,6 +106,9 @@ func buildCommandManifest(root *cobra.Command, cfg *ticket.Config) []map[string]
 func commandFlags(c *cobra.Command) map[string]any {
 	flags := map[string]any{}
 	c.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
 		flags["--"+f.Name] = map[string]any{
 			"type":    f.Value.Type(),
 			"default": f.DefValue,
@@ -138,7 +141,7 @@ func commandExamples(name string, cfg *ticket.Config) []string {
 		"skill invoke":     {"docket skill invoke ticket-discovery", "docket skill invoke learning-replay --ticket TKT-001"},
 		"skill audit":      {"docket skill audit", "docket skill audit learning-replay --bucket day --format json"},
 		"hook list":        {"docket hook list", "docket hook list --format json"},
-		"hook show":        {"docket hook show ticket.review"},
+		"hook show":        {"docket hook show run.start"},
 		"hook status":      {"docket hook status", "docket hook status --format json"},
 		"smart-commit":     {"docket smart-commit TKT-001", "docket smart-commit TKT-001 --validate \"feat: x\\n\\nTicket: TKT-001\""},
 		"context-optimize": {"docket context-optimize TKT-001", "docket context-optimize TKT-001 --format json"},

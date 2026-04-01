@@ -14,8 +14,6 @@ func CanonicalContractV1() Contract {
 			Execution:  HookExecutionInternal,
 			Events: []HookEvent{
 				{Name: "run.start", Mode: HookModeEnforcement},
-				{Name: "ticket.review", Mode: HookModeEnforcement},
-				{Name: "ticket.qa", Mode: HookModeAdvisory},
 			},
 		},
 		Skills: SkillInventory{

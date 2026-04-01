@@ -686,7 +686,7 @@ func TestUpdateCmd_CustomWorkflowCompletedStateUsesConfiguredCompletedState(t *t
 	}
 }
 
-func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
+func TestUpdateCmd_ManagedRunValidatedIgnoresRetiredCommitLinkageGate(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -738,25 +738,12 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "validated"})
-	err := rootCmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "no commit on HEAD references Ticket: TKT-198") {
-		t.Fatalf("expected commit-linkage rejection, got: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(tmpDir, "work.txt"), []byte("x\n"), 0o644); err != nil {
-		t.Fatalf("write file failed: %v", err)
-	}
-	runGitSession(t, tmpDir, "add", ".")
-	runGitSession(t, tmpDir, "commit", "-m", "feat: managed run linkage\n\nTicket: TKT-198")
-
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected validated transition after linked commit, got: %v", err)
+		t.Fatalf("expected validated transition without default linkage gate, got: %v", err)
 	}
 }
 
-func TestUpdateCmd_ManagedRunLinkageWarningOnlyByDefault(t *testing.T) {
+func TestUpdateCmd_ManagedRunValidatedOmitsRetiredLinkageWarnings(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -811,14 +798,14 @@ func TestUpdateCmd_ManagedRunLinkageWarningOnlyByDefault(t *testing.T) {
 	rootCmd.SetErr(errBuf)
 	rootCmd.SetArgs([]string{"update", "TKT-198B", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected warning-only linkage mode to proceed, got: %v", err)
+		t.Fatalf("expected validated transition without retired linkage warning, got: %v", err)
 	}
-	if !strings.Contains(errBuf.String(), "warning: managed run") {
-		t.Fatalf("expected managed-run linkage warning, got: %s", errBuf.String())
+	if strings.Contains(errBuf.String(), "warning: managed run") {
+		t.Fatalf("did not expect managed-run linkage warning after retiring default review gate, got: %s", errBuf.String())
 	}
 }
 
-func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
+func TestUpdateCmd_ManagedRunValidatedDoesNotRequireBoundBranchRepair(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -879,14 +866,7 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetArgs([]string{"update", "TKT-287", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected validated transition after auto-repair, got: %v", err)
-	}
-	ok, err := docketgit.HasTicketTrailerSince(tmpDir, "docket/TKT-287", "TKT-287", now.Add(-time.Minute).Format(time.RFC3339))
-	if err != nil {
-		t.Fatalf("check repaired branch failed: %v", err)
-	}
-	if !ok {
-		t.Fatalf("expected repaired branch docket/TKT-287 to include ticket trailer")
+		t.Fatalf("expected validated transition without branch auto-repair, got: %v", err)
 	}
 }
 

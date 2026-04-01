@@ -11,8 +11,6 @@ import (
 	"time"
 
 	ck "github.com/leomorpho/docket/internal/check"
-	docketgit "github.com/leomorpho/docket/internal/git"
-	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -495,7 +493,7 @@ func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id
 func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *ticket.Config) error {
 	enforce := cfg != nil && cfg.SecurityEnforcement
 	ns := runstate.New(runtimeNamespaceRoot(repo))
-	run, ok, err := ns.GetRunManifest(repo, ticketID)
+	_, ok, err := ns.GetRunManifest(repo, ticketID)
 	if err != nil {
 		if !enforce {
 			warnSecurityEnforcementBypassed(fmt.Sprintf("managed-run linkage check failed for %s but enforcement is disabled: %v", ticketID, err))
@@ -515,55 +513,6 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *t
 			return nil
 		}
 		return fmt.Errorf("run manifest validation failed for %s: %w", ticketID, err)
-	}
-
-	manager := hooks.NewManager()
-	hooks.RegisterCoreHooks(manager)
-	advisory, hookErr := manager.Run(hooks.EventReviewGate, hooks.Context{
-		Repo:         repo,
-		TicketID:     ticketID,
-		ManagedRun:   true,
-		TargetState:  string(target),
-		WorktreePath: run.WorktreePath,
-		Branch:       run.Branch,
-		RunStartedAt: run.StartedAt,
-	})
-	if hookErr != nil {
-		shouldRepair := strings.Contains(strings.ToLower(hookErr.Error()), "no commit on") || isMissingGitRefError(hookErr)
-		if shouldRepair {
-			repair, repairErr := docketgit.RepairManagedBranchFromCurrent(repo, run.WorktreePath, run.Branch, ticketID, run.StartedAt)
-			if repairErr != nil {
-				return fmt.Errorf("managed run %s cannot advance to %s: bound branch=%s worktree=%s; auto-repair failed: %w", ticketID, target, run.Branch, run.WorktreePath, repairErr)
-			}
-			if repair.Repaired {
-				fmt.Printf("docket: repaired managed run branch %s via %s from %s\n", run.Branch, repair.Method, repair.SourceRef)
-				advisory, hookErr = manager.Run(hooks.EventReviewGate, hooks.Context{
-					Repo:         repo,
-					TicketID:     ticketID,
-					ManagedRun:   true,
-					TargetState:  string(target),
-					WorktreePath: run.WorktreePath,
-					Branch:       run.Branch,
-					RunStartedAt: run.StartedAt,
-				})
-			}
-		}
-	}
-	if hookErr != nil && isMissingGitRefError(hookErr) && strings.TrimSpace(run.WorktreePath) != "" {
-		if ok, err := docketgit.HasTicketTrailerSince(run.WorktreePath, "HEAD", ticketID, run.StartedAt); err == nil && ok {
-			fmt.Printf("docket: validated managed run %s against %s HEAD because branch %s is unavailable\n", ticketID, run.WorktreePath, run.Branch)
-			hookErr = nil
-		}
-	}
-	if hookErr != nil {
-		if !enforce {
-			warnSecurityEnforcementBypassed(fmt.Sprintf("managed run %s linkage check failed but enforcement is disabled: %v", ticketID, hookErr))
-			return nil
-		}
-		return fmt.Errorf("managed run %s cannot advance to %s: %w", ticketID, target, hookErr)
-	}
-	for _, msg := range advisory {
-		fmt.Printf("hook advisory: %s\n", msg)
 	}
 	return nil
 }

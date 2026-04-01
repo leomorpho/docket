@@ -144,12 +144,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/capabilities ./internal/hooks -count=1`.
   Note: Added red regressions in `internal/capabilities/contract_test.go`, `internal/hooks/core_test.go`, `cmd/hook_test.go`, and `cmd/helpjson_test.go` that require the default contract and help surfaces to stop exposing `ticket.review`, `ticket.qa`, and default `--review` flags. Focused package and command runs fail on those new assertions (`ticket.review` still appears in the canonical contract, core hook registration, hook list/show output, and help JSON), which leaves `NS-18` as the production follow-up.
 
-- [ ] NS-18 — Remove review and QA hook semantics from the default product surface while preserving optional reviewer behavior behind explicit opt-in: implement the cleanup defined in `NS-17`.  
+- [x] NS-18 — Remove review and QA hook semantics from the default product surface while preserving optional reviewer behavior behind explicit opt-in: implement the cleanup defined in `NS-17`.  
   Code paths: `internal/capabilities/canonical.go`, `internal/hooks/core.go`, `cmd/helpjson.go`, `cmd/start.go`, optional reviewer helpers.  
   TDD: implement against the red tests from `NS-17`; add focused tests if explicit opt-in reviewer behavior needs separate coverage.  
   Tests must cover: no default `ticket.review`/`ticket.qa` events; explicit reviewer path still works when requested; no regression in command discovery or help output.  
   Acceptance criteria: planning, execution, and validation are the default lifecycle; review is optional and not a core contract event.  
   Verify with `go test ./cmd ./internal/capabilities ./internal/hooks -count=1`.
+  Note: Removed `ticket.review` and `ticket.qa` from the canonical capability contract and default core hook registry, hid the opt-in reviewer flags from default help/manifest output while keeping `--review` functional, and deleted the retired managed-run review-gate linkage path from `update`. Updated affected status/help/update tests to assert the new serial-first lifecycle surface. Verified with `go test ./cmd ./internal/capabilities ./internal/hooks -count=1 -timeout 120s`.
 
 - [x] NS-19 — Add failing tests that lock down the removal of premature parallelism surfaces: write red tests proving that `status --parallel`, `parallel-safe` relations, and related help output are still exposed.  
   Code paths: `cmd/status.go`, `cmd/link.go`, relation validation under `internal/store/local/` or `internal/ticket/`, `cmd/helpjson.go`.  

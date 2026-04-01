@@ -57,8 +57,8 @@ func TestStatusIncludesHookPolicyAndRecentBlockingEventsWhenDegraded(t *testing.
 	if !strings.Contains(out, "Hooks: needs-setup") {
 		t.Fatalf("expected degraded hook readiness, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Hook policy:") || !strings.Contains(out, "advisory") || !strings.Contains(out, "enforcement") {
-		t.Fatalf("expected concise advisory/enforcement policy summary, got:\n%s", out)
+	if !strings.Contains(out, "Hook policy: run.start (enforcement)") {
+		t.Fatalf("expected concise default hook policy summary, got:\n%s", out)
 	}
 	if !strings.Contains(out, "Recent blocking hook events:") || !strings.Contains(out, "hooks.run_start") {
 		t.Fatalf("expected recent blocking hook event details, got:\n%s", out)

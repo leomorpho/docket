@@ -593,6 +593,8 @@ func init() {
 	startCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	startCmd.Flags().BoolVar(&runEnableReview, "review", false, "run the optional reviewer pass and capped fix loop after implementer validation")
 	startCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "compatibility alias; reviewer pass is disabled by default")
+	_ = startCmd.Flags().MarkHidden("review")
+	_ = startCmd.Flags().MarkHidden("no-review")
 	startCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
 	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	rootCmd.AddCommand(startCmd)

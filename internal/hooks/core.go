@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -10,18 +9,6 @@ import (
 )
 
 func RegisterCoreHooks(m *Manager) {
-	m.Register(Registration{
-		Name:  "advisory-review-lifecycle",
-		Event: EventReviewGate,
-		Mode:  ModeAdvisory,
-		Run: func(ctx Context) error {
-			if ctx.ManagedRun {
-				return nil
-			}
-			return errors.New("review gate running without managed run manifest")
-		},
-	})
-
 	enforceWorktree := func(ctx Context) error {
 		if !ctx.ManagedRun {
 			return nil
@@ -47,34 +34,5 @@ func RegisterCoreHooks(m *Manager) {
 		Event: EventRunStart,
 		Mode:  ModeEnforcement,
 		Run:   enforceWorktree,
-	})
-	m.Register(Registration{
-		Name:  "enforce-managed-worktree-review",
-		Event: EventReviewGate,
-		Mode:  ModeEnforcement,
-		Run:   enforceWorktree,
-	})
-
-	m.Register(Registration{
-		Name:  "enforce-commit-linkage-review",
-		Event: EventReviewGate,
-		Mode:  ModeEnforcement,
-		Run: func(ctx Context) error {
-			if !ctx.ManagedRun {
-				return nil
-			}
-			ref := strings.TrimSpace(ctx.Branch)
-			if ref == "" {
-				ref = "HEAD"
-			}
-			ok, err := docketgit.HasTicketTrailerSince(ctx.Repo, ref, ctx.TicketID, ctx.RunStartedAt)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("no commit on %s references Ticket: %s", ref, ctx.TicketID)
-			}
-			return nil
-		},
 	})
 }
