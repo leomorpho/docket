@@ -119,7 +119,7 @@ func TestUpdateCmd(t *testing.T) {
 	updateState = ""
 	updateAddLabels = []string{"feat"}
 	updateBlockedBy = []string{"TKT-002"}
-	rootCmd.SetArgs([]string{"update", "TKT-001", "--add-label", "feat", "--blocked-by", "TKT-002"})
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--add-label", "feat", "--blocked-by", "TKT-002", "--allow-empty-startable-leaf"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("update labels/blockers failed: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
 	}
 
 	b.Reset()
-	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "stale", "--cascade"})
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "stale", "--cascade", "--allow-empty-startable-leaf"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("stale transition with cascade failed: %v", err)
 	}
@@ -572,7 +572,7 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-440", "--state", "building"})
+	rootCmd.SetArgs([]string{"update", "TKT-440", "--state", "building", "--allow-empty-startable-leaf"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected queued -> building transition to succeed, got: %v", err)
 	}

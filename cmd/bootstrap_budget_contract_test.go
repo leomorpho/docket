@@ -69,3 +69,22 @@ func TestBootstrapWritesStarterScaffoldLayout(t *testing.T) {
 		t.Fatalf(".gitignore should ignore canonical local root, got:\n%s", string(gitignoreData))
 	}
 }
+
+func TestStarterScaffoldManagedArtifactsIncludeTrackedInstallManifest(t *testing.T) {
+	tmpRepo := t.TempDir()
+
+	managed := starterScaffoldManagedArtifacts(tmpRepo)
+	installManifest := installManifestPath(tmpRepo)
+	if !containsArtifactPath(managed, installManifest) {
+		t.Fatalf("managed artifacts should include tracked install manifest %q, got %q", installManifest, managed)
+	}
+}
+
+func containsArtifactPath(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}

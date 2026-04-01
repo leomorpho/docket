@@ -23,7 +23,7 @@ func TestProofPipelineEndToEndIntegration(t *testing.T) {
 	if out, err := h.run("bootstrap", "--adapter", "codex"); err != nil {
 		t.Fatalf("bootstrap failed: %v\n%s", err, out)
 	}
-	if out, err := h.run("update", ticketID, "--state", "running"); err != nil {
+	if out, err := h.run("update", ticketID, "--state", "running", "--allow-empty-startable-leaf"); err != nil {
 		t.Fatalf("start ticket failed: %v\n%s", err, out)
 	}
 

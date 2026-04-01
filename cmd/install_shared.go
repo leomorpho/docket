@@ -41,6 +41,7 @@ func starterScaffoldLayout(repoRoot string) []string {
 
 func starterScaffoldManagedArtifacts(repoRoot string) []string {
 	managed := []string{
+		installManifestPath(repoRoot),
 		claudePath(repoRoot),
 		commitMsgHookPath(repoRoot),
 		postMergeHookPath(repoRoot),

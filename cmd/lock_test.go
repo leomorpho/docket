@@ -67,7 +67,7 @@ func TestUpdateAutoReleasesLockOnDoneState(t *testing.T) {
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-010", "--state", "running"})
+	rootCmd.SetArgs([]string{"update", "TKT-010", "--state", "running", "--allow-empty-startable-leaf"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("update running failed: %v", err)
 	}

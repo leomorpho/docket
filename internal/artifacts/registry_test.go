@@ -176,6 +176,7 @@ func TestLocalOnlyRepoArtifactsDeclareCanonicalLocalLayout(t *testing.T) {
 		current string
 		target  string
 	}{
+		{RepoCheckpoints, ".docket/checkpoints", ".docket/local/checkpoints"},
 		{RepoIndexDB, ".docket/index.db", ".docket/local/index.db"},
 		{RepoLifecycleEvents, ".docket/runtime/lifecycle-events.jsonl", ".docket/local/runtime/lifecycle-events.jsonl"},
 		{RepoLearnRules, ".docket/runtime/learn-rules.json", ".docket/local/runtime/learn-rules.json"},
@@ -203,6 +204,28 @@ func TestLocalOnlyRepoArtifactsDeclareCanonicalLocalLayout(t *testing.T) {
 			}
 			if !strings.HasPrefix(entry.CanonicalRelPath, CanonicalLocalRootRelPath()) {
 				t.Fatalf("%s canonical path should live under %s, got %s", tc.key, CanonicalLocalRootRelPath(), entry.CanonicalRelPath)
+			}
+		})
+	}
+}
+
+func TestRepoLocalOnlyArtifactsStayUnderCanonicalLocalRoot(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range All() {
+		entry := entry
+		if entry.Root != RootRepo || entry.Policy != PolicyLocalOnly {
+			continue
+		}
+
+		t.Run(string(entry.Key), func(t *testing.T) {
+			t.Parallel()
+
+			if strings.TrimSpace(entry.CanonicalRelPath) == "" {
+				t.Fatalf("%s is local-only but has no canonical local path", entry.Key)
+			}
+			if !strings.HasPrefix(entry.CanonicalRelPath, CanonicalLocalRootRelPath()) {
+				t.Fatalf("%s canonical path %q must stay under %s", entry.Key, entry.CanonicalRelPath, CanonicalLocalRootRelPath())
 			}
 		})
 	}
