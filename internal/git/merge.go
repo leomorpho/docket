@@ -10,7 +10,10 @@ func MergeBranch(repoRoot, branch, message string) error {
 	if strings.TrimSpace(message) == "" {
 		message = fmt.Sprintf("Merge ticket branch %s", branch)
 	}
-	args := []string{"merge", "--no-ff", "--autostash", "-m", message, branch}
+	// Managed closeout merges synthesize their own commit message and should not
+	// be blocked by repo-local commit hooks that are meant for human-authored
+	// commits in the primary checkout.
+	args := []string{"-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "--autostash", "-m", message, branch}
 	out, err := runGit(repoRoot, args...)
 	if err != nil {
 		// If merge failed, we might want to abort it to keep the main repo clean

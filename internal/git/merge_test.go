@@ -178,3 +178,51 @@ func TestMergeBranch_UsesExplicitMessage(t *testing.T) {
 		t.Fatalf("merge commit message = %q, want %q", got, message)
 	}
 }
+
+func TestMergeBranch_BypassesPrimaryCheckoutCommitHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		c := exec.Command("git", append([]string{"-C", tmpDir}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGit("add", "README")
+	runGit("commit", "-m", "initial")
+
+	hook := "#!/bin/sh\nif grep -q 'Ticket: TKT-' \"$1\"; then\n  echo 'hook rejected ticket trailer in primary checkout' >&2\n  exit 1\nfi\n"
+	hookPath := filepath.Join(tmpDir, ".git", "hooks", "commit-msg")
+	if err := os.WriteFile(hookPath, []byte(hook), 0o755); err != nil {
+		t.Fatalf("write commit-msg hook: %v", err)
+	}
+
+	def, err := GetDefaultBranch(tmpDir)
+	if err != nil {
+		t.Fatalf("GetDefaultBranch failed: %v", err)
+	}
+
+	runGit("checkout", "-b", "feature-1")
+	if err := os.WriteFile(filepath.Join(tmpDir, "feature.txt"), []byte("feat\n"), 0o644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	runGit("add", "feature.txt")
+	runGit("commit", "-m", "feature")
+	runGit("checkout", def)
+
+	message := "docket: close out TKT-001\n\nTicket: TKT-001"
+	if err := MergeBranch(tmpDir, "feature-1", message); err != nil {
+		t.Fatalf("MergeBranch failed with primary-checkout hook installed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tmpDir, "feature.txt")); err != nil {
+		t.Fatalf("expected merged file to exist: %v", err)
+	}
+}
