@@ -1132,6 +1132,93 @@ func TestServiceResumeTicketStartsFreshSessionWhenPriorSessionIDIsKnown(t *testi
 	}
 }
 
+func TestServiceResumeTicketFallsBackToPersistedRunRecordWhenManifestMissing(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-376C",
+		Seq:         3762,
+		Title:       "Resume from run record fallback",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
+	flow := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	_, worktreePath, err := flow.StartTask(context.Background(), "TKT-376C", "agent:test", ticket.DefaultConfig())
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+	runtimeStore := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-376C",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "recording",
+		RepoRoot:     repoRoot,
+		WorktreePath: worktreePath,
+		Branch:       "docket/TKT-376C",
+		StartedAt:    now.Format(time.RFC3339Nano),
+		SessionID:    "synthetic-old-session",
+	}
+	if err := runtimeStore.Init(record, "original prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := agentrun.WriteRunRecord(repoRoot, record); err != nil {
+		t.Fatalf("WriteRunRecord() error = %v", err)
+	}
+	if err := runtimeStore.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:          "TKT-376C",
+		SessionID:         "thread-actual-376c",
+		Active:            false,
+		Hung:              true,
+		PlannedSteps:      2,
+		CurrentStep:       1,
+		CurrentStepTitle:  "inspect repo",
+		InactivityTimeout: "10m0s",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	adapter := &recordingResumableAdapter{}
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  flow,
+		Namespace: namespace,
+		Adapter:   adapter,
+		Monitor: &fakeMonitor{queue: []agentrun.Observation{
+			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-376C", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
+		}},
+		Validator: fakeValidator{},
+		Runtime:   runtimeStore,
+	})
+
+	summary, err := service.ResumeTicket(context.Background(), "TKT-376C")
+	if err != nil {
+		t.Fatalf("ResumeTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	if adapter.spec.WorktreePath != worktreePath || adapter.spec.Branch != "docket/TKT-376C" {
+		t.Fatalf("expected resume to use persisted run record fallback, got %#v", adapter.spec)
+	}
+}
+
 func TestServiceRunTicketLeavesRecoverableRuntimeForStuckResult(t *testing.T) {
 	t.Parallel()
 

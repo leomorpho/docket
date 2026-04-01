@@ -363,14 +363,7 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
-	worktreePath := ""
-	branch := "docket/" + ticketID
-	if manifest, ok, err := s.namespace.GetRunManifest(s.repoRoot, ticketID); err == nil && ok {
-		worktreePath = manifest.WorktreePath
-		if manifest.Branch != "" {
-			branch = manifest.Branch
-		}
-	}
+	worktreePath, branch := s.resolveRunLocation(ticketID)
 	if strings.TrimSpace(worktreePath) == "" {
 		return agentrun.TicketRunSummary{}, fmt.Errorf("no active worktree recorded for %s", ticketID)
 	}
@@ -479,14 +472,7 @@ func (s *Service) PingTicket(ctx context.Context, ticketID string) (agentrun.Pin
 	if strings.TrimSpace(status.SessionID) == "" {
 		return agentrun.PingSummary{}, fmt.Errorf("ticket %s does not have a persisted codex session", ticketID)
 	}
-	worktreePath := ""
-	branch := "docket/" + ticketID
-	if manifest, ok, err := s.namespace.GetRunManifest(s.repoRoot, ticketID); err == nil && ok {
-		worktreePath = manifest.WorktreePath
-		if manifest.Branch != "" {
-			branch = manifest.Branch
-		}
-	}
+	worktreePath, branch := s.resolveRunLocation(ticketID)
 	if strings.TrimSpace(worktreePath) == "" {
 		return agentrun.PingSummary{}, fmt.Errorf("no active worktree recorded for %s", ticketID)
 	}
@@ -762,6 +748,23 @@ func (s *Service) startAutoResumeAttempt(ctx context.Context, ticketID, worktree
 
 func (s *Service) startImplementerContinuation(ctx context.Context, ticketID, worktreePath, branch, prompt string) (StartedRun, error) {
 	return s.startFollowup(ctx, ticketID, worktreePath, branch, agentrun.RoleImplementer, prompt, s.adapter)
+}
+
+func (s *Service) resolveRunLocation(ticketID string) (string, string) {
+	branch := "docket/" + ticketID
+	if manifest, ok, err := s.namespace.GetRunManifest(s.repoRoot, ticketID); err == nil && ok {
+		if strings.TrimSpace(manifest.Branch) != "" {
+			branch = manifest.Branch
+		}
+		return manifest.WorktreePath, branch
+	}
+	if record, ok, err := agentrun.LoadRunRecord(s.repoRoot, ticketID); err == nil && ok {
+		if strings.TrimSpace(record.Branch) != "" {
+			branch = record.Branch
+		}
+		return record.WorktreePath, branch
+	}
+	return "", branch
 }
 
 func (s *Service) cleanupRuntime(ticketID string) error {
