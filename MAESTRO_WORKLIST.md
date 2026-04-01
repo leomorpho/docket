@@ -8,86 +8,226 @@ Use this document while the live Docket backlog is being repaired and re-groomed
 - Hotspots: `.docket/config.json`, `.docket/manifest.json`, `.docket/tickets/`, `.docket/checkpoints/`, `.docket/local/runtime/`, `cmd/`, `internal/workable/`, `internal/store/local/`, `internal/agentrun/`, `internal/hooks/`, `internal/capabilities/`, `internal/runstate/`, `docs/`, `README.md`.
 - Primary objective: leave the repo with a truthful executable backlog, a clean serial autorun loop, and no default-product dependency on security, review, or parallelism semantics.
 
-- [ ] NS-01 — Unify runnable-queue truthfulness across `start`, `doctor`, `status`, and selector diagnostics: write failing tests first proving that a repo with zero runnable leaves reports the same “no workable tickets” outcome everywhere, and that a repo with exactly one groomed ready leaf reports that same runnable ticket everywhere, then remove the label-gated loophole in `cmd/queue_invariant.go` and align `cmd/doctor.go`, `cmd/status.go`, `internal/agentrun/selector/service.go`, and `internal/workable/diagnosis.go` with `internal/workable/workable.go` so the runtime has one source of truth for “runnable now.”  
-  Code paths: `cmd/doctor.go`, `cmd/status.go`, `cmd/queue_invariant.go`, `internal/workable/workable.go`, `internal/workable/diagnosis.go`, `internal/agentrun/selector/service.go`.  
-  TDD: add failing command tests in `cmd/*_test.go` and failing unit tests in `internal/workable/*_test.go` before changing production code.  
-  Tests must cover: zero ready leaves; a ready leaf that fails the ready contract; a blocked ready leaf; a single runnable ready leaf; a custom workflow config that still uses role-based startable/completed states; regression that `doctor`, `status`, and `start` never disagree about queue health.  
-  Acceptance criteria: there is exactly one runtime definition of “workable”; `doctor` cannot pass the queue invariant when `start` says nothing is runnable; empty queues produce actionable reasons instead of contradictory health output.  
+- [ ] NS-01 — Add failing tests that prove the queue health surfaces currently disagree: write command and unit tests showing that `start`, `doctor`, `status`, and selector diagnostics all report different outcomes today for the same repo fixture with zero runnable tickets and for a fixture with one runnable ticket, then keep those tests red until the follow-up implementation tasks fix the disagreement.  
+  Code paths: `cmd/doctor.go`, `cmd/status.go`, `cmd/start.go`, `cmd/queue_invariant.go`, `internal/agentrun/selector/service.go`, `internal/workable/diagnosis.go`, `internal/workable/workable.go`.  
+  TDD: start with failing tests only; do not change production code in this task.  
+  Tests must cover: zero ready tickets; a ready ticket that fails the ready contract; a blocked ready ticket; one valid runnable ready leaf; consistent human and JSON output where supported.  
+  Acceptance criteria: the repo has regression tests that capture the current queue-truthfulness gap and will fail until the CLI/runtime agrees on one definition of runnable work.  
   Verify with `go test ./cmd ./internal/workable ./internal/agentrun/selector -count=1`.
 
-- [ ] NS-02 — Add a first-class draft-to-ready grooming flow instead of relying on manual state fiddling: write failing command tests for a dedicated readiness command that evaluates a ticket against the runnable contract, reports every missing field clearly, and can promote a passing draft leaf to `ready`, then implement it on top of the existing ready-contract logic so grooming is an explicit product action rather than an undocumented `update --state ready` convention.  
-  Code paths: create a new command under `cmd/` (for example `cmd/ready_check.go`), reuse `internal/store/local/ready_contract.go`, and wire any shared messaging into `cmd/mutation_error.go` or the existing ticket mutation helpers.  
-  TDD: begin with failing command tests that exercise non-interactive CLI output and any needed store/unit tests around ready-contract reporting.  
-  Tests must cover: missing summary/outcome; missing acceptance criteria; missing verification commands; missing explicit out-of-scope; a non-leaf or coordination ticket rejected from promotion; a passing draft leaf promoted cleanly to `ready`; idempotent re-check of an already ready ticket; JSON output if the surrounding command family supports JSON.  
-  Acceptance criteria: a user can run one explicit command to know why a draft ticket is not runnable; passing tickets can be promoted without hand-editing state files; error output is specific enough for an agent to repair the ticket.  
+- [ ] NS-02 — Remove the label-gated queue-invariant loophole so queue health is always evaluated against real runnable work: implement the production fix for the failing tests from `NS-01` by changing `cmd/queue_invariant.go` and related diagnostics so queue invariants are not silently skipped when labels are absent.  
+  Code paths: `cmd/queue_invariant.go`, `cmd/doctor.go`, `internal/workable/diagnosis.go`.  
+  TDD: use the failing tests from `NS-01`; add targeted unit tests if the invariant logic needs narrower coverage.  
+  Tests must cover: no `topo:*` labels present; a repo with no runnable tickets; a repo with one runnable ticket; error messaging that explains why no ticket is runnable.  
+  Acceptance criteria: queue invariants are checked against the actual backlog state, not against optional topology labels; `doctor` cannot pass when the runtime has no runnable tickets.  
+  Verify with `go test ./cmd ./internal/workable -count=1`.
+
+- [ ] NS-03 — Align `status` and selector output with the same runnable-work definition used by `workable.go`: implement the remaining queue-truthfulness fixes so `cmd/status.go` and `internal/agentrun/selector/service.go` report the same runnable candidates as `internal/workable/workable.go`.  
+  Code paths: `cmd/status.go`, `internal/agentrun/selector/service.go`, `internal/workable/workable.go`, `internal/workable/diagnosis.go`.  
+  TDD: keep the `NS-01` tests red until this work is complete; add targeted selector tests before modifying selector behavior if gaps remain.  
+  Tests must cover: empty queue; one runnable ticket; multiple ready tickets with only one unblocked leaf; custom workflow roles; regression that `status`, `doctor`, and `start` agree.  
+  Acceptance criteria: all queue-health surfaces use one source of truth for “runnable now”; the CLI stops presenting contradictory queue state.  
+  Verify with `go test ./cmd ./internal/agentrun/selector ./internal/workable -count=1`.
+
+- [ ] NS-04 — Add a failing command test suite for an explicit readiness-check command: write red tests for a new CLI path that evaluates one ticket against the ready contract and reports every missing field clearly enough for an agent to repair it.  
+  Code paths: new command under `cmd/`, `internal/store/local/ready_contract.go`, existing mutation/help helpers in `cmd/`.  
+  TDD: tests only in this task; do not implement the command yet.  
+  Tests must cover: missing description/outcome; missing AC; missing verification; missing out-of-scope; non-leaf rejection; already-ready ticket recheck; machine-readable output if JSON is supported.  
+  Acceptance criteria: there is a failing test contract for a first-class readiness-check flow, separate from generic state updates.  
   Verify with `go test ./cmd ./internal/store/local -count=1`.
 
-- [ ] NS-03 — Make `workflow-migrate` work on the real repository instead of only the pristine shipped default: write failing tests proving that the current repo configuration, including custom states such as `stale`, legacy blockers, and old manifest/workflow metadata, can be dry-run migrated and then applied without manual surgery, then expand `cmd/workflow_migrate.go` so it can map legacy state names into the north-star model, rewrite or archive unsupported states, and normalize ticket/manifest data safely.  
-  Code paths: `cmd/workflow_migrate.go`, `.docket/config.json`, `.docket/manifest.json`, `internal/store/local/store.go`, and any shared workflow helpers under `internal/ticket/` or `internal/store/local/`.  
-  TDD: add failing command tests for `workflow-migrate --dry-run` and `workflow-migrate --apply` against a fixture repo shaped like the current one before broadening the migrator.  
-  Tests must cover: custom states present in config; legacy tickets in `backlog`, `todo`, `in-progress`, `in-review`, or `done`; invalid blockers pointing at coordination tickets; dry-run output that describes the rewrite without mutating files; apply mode that rewrites config and tickets consistently; repeated runs that are safe and idempotent.  
-  Acceptance criteria: the migrator can process a real non-pristine repo; dry-run and apply both work; the result is a clean `draft -> ready -> running -> validated -> archived` model plus any intentionally preserved non-runtime state such as `stale`.  
+- [ ] NS-05 — Implement the readiness-check command on top of the existing ready-contract logic: build the command specified in `NS-04` so a draft ticket can be evaluated without changing state and the missing fields are reported deterministically.  
+  Code paths: new command under `cmd/`, `internal/store/local/ready_contract.go`, `cmd/mutation_error.go`, command registration/help wiring.  
+  TDD: implement against the failing tests from `NS-04`; add unit tests for any shared reporting helpers introduced.  
+  Tests must cover: successful readiness check; failure output with all missing fields preserved; non-leaf rejection; stable JSON/human output.  
+  Acceptance criteria: there is one explicit CLI action for readiness diagnosis; agents no longer have to infer readiness by trial-and-error or direct state edits.  
+  Verify with `go test ./cmd ./internal/store/local -count=1`.
+
+- [ ] NS-06 — Add failing tests for readiness promotion from `draft` to `ready`: write red tests for a command path or flag that promotes a ticket only when the ready contract passes and refuses promotion otherwise.  
+  Code paths: the readiness command from `NS-05`, `cmd/update.go` or shared mutation helpers, `internal/store/local/ready_contract.go`.  
+  TDD: tests only in this task; do not implement promotion yet.  
+  Tests must cover: passing draft leaf promotion; failed promotion with contract errors; non-leaf rejection; idempotent re-run on an already-ready ticket; manifest/index updates after promotion.  
+  Acceptance criteria: the expected behavior for explicit readiness promotion is locked down in tests before implementation.  
+  Verify with `go test ./cmd ./internal/store/local -count=1`.
+
+- [ ] NS-07 — Implement readiness promotion so grooming becomes a first-class product action: build the promotion path defined in `NS-06`, including state updates and any manifest/index refresh needed by the local store.  
+  Code paths: readiness command implementation, `cmd/update.go` or shared mutation code, `internal/store/local/store.go`, `internal/store/local/index.go`.  
+  TDD: implement against the failing tests from `NS-06`; add narrower store tests if index updates need them.  
+  Tests must cover: promotion writes the new state; invalid tickets stay in draft; no coordination ticket can be promoted; ready queue surfaces see the new ticket immediately.  
+  Acceptance criteria: a user or agent can explicitly move a ticket into the runnable queue through one guarded command instead of manual state editing.  
+  Verify with `go test ./cmd ./internal/store/local ./internal/workable -count=1`.
+
+- [ ] NS-08 — Add failing migration tests for a repo shaped like the current one rather than the pristine default: write red tests proving that `workflow-migrate --dry-run` and `--apply` currently fail on custom states, stale legacy state names, and current manifest data.  
+  Code paths: `cmd/workflow_migrate.go`, `.docket/config.json`-style fixtures, `.docket/manifest.json`-style fixtures, store/workflow helpers.  
+  TDD: tests only in this task; no production fixes yet.  
+  Tests must cover: custom `stale` state retained; legacy states in tickets; invalid blockers; dry-run no-op behavior; apply mode fixture rewrite expectations.  
+  Acceptance criteria: the real migration gap is captured in reproducible tests instead of anecdotal failure on the live repo.  
+  Verify with `go test ./cmd -run 'TestWorkflowMigrate' -count=1`.
+
+- [ ] NS-09 — Expand `workflow-migrate` to map legacy state names into the north-star workflow while preserving intentional custom states: implement the config and ticket state-mapping layer required by the failing tests from `NS-08`.  
+  Code paths: `cmd/workflow_migrate.go`, `internal/ticket/`, `internal/store/local/`.  
+  TDD: implement against the red tests from `NS-08`; add unit tests for state-mapping helpers if needed.  
+  Tests must cover: `backlog`, `todo`, `in-progress`, `in-review`, `done`; preservation of `stale`; dry-run output describing the mapping; apply mode producing valid workflow state files.  
+  Acceptance criteria: the migrator can translate old workflow states into the new model without requiring a pristine repo.  
+  Verify with `go test ./cmd ./internal/ticket ./internal/store/local -count=1`.
+
+- [ ] NS-10 — Teach `workflow-migrate` to normalize ticket metadata and blockers during apply mode: implement the ticket and manifest rewrite portion of the migration so legacy blockers, coordination blockers, and stale manifest entries are cleaned up during migration.  
+  Code paths: `cmd/workflow_migrate.go`, `.docket/manifest.json`, `internal/store/local/store.go`, `internal/store/local/validate.go`.  
+  TDD: extend the failing tests from `NS-08` before changing production code.  
+  Tests must cover: blocker cleanup for coordination tickets; manifest consistency after rewrite; repeated runs are idempotent; dry-run leaves files untouched.  
+  Acceptance criteria: the migrator leaves the repo in a schema-valid north-star state, not just with renamed workflow labels.  
   Verify with `go test ./cmd ./internal/store/local -count=1` and `go run . workflow-migrate --dry-run`.
 
-- [ ] NS-04 — Reset the live backlog by archiving or rewriting draft tickets that belong to the removed security/governance branch or that describe work already landed in code: inspect the remaining draft tickets and update `.docket/tickets/` plus `.docket/manifest.json` so the repo backlog reflects the current product instead of historical directions, adding regression tests only if tooling bugs are uncovered while editing real ticket data.  
-  Code paths: `.docket/tickets/`, `.docket/manifest.json`, and any ticket-loading code that fails while processing corrected backlog data.  
-  TDD: if backlog cleanup exposes parser, store, or manifest bugs, add a failing test in the impacted package before fixing the bug; otherwise treat this as a repository-data grooming task, not a feature task.  
-  Tests must cover: no remaining draft ticket represents secure-mode/governance as active product work; no remaining draft ticket duplicates work already completed in code; parent tickets summarize work instead of blocking execution; manifest indices remain consistent after archival and rewrites.  
-  Acceptance criteria: obsolete draft work is either archived or rewritten to match the actual product direction; the backlog stops advertising removed product lines; loading/listing tickets succeeds after the cleanup.  
-  Verify with `go run . list --state draft --format table`, `go run . show TKT-172`, and `go test ./... -count=1 -run 'Test(Ticket|Manifest|List|Show)'`.
+- [ ] NS-11 — Audit and archive draft tickets that belong to the removed security/governance product line: review the live backlog, update the matching files in `.docket/tickets/`, and archive or rewrite those tickets so the repo no longer advertises security/governance as active roadmap work.  
+  Code paths: `.docket/tickets/`, `.docket/manifest.json`; add product-code tests only if backlog editing uncovers parser/store bugs.  
+  TDD: if a backlog-editing bug appears, add a failing test in the impacted package before fixing it; otherwise treat this as backlog data work.  
+  Tests must cover: no remaining draft ticket describes secure-mode/workflow-lock/governance as active product scope; manifest loads cleanly after archival.  
+  Acceptance criteria: removed product lines are removed from the active backlog, not just from docs and code.  
+  Verify with `go run . list --state draft --format table` and `go run . validate`.
 
-- [ ] NS-05 — Curate the first real `ready` queue for this repo by promoting a small ordered set of leaf tickets that are actually runnable under the north-star contract: use the readiness flow from the prior task to groom and promote at least five concrete leaf tickets, update their acceptance criteria and verification commands where needed, and ensure they are ordered so serial autorun can consume them without hidden prerequisites.  
-  Code paths: `.docket/tickets/`, `.docket/manifest.json`, and the readiness command from `NS-02`; only change product code if grooming uncovers a defect in ticket parsing or validation.  
-  TDD: if tooling defects appear while grooming live tickets, add a failing test in the impacted command/store package before fixing the defect; otherwise treat this as backlog execution setup, not feature work.  
-  Tests must cover: every promoted ticket is a leaf; every promoted ticket satisfies the ready contract; there are no coordination blockers in the promoted chain; the queue has at least one immediately runnable ticket after promotion; `start`, `doctor`, and `status` all agree on the resulting queue.  
-  Acceptance criteria: the repo no longer has zero ready work; there is a real serial queue of groomed leaf tickets; every promoted ticket has concrete AC and verification that an agent can execute without guessing.  
+- [ ] NS-12 — Audit and reconcile draft tickets that describe work already landed in code: inspect the remaining draft tickets, close or rewrite the ones that now mismatch the implementation, and keep the backlog aligned with the shipped product.  
+  Code paths: `.docket/tickets/`, `.docket/manifest.json`; product-code paths only if backlog grooming uncovers defects.  
+  TDD: only add tests if the tooling breaks while processing corrected ticket data.  
+  Tests must cover: no draft ticket duplicates already-landed workflow/runtime work; archived or rewritten tickets remain schema-valid; manifest indices remain consistent.  
+  Acceptance criteria: the draft backlog becomes a truthful source of pending work instead of a historical graveyard of already-done tasks.  
+  Verify with `go run . list --state draft --format table`, `go run . show TKT-310`, `go run . show TKT-329`, and `go run . validate`.
+
+- [ ] NS-13 — Promote the first two runnable leaf tickets into `ready` and prove the queue becomes non-empty: use the readiness flow to groom and promote two concrete leaf tickets, fixing ticket content where needed so they satisfy the ready contract.  
+  Code paths: `.docket/tickets/`, `.docket/manifest.json`, readiness command from `NS-05` to `NS-07`.  
+  TDD: if grooming exposes tooling bugs, add failing tests in the owning package before fixing them; otherwise treat this as backlog execution setup.  
+  Tests must cover: both promoted tickets are leaves; both satisfy the ready contract; at least one is immediately runnable; queue health surfaces agree after promotion.  
+  Acceptance criteria: the repo stops having zero ready work; there is a first real runnable queue entry.  
   Verify with `go run . list --state ready --format context`, `go run . doctor`, and `go run . status`.
 
-- [ ] NS-06 — Remove the remaining runtime namespace and security-naming residue from the normal execution path: write failing tests proving that managed-run state resolution no longer depends on `DOCKET_HOME`, that runtime artifacts are stored under the repo runtime namespace, and that user-facing run/status/start output no longer uses `security.*` terminology, then simplify `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, and any shared runstate helpers to match the new product language.  
-  Code paths: `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, `internal/runstate/`, and any helper packages still emitting legacy operation names.  
-  TDD: start with failing command tests and focused unit tests for namespace resolution before deleting fallback behavior.  
-  Tests must cover: repo-local runtime state with and without `DOCKET_HOME` set; status/start output free of “Security enforcement” phrasing; runtime artifacts written to the repo-local namespace; no regression for managed-run lifecycle commands that depend on runtime state lookup.  
-  Acceptance criteria: the normal runtime path is fully repo-local; user-facing execution surfaces stop leaking security product language; backward-compatibility shims are deleted unless they are strictly required for reading existing artifacts.  
+- [ ] NS-14 — Expand the ready queue to at least five groomed serial leaf tickets: continue grooming and promotion until there is a small ordered ready queue suitable for dogfooding serial autorun.  
+  Code paths: `.docket/tickets/`, `.docket/manifest.json`, readiness tooling.  
+  TDD: add regression tests only if ticket-tooling bugs are uncovered while grooming.  
+  Tests must cover: all promoted tickets are leaves; no coordination blockers; each ticket contains AC and verification commands; queue truthfulness still holds after the larger queue is created.  
+  Acceptance criteria: the repo has a real serial backlog, not just one emergency ready ticket.  
+  Verify with `go run . list --state ready --format context`, `go run . doctor`, and `go run . status`.
+
+- [ ] NS-15 — Add failing tests that capture the remaining repo-local runtime namespace drift: write red tests proving that managed-run state lookup still varies with `DOCKET_HOME` or still emits legacy `security.*` names in runtime-facing output.  
+  Code paths: `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, `internal/runstate/`.  
+  TDD: tests only in this task.  
+  Tests must cover: repo-local runtime state with and without `DOCKET_HOME`; user-facing start/status output; runtime event naming or routing labels that still reference security concepts.  
+  Acceptance criteria: the remaining namespace-language debt is captured in executable tests before cleanup.  
   Verify with `go test ./cmd ./internal/runstate -count=1`.
 
-- [ ] NS-07 — Remove review and QA hook semantics from the default runtime contract so optional reviewer passes stop shaping the product surface: write failing tests showing that canonical capabilities, default hooks, and help output no longer advertise `ticket.review` or `ticket.qa` as core lifecycle events, then simplify the default hook/capability contract while keeping any optional reviewer implementation behind explicit opt-in paths only.  
-  Code paths: `internal/capabilities/canonical.go`, `internal/hooks/core.go`, `cmd/helpjson.go`, `cmd/start.go`, and any optional reviewer helpers that still leak review semantics into default output.  
-  TDD: add failing unit tests for capability and hook manifests and failing command tests for help output before removing the legacy events.  
-  Tests must cover: canonical capabilities output; hook list/show output; help JSON output; start/run help text; optional reviewer pass still functions when explicitly requested, without reintroducing review as a required lifecycle concept.  
-  Acceptance criteria: the default runtime contract talks about planning, execution, validation, and optional review only by exception; no core capability or default hook event requires review semantics.  
+- [ ] NS-16 — Remove `DOCKET_HOME` fallback and security-naming residue from the normal runtime path: implement the cleanup proven by `NS-15` so runtime state is fully repo-local and normal user-facing output stops leaking the removed security model.  
+  Code paths: `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, `internal/runstate/`.  
+  TDD: implement against the failing tests from `NS-15`; add helper-level tests if new namespace logic is introduced.  
+  Tests must cover: repo-local runtime state lookup; status/start output free of security wording; no regression for run lifecycle commands.  
+  Acceptance criteria: the serial runtime path is completely described in runtime terms, not security terms.  
+  Verify with `go test ./cmd ./internal/runstate -count=1`.
+
+- [ ] NS-17 — Add failing tests for removing review and QA events from the default capability and hook contract: write red tests showing that canonical capabilities, hook manifests, and help output still expose `ticket.review` or `ticket.qa` as core lifecycle events.  
+  Code paths: `internal/capabilities/canonical.go`, `internal/hooks/core.go`, `cmd/helpjson.go`, optional reviewer help paths.  
+  TDD: tests only in this task.  
+  Tests must cover: canonical capability manifest; default hook list/show output; help JSON; start/run help text.  
+  Acceptance criteria: the remaining review/QA contract leakage is codified in failing tests before removal.  
   Verify with `go test ./cmd ./internal/capabilities ./internal/hooks -count=1`.
 
-- [ ] NS-08 — Delete premature parallelism surfaces from the product until the serial runtime is proven: write failing tests showing that user-facing commands can no longer advertise `status --parallel` or accept `parallel-safe` as a first-class planning relation, then remove or explicitly retire those surfaces in `cmd/status.go`, `cmd/link.go`, any relation validation helpers, and the relevant help/docs so the product stops promising a scheduler it does not yet have.  
-  Code paths: `cmd/status.go`, `cmd/link.go`, ticket relation validation under `internal/store/local/` or `internal/ticket/`, `cmd/helpjson.go`, and any docs/help strings that still teach parallel planning.  
-  TDD: begin with failing command tests for help/output/validation, then delete or hard-reject the parallel surfaces.  
-  Tests must cover: `status` help/output no longer exposes parallel matrix views; linking with `parallel-safe` is rejected or migrated; existing non-parallel relations continue to work; help JSON and README/docs no longer describe safe-parallel planning as active product behavior.  
-  Acceptance criteria: the shipped product surface is honest about being serial-first; there is no default CLI path that implies a mature parallel scheduler exists today.  
+- [ ] NS-18 — Remove review and QA hook semantics from the default product surface while preserving optional reviewer behavior behind explicit opt-in: implement the cleanup defined in `NS-17`.  
+  Code paths: `internal/capabilities/canonical.go`, `internal/hooks/core.go`, `cmd/helpjson.go`, `cmd/start.go`, optional reviewer helpers.  
+  TDD: implement against the red tests from `NS-17`; add focused tests if explicit opt-in reviewer behavior needs separate coverage.  
+  Tests must cover: no default `ticket.review`/`ticket.qa` events; explicit reviewer path still works when requested; no regression in command discovery or help output.  
+  Acceptance criteria: planning, execution, and validation are the default lifecycle; review is optional and not a core contract event.  
+  Verify with `go test ./cmd ./internal/capabilities ./internal/hooks -count=1`.
+
+- [ ] NS-19 — Add failing tests that lock down the removal of premature parallelism surfaces: write red tests proving that `status --parallel`, `parallel-safe` relations, and related help output are still exposed.  
+  Code paths: `cmd/status.go`, `cmd/link.go`, relation validation under `internal/store/local/` or `internal/ticket/`, `cmd/helpjson.go`.  
+  TDD: tests only in this task.  
+  Tests must cover: `status` help/output; relation validation for `parallel-safe`; help JSON; any README/help strings surfaced through tests.  
+  Acceptance criteria: the product’s premature parallelism promises are captured in failing tests before deletion.  
   Verify with `go test ./cmd ./internal/store/local ./internal/ticket -count=1`.
 
-- [ ] NS-09 — Add runtime artifact reconciliation and legacy checkpoint cleanup so stale runs stop polluting the repo and resume surfaces: write failing tests for a reconciliation path that detects orphan run directories, stale recoverable statuses, missing briefs, and checkpoints still carrying old workflow state names, then implement a repo-local cleanup/repair command or doctor sub-check that can report and, when asked, repair or archive those artifacts safely.  
-  Code paths: `.docket/local/runtime/`, `.docket/checkpoints/`, `internal/runstate/`, `internal/agentrun/runtime/store.go`, `cmd/doctor.go`, and a new or expanded runtime-maintenance command under `cmd/`.  
-  TDD: add failing unit tests around artifact scanning/repair logic and failing command tests for dry-run versus apply behavior before implementing cleanup.  
-  Tests must cover: orphan agent-run directories; recoverable runs with no live process; missing run briefs; checkpoints using legacy state names; dry-run output with no mutation; apply mode that archives, repairs, or prunes safely; idempotent repeated execution.  
-  Acceptance criteria: stale runtime artifacts are visible and repairable; resume/status surfaces are not polluted by dead runs from old refactors; the repo can be brought to a clean runtime baseline before dogfooding autorun.  
+- [ ] NS-20 — Remove `status --parallel` and retire `parallel-safe` as an active planning relation: implement the serial-first cleanup proven by `NS-19` so the shipped CLI no longer implies a mature scheduler exists.  
+  Code paths: `cmd/status.go`, `cmd/link.go`, relation validation, `cmd/helpjson.go`, any docs/help copy touched by tested command output.  
+  TDD: implement against the failing tests from `NS-19`; add migration or validation tests if existing stored relations need graceful rejection.  
+  Tests must cover: command help/output no longer exposes parallel views; `parallel-safe` is rejected or explicitly migrated; existing supported relations continue to work.  
+  Acceptance criteria: the CLI is honest about being serial-first today.  
+  Verify with `go test ./cmd ./internal/store/local ./internal/ticket -count=1`.
+
+- [ ] NS-21 — Add failing tests for runtime artifact scanning and dry-run reporting: write red tests for a new cleanup or doctor path that detects orphan run directories, stale recoverable statuses, missing briefs, and legacy checkpoints without mutating anything in dry-run mode.  
+  Code paths: `.docket/local/runtime/`, `.docket/checkpoints/`, `internal/runstate/`, `internal/agentrun/runtime/store.go`, `cmd/doctor.go` or a new maintenance command.  
+  TDD: tests only in this task.  
+  Tests must cover: orphan run directories; stale recoverable statuses; missing run briefs; checkpoints still carrying legacy states; dry-run output with zero mutations.  
+  Acceptance criteria: there is an executable test contract for runtime artifact reconciliation before implementation begins.  
   Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
 
-- [ ] NS-10 — Prove run-brief durability and commit-summary closeout end to end under both success and failure paths: write failing tests showing that a successful managed run leaves a durable repo-local brief plus a commit summary, and that stuck or validation-failed runs leave enough persisted state for `run-status` and resume flows to explain what happened without the ephemeral runtime directory, then complete any missing wiring in the run-validation/orchestration and VCS layers.  
-  Code paths: `internal/agentrun/validate/service.go`, `internal/agentrun/orchestrate/service.go`, `internal/agentrun/runtime/store.go`, `internal/vcs/git_provider.go`, `internal/git/merge.go`, `cmd/run_ticket.go`.  
-  TDD: begin with failing unit/integration tests in the agentrun and VCS packages before touching production code.  
-  Tests must cover: successful run writes brief and commit summary; validation rejection writes a failure brief with actionable next step; stuck run writes recoverable status and visible resume metadata; `run-status` can surface the brief after cleanup; commit body contains the compact run summary block.  
-  Acceptance criteria: serial autorun leaves durable human- and machine-readable artifacts on every closeout path; checking back hours later does not require reading transient agent logs to understand what happened.  
+- [ ] NS-22 — Implement runtime artifact reconciliation reporting and dry-run output: build the non-mutating scan/report behavior defined in `NS-21`.  
+  Code paths: `internal/runstate/`, `internal/agentrun/runtime/store.go`, `cmd/doctor.go` or new maintenance command.  
+  TDD: implement against the failing tests from `NS-21`; add narrower unit tests for scanning helpers if needed.  
+  Tests must cover: discovery of each artifact problem type; stable dry-run output; no mutation to runtime/checkpoint files in report mode.  
+  Acceptance criteria: operators can see stale runtime damage clearly before repairing it.  
+  Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
+
+- [ ] NS-23 — Implement runtime artifact repair/apply mode so stale artifacts can be archived or cleaned safely: add the mutating half of the reconciliation path, including idempotent cleanup behavior.  
+  Code paths: same as `NS-22`, plus any archive/prune helpers.  
+  TDD: extend the `NS-21`/`NS-22` tests with red apply-mode cases before implementing the mutating path.  
+  Tests must cover: archiving or pruning stale run dirs; handling missing briefs; rewriting or archiving legacy checkpoints; idempotent repeated repair runs; safe behavior when nothing needs cleanup.  
+  Acceptance criteria: the repo can be brought to a clean runtime baseline before dogfooding autorun.  
+  Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
+
+- [ ] NS-24 — Add failing tests for durable success-path run briefs and commit summaries: write red tests proving that a successful managed run must leave both a repo-local brief and a compact commit summary block that survives ephemeral runtime cleanup.  
+  Code paths: `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `internal/vcs/git_provider.go`, `internal/git/merge.go`, `cmd/run_ticket.go`.  
+  TDD: tests only in this task.  
+  Tests must cover: successful run brief persistence; commit message summary block; `run-status` after runtime cleanup; brief contents include outcome, ticket, validation, and next step.  
+  Acceptance criteria: the success-path durability contract is captured in failing tests before more runtime changes are made.  
   Verify with `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1`.
 
-- [ ] NS-11 — Reposition the primary entry points so the repo advertises “executable backlog runtime” instead of “git-native ticket tracker with extras”: write failing command tests for root help and help JSON, then update `cmd/root.go`, `cmd/helpjson.go`, `README.md`, `docs/README.md`, and any short product copy so the first story is grooming, validation, and serial autorun, not historical security/review/parallel features.  
-  Code paths: `cmd/root.go`, `cmd/helpjson.go`, `README.md`, `docs/README.md`, and any other top-level discoverability docs surfaced by install/help flows.  
-  TDD: add failing command tests for root/help output before changing CLI copy; docs do not require tests unless a doc drift check already exists.  
-  Tests must cover: root help summary; help JSON product description; no primary help copy leading with secure-mode, review, or parallel planning; command discovery output consistent with the new runtime story.  
-  Acceptance criteria: a new user landing on the CLI or README sees the north-star product immediately; legacy concepts only appear as explicit non-core or historical context if they appear at all.  
-  Verify with `go test ./cmd -count=1` and `rg -n 'security|workflow lock|parallel-safe|ticket\\.review|ticket\\.qa' README.md docs cmd/helpjson.go cmd/root.go`.
+- [ ] NS-25 — Implement durable success-path run briefs and commit-summary closeout: complete the production wiring required by `NS-24`.  
+  Code paths: `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `internal/vcs/git_provider.go`, `internal/git/merge.go`, `cmd/run_ticket.go`.  
+  TDD: implement against the red tests from `NS-24`; add helper tests if summary formatting or brief storage is extracted.  
+  Tests must cover: success brief written; commit summary written; `run-status` reads the persisted brief; cleanup does not destroy the closeout artifact.  
+  Acceptance criteria: a successful unattended run leaves a durable human- and machine-readable checkpoint.  
+  Verify with `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1`.
 
-- [ ] NS-12 — Dogfood the serial autorun loop on this repository with the newly curated ready queue and close the defects it exposes: run the repo through a real single-lane autorun cycle, require test-first fixes for every runtime defect uncovered, and do not stop until at least five groomed leaf tickets have been processed cleanly enough that the resulting status, briefs, commit summaries, and backlog state make sense without manual reconstruction.  
-  Code paths: whatever the live run exposes, most likely `cmd/start.go`, `cmd/run_ticket.go`, `internal/agentrun/`, `internal/workable/`, `.docket/tickets/`, and `.docket/local/runtime/`; add regression tests in the precise package that owns each defect before fixing it.  
-  TDD: every defect uncovered during dogfooding must get a failing regression test before the fix, even if the defect appears in an integration path first.  
-  Tests must cover: serial selection consumes the intended ready tickets in order; successful runs land in `validated`; failed or stuck runs leave durable artifacts and honest status; backlog state after the run still satisfies queue truthfulness; no hidden security/review/parallel assumptions reappear under real usage.  
-  Acceptance criteria: this repo can actually use Docket the way the north star describes; there is a real proof run, not just architecture and docs; the runtime can be left alone for hours and still be inspectable when revisited.  
-  Verify with `go test ./... -count=1 -timeout 120s`, `go run . doctor`, `go run . status`, `go run . list --state ready --format context`, and a documented serial `docket start` or `docket autorun` dogfood run.
+- [ ] NS-26 — Add failing tests for durable failure-path and stuck-run artifacts: write red tests proving that validation failures and stuck runs must leave recoverable repo-local state with visible next-step guidance even after ephemeral runtime cleanup.  
+  Code paths: `internal/agentrun/orchestrate/service.go`, `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `cmd/run_ticket.go`.  
+  TDD: tests only in this task.  
+  Tests must cover: validation failure brief; stuck run recoverable status; resume metadata visible through `run-status`; failure artifact survives cleanup.  
+  Acceptance criteria: failure-path durability is locked down before implementation changes are made.  
+  Verify with `go test ./internal/agentrun/... ./cmd -count=1`.
+
+- [ ] NS-27 — Implement durable failure-path and stuck-run artifacts so resume flows are honest after cleanup: complete the production changes required by `NS-26`.  
+  Code paths: `internal/agentrun/orchestrate/service.go`, `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `cmd/run_ticket.go`.  
+  TDD: implement against the red tests from `NS-26`; add narrower unit tests if the status/brief schema changes.  
+  Tests must cover: validation rejection artifact; stuck-run artifact; resume guidance shown through status; no regression to success-path artifacts.  
+  Acceptance criteria: hours later, a user can understand a failed or stuck run without reopening transient agent logs.  
+  Verify with `go test ./internal/agentrun/... ./cmd -count=1`.
+
+- [ ] NS-28 — Add failing tests for root/help copy that still presents Docket as a generic git-native tracker with historical extras: write red tests for root help and help JSON before changing product-facing copy.  
+  Code paths: `cmd/root.go`, `cmd/helpjson.go`.  
+  TDD: tests only in this task.  
+  Tests must cover: root help summary; help JSON product description; absence of security/review/parallel-first framing in the primary description.  
+  Acceptance criteria: the desired product story is locked down in tests before copy changes start.  
+  Verify with `go test ./cmd -run 'Test(HelpJSON|Root)' -count=1`.
+
+- [ ] NS-29 — Reposition CLI entry-point copy around executable backlog runtime semantics: implement the copy changes proven by `NS-28` so the CLI leads with grooming, validation, and serial autorun.  
+  Code paths: `cmd/root.go`, `cmd/helpjson.go`, any related discovery/help surfaces under `cmd/`.  
+  TDD: implement against the red tests from `NS-28`; add smaller tests if discovery output also needs coverage.  
+  Tests must cover: root help; help JSON; discovery output consistent with the new runtime story.  
+  Acceptance criteria: a new CLI user immediately sees the north-star product instead of the historical tracker/security framing.  
+  Verify with `go test ./cmd -count=1`.
+
+- [ ] NS-30 — Rewrite top-level README and docs index copy so repository entry points match the runtime product story: update the top docs surfaces after the CLI wording is fixed.  
+  Code paths: `README.md`, `docs/README.md`, and any top-level docs index sections linked from those files.  
+  TDD: docs task unless an existing doc drift test fails; if a tested doc surface exists, add the failing test first.  
+  Tests must cover: README/docs no longer lead with security, workflow-lock, or parallel scheduler claims; top-level docs point to the north-star runtime direction.  
+  Acceptance criteria: the repo landing pages tell the same story as the CLI.  
+  Verify with `rg -n 'security|workflow lock|parallel-safe|ticket\\.review|ticket\\.qa' README.md docs`.
+
+- [ ] NS-31 — Run the first real serial dogfood cycle on the curated ready queue and capture every runtime defect as a regression test before fixing it: use the ready queue from `NS-14` to exercise a real unattended run on this repo, and for every defect that appears, add a failing regression test in the owning package before fixing the bug.  
+  Code paths: whatever the live run exposes, most likely `cmd/start.go`, `cmd/run_ticket.go`, `internal/agentrun/`, `internal/workable/`, `.docket/tickets/`, `.docket/local/runtime/`.  
+  TDD: mandatory defect-first regression tests for every bug discovered during dogfooding.  
+  Tests must cover: ticket selection order; transition to `validated`; durable run artifacts; honest queue/status reporting under real usage; no hidden security/review/parallel assumptions resurfacing.  
+  Acceptance criteria: the first real serial run is completed with all discovered defects converted into regressions and fixed.  
+  Verify with `go test ./... -count=1 -timeout 120s`, `go run . doctor`, `go run . status`, and a documented serial `go run . start` or equivalent autorun session.
+
+- [ ] NS-32 — Repeat the dogfood cycle until at least five groomed leaf tickets have been processed cleanly enough to trust the serial runtime: keep running, fixing, and re-verifying until the repo proves the north-star workflow on its own backlog rather than just on isolated tests.  
+  Code paths: the live backlog, runtime surfaces, and any package that fails under real use; each new defect still requires a regression test before the fix.  
+  TDD: continue the `NS-31` rule for every new defect uncovered in repeated runs.  
+  Tests must cover: at least five real ticket executions; successful and failed paths remain inspectable; queue health remains truthful after repeated runs; backlog state still makes sense without manual reconstruction.  
+  Acceptance criteria: this repo can actually use Docket the way the north star describes; the proof is repeated clean serial execution, not just architecture and documentation.  
+  Verify with `go test ./... -count=1 -timeout 120s`, `go run . doctor`, `go run . status`, `go run . list --state ready --format context`, and preserved run-status/commit-summary artifacts from the proof run.
