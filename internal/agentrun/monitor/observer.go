@@ -97,7 +97,7 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 	waited := false
 	stdoutClosed := false
 	stderrClosed := false
-	commandInFlight := false
+	commandInFlight := map[string]struct{}{}
 	for {
 		if waited && stdoutClosed && stderrClosed {
 			return o.finalizeObservation(input, status, waitErr, stdoutLines, stderrLines)
@@ -145,7 +145,7 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 				default:
 				}
 			}
-			timer.Reset(nextInactivityTimeout(timeout, commandInFlight))
+			timer.Reset(nextInactivityTimeout(timeout, len(commandInFlight) > 0))
 		case err := <-waitCh:
 			waited = true
 			waitErr = err
@@ -437,10 +437,11 @@ func llmMessageCountFromLine(line string) int {
 	}
 }
 
-func updateCommandExecutionState(current bool, line string) bool {
+func updateCommandExecutionState(current map[string]struct{}, line string) map[string]struct{} {
 	var event struct {
 		Type string `json:"type"`
 		Item struct {
+			ID   string `json:"id"`
 			Type string `json:"type"`
 		} `json:"item"`
 	}
@@ -450,11 +451,20 @@ func updateCommandExecutionState(current bool, line string) bool {
 	if event.Item.Type != "command_execution" {
 		return current
 	}
+	if current == nil {
+		current = map[string]struct{}{}
+	}
+	id := strings.TrimSpace(event.Item.ID)
+	if id == "" {
+		return current
+	}
 	switch event.Type {
 	case "item.started":
-		return true
+		current[id] = struct{}{}
+		return current
 	case "item.completed":
-		return false
+		delete(current, id)
+		return current
 	default:
 		return current
 	}

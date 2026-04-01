@@ -560,6 +560,51 @@ func TestObserverAllowsLongRunningCommandExecutionToFinish(t *testing.T) {
 	}
 }
 
+func TestObserverKeepsLongRunningCommandAliveWhenShortProbeCommandsFinish(t *testing.T) {
+	t.Parallel()
+
+	stdoutR, stdoutW := io.Pipe()
+	stderrR, stderrW := io.Pipe()
+	waitCh := make(chan error, 1)
+	handle := &fakeHandle{
+		stdout: stdoutR,
+		stderr: stderrR,
+		waitCh: waitCh,
+	}
+
+	go func() {
+		defer stdoutW.Close()
+		defer stderrW.Close()
+		_, _ = io.WriteString(stdoutW, "{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"/bin/zsh -lc \\\"go test ./...\\\"\",\"status\":\"in_progress\"}}\n")
+		time.Sleep(5 * time.Millisecond)
+		_, _ = io.WriteString(stdoutW, "{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"/bin/zsh -lc \\\"ps -Ao pid\\\"\",\"status\":\"in_progress\"}}\n")
+		time.Sleep(5 * time.Millisecond)
+		_, _ = io.WriteString(stdoutW, "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"/bin/zsh -lc \\\"ps -Ao pid\\\"\",\"status\":\"completed\",\"aggregated_output\":\"123\"}}\n")
+		time.Sleep(50 * time.Millisecond)
+		_, _ = io.WriteString(stdoutW, "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"/bin/zsh -lc \\\"go test ./...\\\"\",\"status\":\"completed\",\"aggregated_output\":\"ok\"}}\n")
+		_, _ = io.WriteString(stdoutW, "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"RESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\"}}\n")
+		waitCh <- nil
+	}()
+
+	obs, err := New().Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer},
+		Timeout: 10 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.TimedOut {
+		t.Fatalf("expected overlapping long-running command to complete without timeout: %#v", obs)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	if handle.killed {
+		t.Fatalf("expected observer to leave overlapping commands alive")
+	}
+}
+
 func TestObserverPersistsVisibleTranscriptAndStatusForActiveRun(t *testing.T) {
 	t.Parallel()
 
