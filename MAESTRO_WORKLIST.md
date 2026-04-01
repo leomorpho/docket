@@ -64,12 +64,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/store/local ./internal/workable -count=1`.
   Note: Added `ready --promote` on top of a shared `Store.PromoteReady` path so passing draft leaf tickets move to `ready` through `UpdateTicket`, with manifest refresh and explicit index sync before rechecking queue visibility. Covered success, contract failure, non-leaf, already-ready, manifest/index refresh, and coordination-ticket rejection in command tests. Targeted `go test ./cmd -run 'TestReady(PromoteCommand|CheckCommand)' -count=1` and `go test ./internal/store/local -run 'TestValidateFile_RejectsCoordinationTicketInRunnableState|TestValidateFile_UsesWorkflowRolesForHandoffAndComments' -count=1` pass; the broader `go test ./cmd ./internal/store/local ./internal/workable -count=1` run still hits pre-existing `cmd/update` and proof-pipeline queue-invariant failures outside this task.
 
-- [ ] NS-08 — Add failing migration tests for a repo shaped like the current one rather than the pristine default: write red tests proving that `workflow-migrate --dry-run` and `--apply` currently fail on custom states, stale legacy state names, and current manifest data.  
+- [x] NS-08 — Add failing migration tests for a repo shaped like the current one rather than the pristine default: write red tests proving that `workflow-migrate --dry-run` and `--apply` currently fail on custom states, stale legacy state names, and current manifest data.  
   Code paths: `cmd/workflow_migrate.go`, `.docket/config.json`-style fixtures, `.docket/manifest.json`-style fixtures, store/workflow helpers.  
   TDD: tests only in this task; no production fixes yet.  
   Tests must cover: custom `stale` state retained; legacy states in tickets; invalid blockers; dry-run no-op behavior; apply mode fixture rewrite expectations.  
   Acceptance criteria: the real migration gap is captured in reproducible tests instead of anecdotal failure on the live repo.  
   Verify with `go test ./cmd -run 'TestWorkflowMigrate' -count=1`.
+  Note: Added current-repo-shaped red coverage in `cmd/workflow_migrate_test.go` for explicit `workflow-migrate --dry-run` and `--apply`, using a north-star-plus-`stale` config, legacy ticket states, coordination/completed blockers, and manifest assertions. The targeted run now fails for the intended reasons: `--dry-run` is not implemented, and `--apply` still rejects custom workflow states like `stale`.
 
 - [ ] NS-09 — Expand `workflow-migrate` to map legacy state names into the north-star workflow while preserving intentional custom states: implement the config and ticket state-mapping layer required by the failing tests from `NS-08`.  
   Code paths: `cmd/workflow_migrate.go`, `internal/ticket/`, `internal/store/local/`.  
