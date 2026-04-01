@@ -96,12 +96,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go run . list --state draft --format table` and `go run . validate`.
   Note: Archived the draft security/governance branch tickets (`TKT-172`, `TKT-174`, `TKT-175`, `TKT-194`, `TKT-204`, and `TKT-207`), detached the surviving workflow and AI epics from archived security parents, and rewrote `TKT-177`, `TKT-328`, and `TKT-332` so the active draft backlog now describes runtime/workflow work without secure approval or enforcement scope. Verified with `go run . list --state draft --format table` and `go run . validate`.
 
-- [ ] NS-12 — Audit and reconcile draft tickets that describe work already landed in code: inspect the remaining draft tickets, close or rewrite the ones that now mismatch the implementation, and keep the backlog aligned with the shipped product.  
+- [x] NS-12 — Audit and reconcile draft tickets that describe work already landed in code: inspect the remaining draft tickets, close or rewrite the ones that now mismatch the implementation, and keep the backlog aligned with the shipped product.  
   Code paths: `.docket/tickets/`, `.docket/manifest.json`; product-code paths only if backlog grooming uncovers defects.  
   TDD: only add tests if the tooling breaks while processing corrected ticket data.  
   Tests must cover: no draft ticket duplicates already-landed workflow/runtime work; archived or rewritten tickets remain schema-valid; manifest indices remain consistent.  
   Acceptance criteria: the draft backlog becomes a truthful source of pending work instead of a historical graveyard of already-done tasks.  
   Verify with `go run . list --state draft --format table`, `go run . show TKT-310`, `go run . show TKT-329`, and `go run . validate`.
+  Note: Closed already-landed workflow tickets `TKT-317`, `TKT-319`, `TKT-327`, and `TKT-329` as completed backlog items, detached `TKT-312` from archived security epic `TKT-174`, and rewrote `TKT-310`, `TKT-312`, and `TKT-332` so the remaining draft workflow backlog describes residual diagnostics/parity work instead of shipped behavior.
 
 - [ ] NS-13 — Promote the first two runnable leaf tickets into `ready` and prove the queue becomes non-empty: use the readiness flow to groom and promote two concrete leaf tickets, fixing ticket content where needed so they satisfy the ready contract.  
   Code paths: `.docket/tickets/`, `.docket/manifest.json`, readiness command from `NS-05` to `NS-07`.  

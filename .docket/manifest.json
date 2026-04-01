@@ -1703,8 +1703,7 @@
     "TKT-312": {
       "title": "[Epic] Unify workflow-driven readiness across CLI, MCP, and UI surfaces",
       "state": "draft",
-      "priority": 1,
-      "parent": "TKT-174"
+      "priority": 1
     },
     "TKT-313": {
       "title": "Define workflow config v1 schema for semantic roles, per-state behavior, and presentation metadata",
@@ -1732,7 +1731,7 @@
     },
     "TKT-317": {
       "title": "Refactor ticket transition validation to use the shared workflow evaluator",
-      "state": "draft",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-312"
     },
@@ -1744,7 +1743,7 @@
     },
     "TKT-319": {
       "title": "Refactor docket start to use config-defined startable states and evaluator-based readiness",
-      "state": "draft",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-312"
     },
@@ -1792,7 +1791,7 @@
     },
     "TKT-327": {
       "title": "Add fallback behavior for repositories missing explicit workflow config",
-      "state": "draft",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-310"
     },
@@ -1804,7 +1803,7 @@
     },
     "TKT-329": {
       "title": "Refactor ticket-apply and backlog-apply validation to accept config-defined workflow states",
-      "state": "draft",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
