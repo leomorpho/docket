@@ -375,7 +375,7 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 		return agentrun.TicketRunSummary{}, fmt.Errorf("no active worktree recorded for %s", ticketID)
 	}
 	resumePrompt := buildResumePrompt(prompt, tkt, transcript, status)
-	started, err := s.startImplementerContinuation(ctx, ticketID, worktreePath, branch, status.SessionID, resumePrompt)
+	started, err := s.startImplementerContinuation(ctx, ticketID, worktreePath, branch, resumePrompt)
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
@@ -384,6 +384,9 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 		Record:  started.Record,
 		Timeout: s.monitorTimeout(),
 	})
+	if err == nil && obs.TimedOut && s.runtime != nil {
+		obs, err = s.resumeTimedOutImplementer(ctx, ticketID, worktreePath, branch, 1)
+	}
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
@@ -740,7 +743,7 @@ func (s *Service) startAutoResumeAttempt(ctx context.Context, ticketID, worktree
 		return StartedRun{}, err
 	}
 	resumePrompt := buildResumePrompt(prompt, tkt, transcript, status)
-	started, err := s.startImplementerContinuation(ctx, ticketID, worktreePath, branch, status.SessionID, resumePrompt)
+	started, err := s.startImplementerContinuation(ctx, ticketID, worktreePath, branch, resumePrompt)
 	if err != nil {
 		return StartedRun{}, err
 	}
@@ -757,46 +760,8 @@ func (s *Service) startAutoResumeAttempt(ctx context.Context, ticketID, worktree
 	return started, nil
 }
 
-func (s *Service) startImplementerContinuation(ctx context.Context, ticketID, worktreePath, branch, sessionID, prompt string) (StartedRun, error) {
-	if resumable, ok := s.adapter.(agentrun.ResumableAdapter); ok && strings.TrimSpace(sessionID) != "" {
-		return s.startResumedFollowup(ctx, ticketID, worktreePath, branch, sessionID, agentrun.RoleImplementer, prompt, resumable)
-	}
+func (s *Service) startImplementerContinuation(ctx context.Context, ticketID, worktreePath, branch, prompt string) (StartedRun, error) {
 	return s.startFollowup(ctx, ticketID, worktreePath, branch, agentrun.RoleImplementer, prompt, s.adapter)
-}
-
-func (s *Service) startResumedFollowup(ctx context.Context, ticketID, worktreePath, branch, sessionID string, role agentrun.Role, prompt string, adapter agentrun.ResumableAdapter) (StartedRun, error) {
-	if adapter == nil {
-		return StartedRun{}, fmt.Errorf("adapter is required")
-	}
-	if err := s.namespace.RecordRunStart(s.repoRoot, ticketID, s.actor, worktreePath, branch, ""); err != nil {
-		return StartedRun{}, err
-	}
-	spec := agentrun.RunSpec{
-		TicketID:     ticketID,
-		Role:         role,
-		RepoRoot:     s.repoRoot,
-		WorktreePath: worktreePath,
-		Branch:       branch,
-		Prompt:       prompt,
-	}
-	handle, record, err := adapter.Resume(ctx, sessionID, spec)
-	if err != nil {
-		return StartedRun{}, err
-	}
-	if err := agentrun.WriteRunRecord(s.repoRoot, record); err != nil {
-		return StartedRun{}, err
-	}
-	if s.runtime != nil {
-		if err := s.runtime.Init(record, spec.Prompt, s.monitorTimeout()); err != nil {
-			return StartedRun{}, err
-		}
-	}
-	return StartedRun{
-		Handle:       handle,
-		Record:       record,
-		WorktreePath: worktreePath,
-		Branch:       branch,
-	}, nil
 }
 
 func (s *Service) cleanupRuntime(ticketID string) error {

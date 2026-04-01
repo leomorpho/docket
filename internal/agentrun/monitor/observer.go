@@ -44,6 +44,8 @@ type lineEvent struct {
 	done   bool
 }
 
+const commandExecutionTimeoutMultiplier = 20
+
 func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput) (agentrun.Observation, error) {
 	if input.Handle == nil {
 		return agentrun.Observation{}, fmt.Errorf("process handle is required")
@@ -95,6 +97,7 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 	waited := false
 	stdoutClosed := false
 	stderrClosed := false
+	commandInFlight := false
 	for {
 		if waited && stdoutClosed && stderrClosed {
 			return o.finalizeObservation(input, status, waitErr, stdoutLines, stderrLines)
@@ -134,6 +137,7 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 			} else {
 				stderrLines = append(stderrLines, event.line)
 			}
+			commandInFlight = updateCommandExecutionState(commandInFlight, event.line)
 			o.applyLine(input.Record.TicketID, event.stream, event.line, &status)
 			if !timer.Stop() {
 				select {
@@ -141,7 +145,7 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 				default:
 				}
 			}
-			timer.Reset(timeout)
+			timer.Reset(nextInactivityTimeout(timeout, commandInFlight))
 		case err := <-waitCh:
 			waited = true
 			waitErr = err
@@ -393,9 +397,17 @@ func failureResult(record agentrun.RunRecord, reason string) agentrun.Result {
 	}
 }
 
+func nextInactivityTimeout(base time.Duration, commandInFlight bool) time.Duration {
+	if !commandInFlight || base <= 0 {
+		return base
+	}
+	return base * commandExecutionTimeoutMultiplier
+}
+
 type codexJSONItem struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type   string `json:"type"`
+	Text   string `json:"text"`
+	Status string `json:"status"`
 }
 
 type codexJSONEvent struct {
@@ -422,6 +434,29 @@ func llmMessageCountFromLine(line string) int {
 		return 1
 	default:
 		return 0
+	}
+}
+
+func updateCommandExecutionState(current bool, line string) bool {
+	var event struct {
+		Type string `json:"type"`
+		Item struct {
+			Type string `json:"type"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &event); err != nil {
+		return current
+	}
+	if event.Item.Type != "command_execution" {
+		return current
+	}
+	switch event.Type {
+	case "item.started":
+		return true
+	case "item.completed":
+		return false
+	default:
+		return current
 	}
 }
 

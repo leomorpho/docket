@@ -1045,7 +1045,7 @@ func TestServiceResumeTicketUsesHungRuntimeStateAndCleansUpOnSuccess(t *testing.
 	}
 }
 
-func TestServiceResumeTicketUsesResumableAdapterWhenSessionIDIsKnown(t *testing.T) {
+func TestServiceResumeTicketStartsFreshSessionWhenPriorSessionIDIsKnown(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := buildGitRepoForOrchestrationTest(t)
@@ -1127,8 +1127,8 @@ func TestServiceResumeTicketUsesResumableAdapterWhenSessionIDIsKnown(t *testing.
 	if summary.Status != agentrun.StatusDone {
 		t.Fatalf("unexpected summary: %#v", summary)
 	}
-	if adapter.resumedSessionID != "thread-actual-123" {
-		t.Fatalf("Resume() used session %q, want thread-actual-123", adapter.resumedSessionID)
+	if adapter.resumedSessionID != "" {
+		t.Fatalf("Resume() should not be used for run-resume, got session %q", adapter.resumedSessionID)
 	}
 }
 
@@ -1227,8 +1227,8 @@ func TestServiceRunTicketLeavesRecoverableRuntimeForStuckResult(t *testing.T) {
 	if second.Status != agentrun.StatusDone {
 		t.Fatalf("unexpected resume summary: %#v", second)
 	}
-	if adapter.resumedSessionID != "session-380" {
-		t.Fatalf("Resume() used session %q, want session-380", adapter.resumedSessionID)
+	if adapter.resumedSessionID != "" {
+		t.Fatalf("Resume() should not be used for run-resume, got session %q", adapter.resumedSessionID)
 	}
 	if _, ok, err := runtimeStore.LoadStatus("TKT-394"); err != nil || ok {
 		t.Fatalf("expected runtime cleanup after successful resume, ok=%v err=%v", ok, err)
@@ -1397,8 +1397,8 @@ func TestServiceResumeTicketUsesDurableRecoverableArtifactAfterRuntimeCleanup(t 
 	if second.Status != agentrun.StatusDone {
 		t.Fatalf("unexpected resume summary: %#v", second)
 	}
-	if adapter.resumedSessionID != "session-380" {
-		t.Fatalf("Resume() used session %q, want session-380", adapter.resumedSessionID)
+	if adapter.resumedSessionID != "" {
+		t.Fatalf("Resume() should not be used for run-resume, got session %q", adapter.resumedSessionID)
 	}
 }
 
@@ -1629,7 +1629,7 @@ func TestServiceRunTicketAutoResumesHungImplementer(t *testing.T) {
 		Monitor:   monitor.New(monitor.Dependencies{Runtime: runtimeStore}),
 		Validator: validator,
 		Runtime:   runtimeStore,
-		Timeout:   100 * time.Millisecond,
+		Timeout:   500 * time.Millisecond,
 	})
 
 	first, err := service.RunTicket(context.Background(), "TKT-391")
@@ -1643,6 +1643,117 @@ func TestServiceRunTicketAutoResumesHungImplementer(t *testing.T) {
 		t.Fatalf("expected runtime cleanup after resume success, ok=%v err=%v", ok, err)
 	}
 	tkt, err := store.GetTicket(context.Background(), "TKT-391")
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if tkt.State != ticket.State("validated") {
+		t.Fatalf("ticket state = %q, want validated", tkt.State)
+	}
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	if len(adapter.specs) != 2 {
+		t.Fatalf("expected two adapter runs, got %#v", adapter.specs)
+	}
+	if !strings.Contains(adapter.specs[1].Prompt, "Previous run hung before completion.") {
+		t.Fatalf("auto-resume prompt missing hung context: %q", adapter.specs[1].Prompt)
+	}
+}
+
+func TestServiceResumeTicketAutoResumesTimedOutRun(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-397",
+		Seq:         397,
+		Title:       "Resume timeout",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: runnableOrchestrationDescription("feature.txt", "README.md"),
+		AC:          runnableOrchestrationAC(),
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
+	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	_, worktreePath, err := workflowSvc.StartTask(context.Background(), "TKT-397", "agent:test", ticket.DefaultConfig())
+	if err != nil {
+		t.Fatalf("StartTask() error = %v", err)
+	}
+	if err := namespace.RecordRunStart(repoRoot, "TKT-397", "agent:test", worktreePath, "docket/TKT-397", ""); err != nil {
+		t.Fatalf("RecordRunStart() error = %v", err)
+	}
+
+	runtimeStore := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-397",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "streaming",
+		RepoRoot:     repoRoot,
+		WorktreePath: worktreePath,
+		Branch:       "docket/TKT-397",
+		StartedAt:    now.Format(time.RFC3339Nano),
+		SessionID:    "session-397-initial",
+	}
+	if err := runtimeStore.Init(record, "original prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := runtimeStore.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:          "TKT-397",
+		SessionID:         "session-397-initial",
+		Active:            false,
+		Hung:              true,
+		PlannedSteps:      4,
+		CurrentStep:       4,
+		CurrentStepTitle:  "run tests",
+		InactivityTimeout: "10m0s",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	adapter := &streamingAdapter{behaviors: []streamBehavior{
+		hangingStreamBehavior("TKT-397"),
+		successfulStreamBehavior(t, "TKT-397"),
+	}}
+	validator := runvalidate.New(runvalidate.Dependencies{
+		RepoRoot: repoRoot,
+		Store:    store,
+		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
+	})
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflowSvc,
+		Namespace: namespace,
+		Adapter:   adapter,
+		Monitor:   monitor.New(monitor.Dependencies{Runtime: runtimeStore}),
+		Validator: validator,
+		Runtime:   runtimeStore,
+		Timeout:   500 * time.Millisecond,
+	})
+
+	summary, err := service.ResumeTicket(context.Background(), "TKT-397")
+	if err != nil {
+		t.Fatalf("ResumeTicket() error = %v", err)
+	}
+	if summary.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	if _, ok, err := runtimeStore.LoadStatus("TKT-397"); err != nil || ok {
+		t.Fatalf("expected runtime cleanup after resume success, ok=%v err=%v", ok, err)
+	}
+	tkt, err := store.GetTicket(context.Background(), "TKT-397")
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
