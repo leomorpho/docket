@@ -186,12 +186,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1`.
   Note: Added red durability regressions in `internal/agentrun/validate/service_test.go` and `cmd/run_ticket_test.go` that require a compact closeout summary block in the validated merge commit and richer success-brief rendering after runtime cleanup; these tests fail against the current implementation and leave `NS-25` as the production follow-up.
 
-- [ ] NS-25 — Implement durable success-path run briefs and commit-summary closeout: complete the production wiring required by `NS-24`.  
+- [x] NS-25 — Implement durable success-path run briefs and commit-summary closeout: complete the production wiring required by `NS-24`.  
   Code paths: `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `internal/vcs/git_provider.go`, `internal/git/merge.go`, `cmd/run_ticket.go`.  
   TDD: implement against the red tests from `NS-24`; add helper tests if summary formatting or brief storage is extracted.  
   Tests must cover: success brief written; commit summary written; `run-status` reads the persisted brief; cleanup does not destroy the closeout artifact.  
   Acceptance criteria: a successful unattended run leaves a durable human- and machine-readable checkpoint.  
   Verify with `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1`.
+  Note: Added a durable `Docket-Run-Summary` block to managed closeout merge commits and expanded `run-status` brief rendering so persisted success briefs show the ticket and closeout commit after runtime cleanup. Targeted regressions for `internal/agentrun/validate` and `cmd/run_ticket` now pass; the broader `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1` sweep still hits pre-existing unrelated `cmd` failures in update/workflow-migrate coverage.
 
 - [ ] NS-26 — Add failing tests for durable failure-path and stuck-run artifacts: write red tests proving that validation failures and stuck runs must leave recoverable repo-local state with visible next-step guidance even after ephemeral runtime cleanup.  
   Code paths: `internal/agentrun/orchestrate/service.go`, `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `cmd/run_ticket.go`.  

@@ -998,11 +998,17 @@ func renderRunBriefHuman(cmd *cobra.Command, brief runruntime.RunBrief) {
 		return
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Last outcome: %s\n", brief.Outcome)
+	if strings.TrimSpace(brief.TicketID) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Ticket: %s\n", brief.TicketID)
+	}
 	if strings.TrimSpace(brief.Summary) != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Summary: %s\n", brief.Summary)
 	}
 	if strings.TrimSpace(brief.CommitSHA) != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Commit: %s\n", brief.CommitSHA)
+	}
+	if strings.TrimSpace(brief.CloseoutCommitSHA) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Closeout commit: %s\n", brief.CloseoutCommitSHA)
 	}
 	if strings.TrimSpace(brief.Tests) != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Validation: %s\n", brief.Tests)

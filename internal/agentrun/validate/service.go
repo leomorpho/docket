@@ -313,7 +313,25 @@ func buildManagedCloseoutCommitMessage(brief runruntime.RunBrief) string {
 	if strings.TrimSpace(brief.ResumeNext) != "" {
 		lines = append(lines, fmt.Sprintf("Docket-Resume-Next: %s", singleLineCommitField(brief.ResumeNext)))
 	}
+	lines = append(lines, durableRunSummaryBlock(brief)...)
 	return strings.Join(lines, "\n")
+}
+
+func durableRunSummaryBlock(brief runruntime.RunBrief) []string {
+	lines := []string{"", "Docket-Run-Summary:"}
+	if ticketID := strings.TrimSpace(brief.TicketID); ticketID != "" {
+		lines = append(lines, fmt.Sprintf("  ticket: %s", ticketID))
+	}
+	if outcome := strings.TrimSpace(brief.Outcome); outcome != "" {
+		lines = append(lines, fmt.Sprintf("  outcome: %s", outcome))
+	}
+	if validation := strings.TrimSpace(brief.Tests); validation != "" {
+		lines = append(lines, fmt.Sprintf("  validation: %s", singleLineCommitField(validation)))
+	}
+	if next := strings.TrimSpace(brief.ResumeNext); next != "" {
+		lines = append(lines, fmt.Sprintf("  next: %s", singleLineCommitField(next)))
+	}
+	return lines
 }
 
 func singleLineCommitField(value string) string {
