@@ -53,6 +53,8 @@ var rootCmd = &cobra.Command{
 		runManagedAdapter = ""
 		runWatch = false
 		runWorkspace = false
+		workflowMigrateApply = false
+		workflowMigrateDryRun = false
 		listWorkspace = false
 		if f := cmd.Root().PersistentFlags().Lookup("automation"); f != nil {
 			f.Changed = false

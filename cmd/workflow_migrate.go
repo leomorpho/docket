@@ -13,6 +13,7 @@ import (
 )
 
 var workflowMigrateApply bool
+var workflowMigrateDryRun bool
 
 type workflowMigrationTicketChange struct {
 	TicketID        string   `json:"ticket_id"`
@@ -31,12 +32,12 @@ var workflowMigrateCmd = &cobra.Command{
 	Use:   "workflow-migrate",
 	Short: "Migrate the shipped legacy workflow to the north-star state model",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if workflowMigrateApply && workflowMigrateDryRun {
+			return fmt.Errorf("choose either --apply or --dry-run")
+		}
 		cfg, err := ticket.LoadConfig(repo)
 		if err != nil {
 			return err
-		}
-		if !supportsNorthStarWorkflowMigration(cfg) {
-			return fmt.Errorf("workflow migration only supports the shipped legacy/default workflow; migrate custom workflows manually")
 		}
 
 		report, err := planWorkflowMigration(context.Background(), repo, cfg)
@@ -65,6 +66,10 @@ func planWorkflowMigration(ctx context.Context, repoRoot string, cfg *ticket.Con
 	if err != nil {
 		return workflowMigrationReport{}, err
 	}
+	newCfg, cfgMigrated := ticket.MigrateConfigToNorthStar(cfg)
+	if newCfg == nil {
+		return workflowMigrationReport{}, fmt.Errorf("workflow migration requires a valid config")
+	}
 	fullTickets := make([]*ticket.Ticket, 0, len(all))
 	byID := make(map[string]*ticket.Ticket, len(all))
 	children := make(map[string][]*ticket.Ticket)
@@ -88,10 +93,9 @@ func planWorkflowMigration(ctx context.Context, repoRoot string, cfg *ticket.Con
 
 	mappedStates := make(map[string]string, len(fullTickets))
 	for _, t := range fullTickets {
-		mappedStates[t.ID] = northStarStateForMigration(string(t.State))
+		mappedStates[t.ID] = ticket.MigrateWorkflowStateName(string(t.State))
 	}
 
-	newCfg := ticket.DefaultConfig()
 	changes := make([]workflowMigrationTicketChange, 0)
 	for _, t := range fullTickets {
 		change := workflowMigrationTicketChange{TicketID: t.ID}
@@ -120,14 +124,19 @@ func planWorkflowMigration(ctx context.Context, repoRoot string, cfg *ticket.Con
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].TicketID < changes[j].TicketID })
 	return workflowMigrationReport{
-		ConfigMigrated: !usesNorthStarStates(cfg),
+		ConfigMigrated: cfgMigrated,
 		Changes:        changes,
 	}, nil
 }
 
 func applyWorkflowMigration(ctx context.Context, repoRoot string, report workflowMigrationReport) error {
 	if report.ConfigMigrated {
-		if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		cfg, err := ticket.LoadConfig(repoRoot)
+		if err != nil {
+			return err
+		}
+		migratedCfg, _ := ticket.MigrateConfigToNorthStar(cfg)
+		if err := ticket.SaveConfig(repoRoot, migratedCfg); err != nil {
 			return err
 		}
 	}
@@ -191,49 +200,6 @@ func renderWorkflowMigrationHuman(cmd *cobra.Command, report workflowMigrationRe
 	}
 }
 
-func supportsNorthStarWorkflowMigration(cfg *ticket.Config) bool {
-	if cfg == nil {
-		return false
-	}
-	allowed := map[string]bool{
-		"backlog": true, "todo": true, "in-progress": true, "in-review": true, "done": true, "archived": true,
-		"draft": true, "ready": true, "running": true, "validated": true,
-	}
-	for name := range cfg.States {
-		if !allowed[name] {
-			return false
-		}
-	}
-	return true
-}
-
-func usesNorthStarStates(cfg *ticket.Config) bool {
-	if cfg == nil {
-		return false
-	}
-	for _, state := range []string{"draft", "ready", "running", "validated", "archived"} {
-		if _, ok := cfg.States[state]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func northStarStateForMigration(state string) string {
-	switch strings.TrimSpace(state) {
-	case "backlog":
-		return "draft"
-	case "todo":
-		return "ready"
-	case "in-progress":
-		return "running"
-	case "in-review", "done":
-		return "validated"
-	default:
-		return strings.TrimSpace(state)
-	}
-}
-
 func containsWorkflowMigrationString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
@@ -245,5 +211,6 @@ func containsWorkflowMigrationString(values []string, target string) bool {
 
 func init() {
 	workflowMigrateCmd.Flags().BoolVar(&workflowMigrateApply, "apply", false, "write the migrated config and ticket updates")
+	workflowMigrateCmd.Flags().BoolVar(&workflowMigrateDryRun, "dry-run", false, "preview the migrated config and ticket updates without writing files")
 	rootCmd.AddCommand(workflowMigrateCmd)
 }

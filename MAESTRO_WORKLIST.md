@@ -72,12 +72,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd -run 'TestWorkflowMigrate' -count=1`.
   Note: Added current-repo-shaped red coverage in `cmd/workflow_migrate_test.go` for explicit `workflow-migrate --dry-run` and `--apply`, using a north-star-plus-`stale` config, legacy ticket states, coordination/completed blockers, and manifest assertions. The targeted run now fails for the intended reasons: `--dry-run` is not implemented, and `--apply` still rejects custom workflow states like `stale`.
 
-- [ ] NS-09 — Expand `workflow-migrate` to map legacy state names into the north-star workflow while preserving intentional custom states: implement the config and ticket state-mapping layer required by the failing tests from `NS-08`.  
+- [x] NS-09 — Expand `workflow-migrate` to map legacy state names into the north-star workflow while preserving intentional custom states: implement the config and ticket state-mapping layer required by the failing tests from `NS-08`.  
   Code paths: `cmd/workflow_migrate.go`, `internal/ticket/`, `internal/store/local/`.  
   TDD: implement against the red tests from `NS-08`; add unit tests for state-mapping helpers if needed.  
   Tests must cover: `backlog`, `todo`, `in-progress`, `in-review`, `done`; preservation of `stale`; dry-run output describing the mapping; apply mode producing valid workflow state files.  
   Acceptance criteria: the migrator can translate old workflow states into the new model without requiring a pristine repo.  
   Verify with `go test ./cmd ./internal/ticket ./internal/store/local -count=1`.
+  Note: Added explicit `workflow-migrate --dry-run` support and moved legacy-to-north-star state translation into `internal/ticket`, where config migration now preserves north-star-plus-custom workflows like `stale` while rewriting legacy state names and transitions. Targeted `go test ./cmd -run 'TestWorkflowMigrate' -count=1` and `go test ./internal/ticket -run 'TestMigrateConfigToNorthStar' -count=1` pass. The broader `go test ./cmd ./internal/ticket ./internal/store/local -count=1` run still hits pre-existing unrelated `cmd` failures in update/proof-path coverage plus the intentional red durability regression from `NS-24`.
 
 - [ ] NS-10 — Teach `workflow-migrate` to normalize ticket metadata and blockers during apply mode: implement the ticket and manifest rewrite portion of the migration so legacy blockers, coordination blockers, and stale manifest entries are cleaned up during migration.  
   Code paths: `cmd/workflow_migrate.go`, `.docket/manifest.json`, `internal/store/local/store.go`, `internal/store/local/validate.go`.  
