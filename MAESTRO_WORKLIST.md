@@ -210,12 +210,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Acceptance criteria: hours later, a user can understand a failed or stuck run without reopening transient agent logs.  
   Verify with `go test ./internal/agentrun/... ./cmd -count=1`.
 
-- [ ] NS-28 — Add failing tests for root/help copy that still presents Docket as a generic git-native tracker with historical extras: write red tests for root help and help JSON before changing product-facing copy.  
+- [x] NS-28 — Add failing tests for root/help copy that still presents Docket as a generic git-native tracker with historical extras: write red tests for root help and help JSON before changing product-facing copy.  
   Code paths: `cmd/root.go`, `cmd/helpjson.go`.  
   TDD: tests only in this task.  
   Tests must cover: root help summary; help JSON product description; absence of security/review/parallel-first framing in the primary description.  
   Acceptance criteria: the desired product story is locked down in tests before copy changes start.  
   Verify with `go test ./cmd -run 'Test(HelpJSON|Root)' -count=1`.
+  Note: Added red north-star copy assertions in `cmd/root_test.go` and `cmd/helpjson_test.go` that require the primary CLI description to lead with backlog/grooming/validation/serial-autorun language and omit the old git-native/security/review/parallel framing. The scoped verify run now fails on those new assertions and still surfaces the pre-existing `TestHelpJSONStatusManifestOmitsParallelFlag` manifest regression.
 
 - [ ] NS-29 — Reposition CLI entry-point copy around executable backlog runtime semantics: implement the copy changes proven by `NS-28` so the CLI leads with grooming, validation, and serial autorun.  
   Code paths: `cmd/root.go`, `cmd/helpjson.go`, any related discovery/help surfaces under `cmd/`.  

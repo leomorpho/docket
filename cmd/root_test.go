@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -25,7 +26,26 @@ func TestRootCmd(t *testing.T) {
 	}
 }
 
-func TestExecuteHelp(t *testing.T) {
+func assertPrimaryDescriptionLeadsWithNorthStarRuntimeStory(t *testing.T, description string) {
+	t.Helper()
+
+	lower := strings.ToLower(description)
+	for _, required := range []string{"backlog", "validat", "serial", "autorun"} {
+		if !strings.Contains(lower, required) {
+			t.Fatalf("primary description should lead with executable backlog runtime semantics and mention %q, got %q", required, description)
+		}
+	}
+	if !strings.Contains(lower, "groom") && !strings.Contains(lower, "runnable") {
+		t.Fatalf("primary description should lead with grooming/runnable-work discipline, got %q", description)
+	}
+	for _, forbidden := range []string{"git-native", "tracker", "security", "review", "parallel"} {
+		if strings.Contains(lower, forbidden) {
+			t.Fatalf("primary description should omit historical framing like %q, got %q", forbidden, description)
+		}
+	}
+}
+
+func TestRootHelpSummaryLeadsWithNorthStarRuntimeStory(t *testing.T) {
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
 	rootCmd.SetArgs([]string{"--help"})
@@ -35,7 +55,9 @@ func TestExecuteHelp(t *testing.T) {
 		t.Fatalf("rootCmd.Execute() failed: %v", err)
 	}
 
-	if !bytes.Contains(b.Bytes(), []byte("git-native ticket system")) {
-		t.Errorf("expected help message to contain 'git-native ticket system', but got:\n%s", b.String())
+	assertPrimaryDescriptionLeadsWithNorthStarRuntimeStory(t, rootCmd.Short)
+
+	if !bytes.Contains(b.Bytes(), []byte(rootCmd.Short)) {
+		t.Errorf("expected help message to contain updated root summary %q, but got:\n%s", rootCmd.Short, b.String())
 	}
 }
