@@ -157,6 +157,9 @@ func TestWorkflowMigrateDryRunSupportsCurrentRepoShapeWithoutMutatingFiles(t *te
 	if !strings.Contains(out.String(), "TKT-401; state todo -> ready; remove blockers [TKT-400]") {
 		t.Fatalf("expected dry-run output to describe todo mapping and coordination blocker removal, got:\n%s", out.String())
 	}
+	if !strings.Contains(out.String(), "TKT-405; state todo -> ready; remove blockers [TKT-499]") {
+		t.Fatalf("expected dry-run output to describe stale blocker removal, got:\n%s", out.String())
+	}
 	if !strings.Contains(out.String(), "Apply with: docket workflow-migrate --apply") {
 		t.Fatalf("expected dry-run apply hint, got:\n%s", out.String())
 	}
@@ -210,6 +213,7 @@ func TestWorkflowMigrateApplyPreservesCustomStatesAndRewritesCurrentManifestData
 	assertWorkflowMigrationTicketState(t, store, "TKT-402", "validated")
 	assertWorkflowMigrationTicketState(t, store, "TKT-403", "ready")
 	assertWorkflowMigrationTicketState(t, store, "TKT-404", "stale")
+	assertWorkflowMigrationTicketState(t, store, "TKT-405", "ready")
 
 	coordBlocked, err := store.GetTicket(context.Background(), "TKT-401")
 	if err != nil {
@@ -227,15 +231,87 @@ func TestWorkflowMigrateApplyPreservesCustomStatesAndRewritesCurrentManifestData
 		t.Fatalf("expected completed blocker pruned, got %#v", doneBlocked.BlockedBy)
 	}
 
+	missingBlocked, err := store.GetTicket(context.Background(), "TKT-405")
+	if err != nil {
+		t.Fatalf("GetTicket(TKT-405) error = %v", err)
+	}
+	if len(missingBlocked.BlockedBy) != 0 {
+		t.Fatalf("expected missing blocker pruned, got %#v", missingBlocked.BlockedBy)
+	}
+
 	manifest := readWorkflowMigrationManifest(t, tmpDir)
+	if manifest.Warning != "Prefer `docket` commands for ticket reads and edits. Direct edits to .docket/tickets/*.md are allowed, but you must run `docket validate` before committing." {
+		t.Fatalf("expected apply to rewrite manifest warning, got %q", manifest.Warning)
+	}
 	assertWorkflowMigrationManifestState(t, manifest, "TKT-400", "draft")
 	assertWorkflowMigrationManifestState(t, manifest, "TKT-401", "ready")
 	assertWorkflowMigrationManifestState(t, manifest, "TKT-402", "validated")
 	assertWorkflowMigrationManifestState(t, manifest, "TKT-403", "ready")
 	assertWorkflowMigrationManifestState(t, manifest, "TKT-404", "stale")
+	assertWorkflowMigrationManifestState(t, manifest, "TKT-405", "ready")
+	if _, ok := manifest.Tickets["TKT-499"]; ok {
+		t.Fatalf("expected apply to remove stale manifest entry TKT-499, got %#v", manifest.Tickets["TKT-499"])
+	}
 
 	if !strings.Contains(out.String(), "Workflow migration applied.") {
 		t.Fatalf("expected apply summary, got:\n%s", out.String())
+	}
+}
+
+func TestWorkflowMigrateApplyIsIdempotentAfterManifestRewrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldRepo := repo
+	oldFormat := format
+	oldApply := workflowMigrateApply
+	repo = tmpDir
+	format = "human"
+	workflowMigrateApply = false
+	t.Cleanup(func() {
+		repo = oldRepo
+		format = oldFormat
+		workflowMigrateApply = oldApply
+	})
+
+	if err := ticket.SaveConfig(tmpDir, currentWorkflowMigrationConfig()); err != nil {
+		t.Fatalf("save current-style config failed: %v", err)
+	}
+	seedCurrentWorkflowMigrationFixture(t, tmpDir)
+
+	var first bytes.Buffer
+	rootCmd.SetOut(&first)
+	rootCmd.SetErr(&first)
+	rootCmd.SetArgs([]string{"workflow-migrate", "--apply"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("first workflow-migrate apply failed: %v\n%s", err, first.String())
+	}
+
+	configAfterFirst := readWorkflowMigrationFixtureFile(t, filepath.Join(tmpDir, ".docket", "config.json"))
+	manifestAfterFirst := readWorkflowMigrationFixtureFile(t, filepath.Join(tmpDir, ".docket", "manifest.json"))
+	ticketAfterFirst := readWorkflowMigrationFixtureFile(t, filepath.Join(tmpDir, ".docket", "tickets", "TKT-405.md"))
+
+	var second bytes.Buffer
+	rootCmd.SetOut(&second)
+	rootCmd.SetErr(&second)
+	rootCmd.SetArgs([]string{"workflow-migrate", "--apply"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("second workflow-migrate apply failed: %v\n%s", err, second.String())
+	}
+
+	configAfterSecond := readWorkflowMigrationFixtureFile(t, filepath.Join(tmpDir, ".docket", "config.json"))
+	manifestAfterSecond := readWorkflowMigrationFixtureFile(t, filepath.Join(tmpDir, ".docket", "manifest.json"))
+	ticketAfterSecond := readWorkflowMigrationFixtureFile(t, filepath.Join(tmpDir, ".docket", "tickets", "TKT-405.md"))
+
+	if !bytes.Equal(configAfterSecond, configAfterFirst) {
+		t.Fatalf("expected second apply to leave config untouched")
+	}
+	if !bytes.Equal(manifestAfterSecond, manifestAfterFirst) {
+		t.Fatalf("expected second apply to leave manifest untouched")
+	}
+	if !bytes.Equal(ticketAfterSecond, ticketAfterFirst) {
+		t.Fatalf("expected second apply to leave rewritten ticket untouched")
+	}
+	if !strings.Contains(second.String(), "No ticket changes required.") {
+		t.Fatalf("expected second apply to report no ticket changes, got:\n%s", second.String())
 	}
 }
 
@@ -403,6 +479,19 @@ func seedCurrentWorkflowMigrationFixture(t *testing.T, repoRoot string) {
 			Description: "Custom stale state from the current repo shape should be preserved through migration.",
 			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
 		},
+		{
+			ID:          "TKT-405",
+			Seq:         405,
+			Title:       "Legacy todo with missing blocker",
+			State:       "todo",
+			Priority:    1,
+			BlockedBy:   []string{"TKT-499"},
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: "Legacy todo leaf blocked by a missing ticket so migration must prune the stale blocker reference.",
+			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		},
 	}
 	for _, tkt := range tickets {
 		if err := store.CreateTicket(context.Background(), tkt); err != nil {
@@ -412,6 +501,11 @@ func seedCurrentWorkflowMigrationFixture(t *testing.T, repoRoot string) {
 
 	manifest := readWorkflowMigrationManifest(t, repoRoot)
 	manifest.Warning = "DO NOT EDIT .docket/tickets/*.md OR .docket/manifest.json DIRECTLY. Use `docket` commands only."
+	manifest.Tickets["TKT-499"] = local.ManifestTicket{
+		Title:    "Removed legacy manifest entry",
+		State:    "todo",
+		Priority: 99,
+	}
 	writeWorkflowMigrationManifest(t, repoRoot, manifest)
 }
 

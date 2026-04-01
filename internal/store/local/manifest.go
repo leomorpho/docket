@@ -99,6 +99,41 @@ func (s *Store) ensureManifest(ctx context.Context) error {
 	return s.saveManifest(m)
 }
 
+// RewriteManifest rebuilds the manifest from ticket files so stale entries and
+// legacy warning text are removed in one canonical write.
+func (s *Store) RewriteManifest(ctx context.Context) error {
+	manifest := defaultManifest()
+	ticketsDir := filepath.Join(s.RepoRoot, ".docket", "tickets")
+	entries, err := os.ReadDir(ticketsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return s.saveManifest(manifest)
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+			continue
+		}
+		id := s.normalizeTicketLookupID(entry.Name())
+		if id == "" {
+			continue
+		}
+		t, err := s.GetTicket(ctx, id)
+		if err != nil {
+			return err
+		}
+		if t == nil {
+			continue
+		}
+		t.ID = id
+		manifest.Tickets[id] = s.manifestEntryFromTicket(t)
+	}
+
+	return s.saveManifest(manifest)
+}
+
 func (s *Store) upsertManifestTicket(tid string, entry ManifestTicket) error {
 	m, err := s.loadManifest()
 	if err != nil {

@@ -130,6 +130,7 @@ func planWorkflowMigration(ctx context.Context, repoRoot string, cfg *ticket.Con
 }
 
 func applyWorkflowMigration(ctx context.Context, repoRoot string, report workflowMigrationReport) error {
+	s := local.New(repoRoot)
 	if report.ConfigMigrated {
 		cfg, err := ticket.LoadConfig(repoRoot)
 		if err != nil {
@@ -140,10 +141,6 @@ func applyWorkflowMigration(ctx context.Context, repoRoot string, report workflo
 			return err
 		}
 	}
-	if len(report.Changes) == 0 {
-		return nil
-	}
-	s := local.New(repoRoot)
 	for _, change := range report.Changes {
 		t, err := s.GetTicket(ctx, change.TicketID)
 		if err != nil {
@@ -169,7 +166,10 @@ func applyWorkflowMigration(ctx context.Context, repoRoot string, report workflo
 			return err
 		}
 	}
-	return nil
+	if err := s.RewriteManifest(ctx); err != nil {
+		return err
+	}
+	return s.SyncIndex(ctx)
 }
 
 func renderWorkflowMigrationHuman(cmd *cobra.Command, report workflowMigrationReport) {
