@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,14 @@ func requiresRunnableContract(cfg *ticket.Config, state ticket.State) bool {
 
 func RunnableContractErrors(cfg *ticket.Config, idx *RelationshipIndex, t *ticket.Ticket) []store.ValidationError {
 	if t == nil || !requiresRunnableContract(cfg, t.State) {
+		return nil
+	}
+
+	return ReadyContractErrors(cfg, idx, t)
+}
+
+func ReadyContractErrors(cfg *ticket.Config, idx *RelationshipIndex, t *ticket.Ticket) []store.ValidationError {
+	if t == nil {
 		return nil
 	}
 
@@ -96,4 +105,52 @@ func RunnableContractErrors(cfg *ticket.Config, idx *RelationshipIndex, t *ticke
 	}
 
 	return errs
+}
+
+type ReadyCheckResult struct {
+	TicketID string            `json:"ticket_id"`
+	Ready    bool              `json:"ready"`
+	State    ticket.State      `json:"state"`
+	Issues   []ReadyCheckIssue `json:"issues,omitempty"`
+}
+
+type ReadyCheckIssue struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+func (s *Store) CheckReady(ctx context.Context, id string) (ReadyCheckResult, error) {
+	id = s.normalizeTicketLookupID(id)
+	t, err := s.GetTicket(ctx, id)
+	if err != nil {
+		return ReadyCheckResult{}, err
+	}
+	if t == nil {
+		return ReadyCheckResult{}, fmt.Errorf("ticket %s not found", id)
+	}
+
+	idx, err := s.BuildRelationshipIndex(ctx)
+	if err != nil {
+		return ReadyCheckResult{}, err
+	}
+
+	cfg, cfgErr := ticket.LoadConfig(s.RepoRoot)
+	if cfgErr != nil {
+		cfg = ticket.DefaultConfig()
+	}
+
+	rawIssues := ReadyContractErrors(cfg, idx, t)
+	issues := make([]ReadyCheckIssue, 0, len(rawIssues))
+	for _, issue := range rawIssues {
+		issues = append(issues, ReadyCheckIssue{
+			Field:   issue.Field,
+			Message: issue.Message,
+		})
+	}
+	return ReadyCheckResult{
+		TicketID: t.ID,
+		Ready:    len(issues) == 0,
+		State:    t.State,
+		Issues:   issues,
+	}, nil
 }

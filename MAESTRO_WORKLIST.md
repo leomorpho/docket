@@ -40,12 +40,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/store/local -count=1`.
   Note: Added red tests in `cmd/ready_check_test.go` for a new non-mutating `ready` CLI path, covering human and JSON reporting, non-leaf rejection, and ready-ticket rechecks. Targeted `go test ./cmd -run 'TestReadyCheckCommand' -count=1` now fails on `unknown command "ready"`, while `go test ./internal/store/local -count=1` still passes.
 
-- [ ] NS-05 — Implement the readiness-check command on top of the existing ready-contract logic: build the command specified in `NS-04` so a draft ticket can be evaluated without changing state and the missing fields are reported deterministically.  
+- [x] NS-05 — Implement the readiness-check command on top of the existing ready-contract logic: build the command specified in `NS-04` so a draft ticket can be evaluated without changing state and the missing fields are reported deterministically.  
   Code paths: new command under `cmd/`, `internal/store/local/ready_contract.go`, `cmd/mutation_error.go`, command registration/help wiring.  
   TDD: implement against the failing tests from `NS-04`; add unit tests for any shared reporting helpers introduced.  
   Tests must cover: successful readiness check; failure output with all missing fields preserved; non-leaf rejection; stable JSON/human output.  
   Acceptance criteria: there is one explicit CLI action for readiness diagnosis; agents no longer have to infer readiness by trial-and-error or direct state edits.  
   Verify with `go test ./cmd ./internal/store/local -count=1`.
+  Note: Added `cmd/ready.go` plus a shared non-mutating readiness evaluator in `internal/store/local/ready_contract.go`. Targeted readiness command tests pass with stable human and JSON output, and `go test ./internal/store/local -count=1` passes; the broader `go test ./cmd ./internal/store/local -count=1` run still hits pre-existing `cmd/update` and proof-pipeline failures tied to queue-invariant assumptions outside this task.
 
 - [ ] NS-06 — Add failing tests for readiness promotion from `draft` to `ready`: write red tests for a command path or flag that promotes a ticket only when the ready contract passes and refuses promotion otherwise.  
   Code paths: the readiness command from `NS-05`, `cmd/update.go` or shared mutation helpers, `internal/store/local/ready_contract.go`.  
