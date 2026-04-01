@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -117,6 +118,48 @@ type ReadyCheckResult struct {
 type ReadyCheckIssue struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
+}
+
+func (s *Store) PromoteReady(ctx context.Context, id string) (ReadyCheckResult, bool, error) {
+	id = s.normalizeTicketLookupID(id)
+	t, err := s.GetTicket(ctx, id)
+	if err != nil {
+		return ReadyCheckResult{}, false, err
+	}
+	if t == nil {
+		return ReadyCheckResult{}, false, fmt.Errorf("ticket %s not found", id)
+	}
+
+	if t.State == ticket.State("ready") {
+		report, reportErr := s.CheckReady(ctx, id)
+		return report, false, reportErr
+	}
+	if t.State != ticket.State("draft") {
+		return ReadyCheckResult{}, false, fmt.Errorf("ticket %s must be in draft to promote with ready --promote", t.ID)
+	}
+
+	report, err := s.CheckReady(ctx, id)
+	if err != nil {
+		return ReadyCheckResult{}, false, err
+	}
+	if !report.Ready {
+		return report, false, fmt.Errorf("ready contract failed for %s", report.TicketID)
+	}
+
+	t.State = ticket.State("ready")
+	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
+	if err := s.UpdateTicket(ctx, t); err != nil {
+		return ReadyCheckResult{}, false, err
+	}
+	if err := s.SyncIndex(ctx); err != nil {
+		return ReadyCheckResult{}, false, err
+	}
+
+	report, err = s.CheckReady(ctx, id)
+	if err != nil {
+		return ReadyCheckResult{}, false, err
+	}
+	return report, true, nil
 }
 
 func (s *Store) CheckReady(ctx context.Context, id string) (ReadyCheckResult, error) {

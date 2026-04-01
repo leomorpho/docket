@@ -56,12 +56,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/store/local -count=1`.
   Note: Added red promotion coverage in `cmd/ready_promote_test.go` around a new `ready --promote` path, including success, contract failure, non-leaf rejection, idempotent already-ready behavior, and manifest/index visibility. `go test ./cmd -run 'TestReadyPromoteCommand' -count=1` now fails on the missing `--promote` flag, while `go test ./internal/store/local -count=1` still passes.
 
-- [ ] NS-07 — Implement readiness promotion so grooming becomes a first-class product action: build the promotion path defined in `NS-06`, including state updates and any manifest/index refresh needed by the local store.  
+- [x] NS-07 — Implement readiness promotion so grooming becomes a first-class product action: build the promotion path defined in `NS-06`, including state updates and any manifest/index refresh needed by the local store.  
   Code paths: readiness command implementation, `cmd/update.go` or shared mutation code, `internal/store/local/store.go`, `internal/store/local/index.go`.  
   TDD: implement against the failing tests from `NS-06`; add narrower store tests if index updates need them.  
   Tests must cover: promotion writes the new state; invalid tickets stay in draft; no coordination ticket can be promoted; ready queue surfaces see the new ticket immediately.  
   Acceptance criteria: a user or agent can explicitly move a ticket into the runnable queue through one guarded command instead of manual state editing.  
   Verify with `go test ./cmd ./internal/store/local ./internal/workable -count=1`.
+  Note: Added `ready --promote` on top of a shared `Store.PromoteReady` path so passing draft leaf tickets move to `ready` through `UpdateTicket`, with manifest refresh and explicit index sync before rechecking queue visibility. Covered success, contract failure, non-leaf, already-ready, manifest/index refresh, and coordination-ticket rejection in command tests. Targeted `go test ./cmd -run 'TestReady(PromoteCommand|CheckCommand)' -count=1` and `go test ./internal/store/local -run 'TestValidateFile_RejectsCoordinationTicketInRunnableState|TestValidateFile_UsesWorkflowRolesForHandoffAndComments' -count=1` pass; the broader `go test ./cmd ./internal/store/local ./internal/workable -count=1` run still hits pre-existing `cmd/update` and proof-pipeline queue-invariant failures outside this task.
 
 - [ ] NS-08 — Add failing migration tests for a repo shaped like the current one rather than the pristine default: write red tests proving that `workflow-migrate --dry-run` and `--apply` currently fail on custom states, stale legacy state names, and current manifest data.  
   Code paths: `cmd/workflow_migrate.go`, `.docket/config.json`-style fixtures, `.docket/manifest.json`-style fixtures, store/workflow helpers.  

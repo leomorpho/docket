@@ -240,3 +240,42 @@ func TestReadyPromoteCommandRefreshesManifestAndIndex(t *testing.T) {
 		t.Fatalf("expected promoted ticket in ready index results, got %#v", tickets)
 	}
 }
+
+func TestReadyPromoteCommandRejectsCoordinationTickets(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	s := local.New(h.repo)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(ctx, &ticket.Ticket{
+		ID:          "TKT-246",
+		Seq:         246,
+		Title:       "Epic: coordination ticket",
+		State:       ticket.State("draft"),
+		Priority:    1,
+		Labels:      []string{"epic"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "agent:harness-agent",
+		Description: readyCheckDescription(),
+		AC:          readyCheckAC(),
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	out, err := h.run("ready", "TKT-246", "--promote")
+	if err == nil {
+		t.Fatalf("expected coordination-ticket promotion to fail, output=%s", out)
+	}
+	if !strings.Contains(strings.ToLower(out), "coordination tickets") {
+		t.Fatalf("expected coordination-ticket rejection, got:\n%s", out)
+	}
+
+	stored, getErr := s.GetTicket(ctx, "TKT-246")
+	if getErr != nil {
+		t.Fatalf("get coordination ticket: %v", getErr)
+	}
+	if stored.State != ticket.State("draft") {
+		t.Fatalf("expected failed coordination-ticket promotion to leave ticket in draft, got %s", stored.State)
+	}
+}
