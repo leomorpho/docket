@@ -143,6 +143,60 @@ func TestCreateWorktree_ReusedPathRestoresTrackedDeletions(t *testing.T) {
 	}
 }
 
+func TestCreateWorktree_ReusedRegisteredPathFastForwardsCleanBranchToRepoHead(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", tmpDir}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGitOutput := func(repo string, args ...string) string {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root\n"), 0o644); err != nil {
+		t.Fatalf("write seed failed: %v", err)
+	}
+	runGit("add", "README")
+	runGit("commit", "-m", "initial")
+
+	wtPath := filepath.Join(tmpDir, "worktrees", "TKT-202")
+	branch := "docket/TKT-202"
+	if err := CreateWorktree(tmpDir, "TKT-202", branch, wtPath); err != nil {
+		t.Fatalf("initial CreateWorktree failed: %v", err)
+	}
+	initialWorktreeHead := runGitOutput(wtPath, "rev-parse", "HEAD")
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root\nmain advanced\n"), 0o644); err != nil {
+		t.Fatalf("advance main failed: %v", err)
+	}
+	runGit("add", "README")
+	runGit("commit", "-m", "advance main")
+	mainHead := runGitOutput(tmpDir, "rev-parse", "HEAD")
+	if mainHead == initialWorktreeHead {
+		t.Fatalf("expected main to advance past reused worktree head %s", mainHead)
+	}
+
+	if err := CreateWorktree(tmpDir, "TKT-202", branch, wtPath); err != nil {
+		t.Fatalf("expected registered CreateWorktree reuse, got: %v", err)
+	}
+	if got := runGitOutput(wtPath, "rev-parse", "HEAD"); got != mainHead {
+		t.Fatalf("expected reused clean branch to fast-forward to %s, got %s", mainHead, got)
+	}
+}
+
 func TestCreateWorktree_ReplacesOrphanedDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheHome := t.TempDir()

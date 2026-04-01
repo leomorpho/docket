@@ -78,6 +78,18 @@ func (o *Observer) Observe(ctx context.Context, input agentrun.ObservationInput)
 		Active:            true,
 		InactivityTimeout: timeout.String(),
 	}
+	if o.runtime != nil {
+		if persisted, ok, err := o.runtime.LoadStatus(input.Record.TicketID); err == nil && ok {
+			status = persisted
+			if strings.TrimSpace(status.SessionID) == "" {
+				status.SessionID = input.Record.SessionID
+			}
+			status.Role = string(input.Record.Role)
+			status.PID = input.Handle.PID()
+			status.Active = true
+			status.InactivityTimeout = timeout.String()
+		}
+	}
 
 	var waitErr error
 	waited := false
@@ -266,7 +278,9 @@ func (o *Observer) updateProgressStatus(status *runruntime.StatusSnapshot, visib
 	case strings.HasPrefix(visible, "PLAN "):
 		status.ConsecutiveNoProgress = 0
 		if plan, err := agentrun.ParsePlanLine(visible); err == nil {
-			status.PlannedSteps = plan.Steps
+			if plan.Steps > status.PlannedSteps {
+				status.PlannedSteps = plan.Steps
+			}
 			status.LastMarker = "PLAN"
 		}
 	case strings.HasPrefix(visible, "STEP "):
@@ -505,11 +519,16 @@ func (o *Observer) operatorStoppedStatus(ticketID string) bool {
 	if o.runtime == nil {
 		return false
 	}
-	status, ok, err := o.runtime.LoadStatus(ticketID)
-	if err != nil || !ok {
-		return false
+	for attempt := 0; attempt < 10; attempt++ {
+		status, ok, err := o.runtime.LoadStatus(ticketID)
+		if err == nil && ok && !status.Active && status.LastResultStatus == "stopped" {
+			return true
+		}
+		if attempt < 9 {
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
-	return !status.Active && status.LastResultStatus == "stopped"
+	return false
 }
 
 func runtimeWarningFromLine(stream, line string, visibleTexts []string) string {

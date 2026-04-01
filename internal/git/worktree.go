@@ -24,7 +24,10 @@ func CreateWorktree(repoRoot, ticketID, branch, path string) error {
 	}
 	if registered {
 		if registeredBranch == "" || registeredBranch == branch {
-			return restoreTrackedDeletions(path)
+			if err := restoreTrackedDeletions(path); err != nil {
+				return err
+			}
+			return syncManagedWorktreeToRepoHead(repoRoot, path, branch)
 		}
 		return fmt.Errorf("worktree path %s is already registered to branch %s", path, registeredBranch)
 	}
@@ -67,7 +70,10 @@ func CreateWorktree(repoRoot, ticketID, branch, path string) error {
 	if err != nil {
 		return fmt.Errorf("git worktree add failed: %w\n%s", err, out)
 	}
-	return restoreTrackedDeletions(path)
+	if err := restoreTrackedDeletions(path); err != nil {
+		return err
+	}
+	return syncManagedWorktreeToRepoHead(repoRoot, path, branch)
 }
 
 // RemoveWorktree removes a git worktree and prunes it.
@@ -193,6 +199,42 @@ func restoreTrackedDeletions(worktreePath string) error {
 	args = append(args, paths...)
 	if _, err := runGit(worktreePath, args...); err != nil {
 		return fmt.Errorf("restore deleted tracked files in %s: %w", worktreePath, err)
+	}
+	return nil
+}
+
+func syncManagedWorktreeToRepoHead(repoRoot, worktreePath, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return nil
+	}
+	clean, err := IsClean(worktreePath)
+	if err != nil {
+		return fmt.Errorf("check worktree cleanliness in %s: %w", worktreePath, err)
+	}
+	if !clean {
+		return nil
+	}
+	repoHead, err := HeadSHA(repoRoot)
+	if err != nil {
+		return nil
+	}
+	worktreeHead, err := HeadSHA(worktreePath)
+	if err != nil {
+		return fmt.Errorf("resolve worktree HEAD in %s: %w", worktreePath, err)
+	}
+	if worktreeHead == repoHead {
+		return nil
+	}
+	canFF, err := IsAncestor(repoRoot, branch, repoHead)
+	if err != nil {
+		return fmt.Errorf("check whether %s can fast-forward to %s: %w", branch, repoHead, err)
+	}
+	if !canFF {
+		return nil
+	}
+	if _, err := runGit(worktreePath, "merge", "--ff-only", repoHead); err != nil {
+		return fmt.Errorf("fast-forward %s in %s to %s: %w", branch, worktreePath, repoHead, err)
 	}
 	return nil
 }

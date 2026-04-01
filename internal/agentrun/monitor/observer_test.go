@@ -365,8 +365,6 @@ func TestObserverFailsWhenProcessExitsAfterResultLine(t *testing.T) {
 }
 
 func TestObserverTreatsHardStoppedRunAsOperatorStop(t *testing.T) {
-	t.Parallel()
-
 	store := runruntime.New(t.TempDir())
 	record := agentrun.RunRecord{TicketID: "TKT-500", Role: agentrun.RoleImplementer, SessionID: "session-stop"}
 	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
@@ -554,6 +552,54 @@ func TestObserverPersistsVisibleTranscriptAndStatusForActiveRun(t *testing.T) {
 	}
 	if len(transcript) < 3 {
 		t.Fatalf("unexpected transcript: %#v", transcript)
+	}
+}
+
+func TestObserverKeepsPriorPlannedStepsWhenResumedRunReportsShorterPlan(t *testing.T) {
+	t.Parallel()
+
+	store := runruntime.New(t.TempDir())
+	handle := &fakeHandle{
+		stdout: bytes.NewBufferString("{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"PLAN ticket=TKT-381 steps=2\\nSTEP ticket=TKT-381 index=4 status=in_progress title=\\\"Run full test suite\\\"\\nRESULT status=done ticket=TKT-381 role=implementer commit=abc123 tests=passed\"}}\n"),
+		stderr: bytes.NewReader(nil),
+		waitCh: make(chan error, 1),
+	}
+	handle.waitCh <- nil
+
+	record := agentrun.RunRecord{TicketID: "TKT-381", Role: agentrun.RoleImplementer, SessionID: "session-resume"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:         "TKT-381",
+		SessionID:        "session-resume",
+		Active:           false,
+		PlannedSteps:     5,
+		CurrentStep:      4,
+		CurrentStepTitle: "Run full test suite",
+		CurrentPhase:     "testing",
+		LastMarker:       "STATUS",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	obs, err := New(Dependencies{Runtime: store}).Observe(context.Background(), agentrun.ObservationInput{
+		Handle:  handle,
+		Record:  record,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if obs.Result.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected observation: %#v", obs)
+	}
+	status, ok, err := store.LoadStatus("TKT-381")
+	if err != nil || !ok {
+		t.Fatalf("LoadStatus() ok=%v err=%v", ok, err)
+	}
+	if status.PlannedSteps != 5 || status.CurrentStep != 4 || status.CurrentStepTitle != "Run full test suite" {
+		t.Fatalf("expected resumed progress to remain 4/5, got %#v", status)
 	}
 }
 

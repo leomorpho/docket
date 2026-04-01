@@ -206,6 +206,30 @@ func (s *Store) WriteStatus(status StatusSnapshot) error {
 		if strings.TrimSpace(status.StartedAt) == "" {
 			status.StartedAt = existing.StartedAt
 		}
+		if status.PlannedSteps == 0 {
+			status.PlannedSteps = existing.PlannedSteps
+		}
+		if status.CurrentStep == 0 {
+			status.CurrentStep = existing.CurrentStep
+		}
+		if strings.TrimSpace(status.CurrentStepTitle) == "" {
+			status.CurrentStepTitle = existing.CurrentStepTitle
+		}
+		if strings.TrimSpace(status.CurrentPhase) == "" {
+			status.CurrentPhase = existing.CurrentPhase
+		}
+		if strings.TrimSpace(status.LastMarker) == "" {
+			status.LastMarker = existing.LastMarker
+		}
+		if strings.TrimSpace(status.LastVisibleText) == "" {
+			status.LastVisibleText = existing.LastVisibleText
+		}
+		if strings.TrimSpace(status.LastVisibleAt) == "" {
+			status.LastVisibleAt = existing.LastVisibleAt
+		}
+		if strings.TrimSpace(status.LastEventAt) == "" {
+			status.LastEventAt = existing.LastEventAt
+		}
 		if existing.LastResultStatus == "stopped" && !existing.Active {
 			status.Active = false
 			status.Hung = false
