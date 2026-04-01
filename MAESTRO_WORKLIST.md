@@ -8,12 +8,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
 - Hotspots: `.docket/config.json`, `.docket/manifest.json`, `.docket/tickets/`, `.docket/checkpoints/`, `.docket/local/runtime/`, `cmd/`, `internal/workable/`, `internal/store/local/`, `internal/agentrun/`, `internal/hooks/`, `internal/capabilities/`, `internal/runstate/`, `docs/`, `README.md`.
 - Primary objective: leave the repo with a truthful executable backlog, a clean serial autorun loop, and no default-product dependency on security, review, or parallelism semantics.
 
-- [ ] NS-01 — Add failing tests that prove the queue health surfaces currently disagree: write command and unit tests showing that `start`, `doctor`, `status`, and selector diagnostics all report different outcomes today for the same repo fixture with zero runnable tickets and for a fixture with one runnable ticket, then keep those tests red until the follow-up implementation tasks fix the disagreement.  
+- [x] NS-01 — Add failing tests that prove the queue health surfaces currently disagree: write command and unit tests showing that `start`, `doctor`, `status`, and selector diagnostics all report different outcomes today for the same repo fixture with zero runnable tickets and for a fixture with one runnable ticket, then keep those tests red until the follow-up implementation tasks fix the disagreement.  
   Code paths: `cmd/doctor.go`, `cmd/status.go`, `cmd/start.go`, `cmd/queue_invariant.go`, `internal/agentrun/selector/service.go`, `internal/workable/diagnosis.go`, `internal/workable/workable.go`.  
   TDD: start with failing tests only; do not change production code in this task.  
   Tests must cover: zero ready tickets; a ready ticket that fails the ready contract; a blocked ready ticket; one valid runnable ready leaf; consistent human and JSON output where supported.  
   Acceptance criteria: the repo has regression tests that capture the current queue-truthfulness gap and will fail until the CLI/runtime agrees on one definition of runnable work.  
   Verify with `go test ./cmd ./internal/workable ./internal/agentrun/selector -count=1`.
+  Note: Added red queue-truth regressions in `cmd/queue_truthfulness_test.go` plus zero-ready unit baselines in `internal/workable` and `internal/agentrun/selector`; the new `cmd` tests intentionally fail today because `doctor` skips queue truth without `topo:*` labels and `status` still omits runnable-queue state.
 
 - [ ] NS-02 — Remove the label-gated queue-invariant loophole so queue health is always evaluated against real runnable work: implement the production fix for the failing tests from `NS-01` by changing `cmd/queue_invariant.go` and related diagnostics so queue invariants are not silently skipped when labels are absent.  
   Code paths: `cmd/queue_invariant.go`, `cmd/doctor.go`, `internal/workable/diagnosis.go`.  

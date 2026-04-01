@@ -207,6 +207,45 @@ func TestDiagnoseEmptyReportsUngroomedReadyTickets(t *testing.T) {
 	}
 }
 
+func TestDiagnoseEmptyReportsZeroReadyTickets(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	if err := ticket.SaveConfig(repoRoot, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-131",
+		Seq:         131,
+		Title:       "Draft only ticket",
+		State:       ticket.State("draft"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Draft-only fixture for zero-ready diagnosis coverage.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "Draft ticket remains present"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	got, err := DiagnoseEmpty(context.Background(), s, cfg)
+	if err != nil {
+		t.Fatalf("DiagnoseEmpty() error = %v", err)
+	}
+	if got.StartableTickets != 0 || got.BlockedTickets != 0 || got.UngroomedTickets != 0 {
+		t.Fatalf("expected no startable backlog accounting, got %#v", got)
+	}
+	summary := got.Summary()
+	if !strings.Contains(summary, "no actionable tickets in startable states") {
+		t.Fatalf("expected zero-ready summary, got %q", summary)
+	}
+	if !strings.Contains(got.NoRunnableReason(), "no runnable tickets remain:") {
+		t.Fatalf("expected no-runnable prefix, got %q", got.NoRunnableReason())
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

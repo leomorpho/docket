@@ -346,6 +346,42 @@ func TestServiceNextExplainsBlockedBacklogWhenNothingRunnable(t *testing.T) {
 	}
 }
 
+func TestServiceNextExplainsZeroReadyTicketsWhenQueueIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-330",
+		Seq:         330,
+		Title:       "Draft only ticket",
+		State:       ticket.State("draft"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Draft-only selector fixture for zero-ready coverage.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "Draft ticket remains present"}},
+	}); err != nil {
+		t.Fatalf("create TKT-330: %v", err)
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if selection.Found {
+		t.Fatalf("expected no runnable selection, got %#v", selection)
+	}
+	if !strings.Contains(selection.Reason, "no actionable tickets in startable states") {
+		t.Fatalf("expected zero-ready diagnosis, got %q", selection.Reason)
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
