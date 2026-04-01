@@ -23,9 +23,9 @@ var linkCmd = &cobra.Command{
 			return fmt.Errorf("loading relations: %w", err)
 		}
 		switch linkRelation {
-		case "blocks", "parallel-safe", "depends-on":
+		case "blocks", "depends-on":
 		default:
-			return fmt.Errorf("--relation must be one of: blocks, parallel-safe, depends-on")
+			return fmt.Errorf("--relation must be one of: blocks, depends-on")
 		}
 		if err := upsertRelation(repo, relationEntry{
 			From:     args[0],
@@ -46,6 +46,6 @@ var linkCmd = &cobra.Command{
 }
 
 func init() {
-	linkCmd.Flags().StringVar(&linkRelation, "relation", "", "relation type: blocks|parallel-safe|depends-on")
+	linkCmd.Flags().StringVar(&linkRelation, "relation", "", "relation type: blocks|depends-on")
 	rootCmd.AddCommand(linkCmd)
 }
