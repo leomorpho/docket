@@ -1364,6 +1364,73 @@ func TestWriteTerminalTitleSkipsNonStdout(t *testing.T) {
 	}
 }
 
+func TestLiveRunLogStreamerFlushWritesTitlesOnlyForActiveRuns(t *testing.T) {
+	prevRepo := repo
+	prevFormat := format
+	prevWriter := managedRunTitleWriter
+	t.Cleanup(func() {
+		repo = prevRepo
+		format = prevFormat
+		managedRunTitleWriter = prevWriter
+	})
+
+	repoRoot := t.TempDir()
+	repo = repoRoot
+	format = "human"
+	store := runruntime.New(repoRoot)
+
+	for _, status := range []runruntime.StatusSnapshot{
+		{
+			TicketID:         "TKT-172",
+			Active:           false,
+			CurrentPhase:     "analysis",
+			CurrentStep:      4,
+			PlannedSteps:     4,
+			LastResultStatus: "failed",
+		},
+		{
+			TicketID:         "TKT-303",
+			Active:           true,
+			CurrentPhase:     "testing",
+			CurrentStep:      2,
+			PlannedSteps:     5,
+			LastResultStatus: "running",
+		},
+		{
+			TicketID:         "TKT-304",
+			Active:           false,
+			CurrentPhase:     "design",
+			CurrentStep:      2,
+			PlannedSteps:     5,
+			LastResultStatus: "failed",
+		},
+	} {
+		if err := store.WriteStatus(status); err != nil {
+			t.Fatalf("WriteStatus(%s) error = %v", status.TicketID, err)
+		}
+	}
+
+	var titles []string
+	managedRunTitleWriter = func(cmd *cobra.Command, title string) {
+		titles = append(titles, title)
+	}
+
+	streamer := &liveRunLogStreamer{
+		cmd:       &cobra.Command{},
+		store:     store,
+		seen:      map[string]int{},
+		announced: map[string]bool{},
+	}
+	streamer.flush()
+
+	if len(titles) != 1 {
+		t.Fatalf("expected exactly one title update for the active run, got %v", titles)
+	}
+	if got, want := titles[0], formatManagedRunTitle(filepathBase(repoRoot), "TKT-303", "testing", 2, 5, true); got != want {
+		t.Fatalf("unexpected title: got %q want %q", got, want)
+	}
+}
+
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

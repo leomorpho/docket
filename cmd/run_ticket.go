@@ -47,6 +47,8 @@ var newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orche
 	return newRunOrchestratorWithMode(repoRoot, enableReview, managedRunAdapterMode())
 }
 
+var managedRunTitleWriter = writeTerminalTitle
+
 var newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode string) agentrun.Orchestrator {
 	store := local.New(repoRoot)
 	wf := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), newRuntimeDeps(repoRoot).claimer)
@@ -180,7 +182,9 @@ func (s *liveRunLogStreamer) flushTicket(ticketID string) {
 			s.announced[ticketID] = true
 			fmt.Fprintf(s.cmd.OutOrStdout(), "[%s] session=%s active=%t\n", ticketID, status.SessionID, status.Active)
 		}
-		writeTerminalTitle(s.cmd, formatManagedRunTitle(filepathBase(repo), ticketID, status.CurrentPhase, status.CurrentStep, status.PlannedSteps, status.Active))
+		if status.Active {
+			managedRunTitleWriter(s.cmd, formatManagedRunTitle(filepathBase(repo), ticketID, status.CurrentPhase, status.CurrentStep, status.PlannedSteps, status.Active))
+		}
 		s.mu.Unlock()
 	}
 	transcript, err := s.store.LoadTranscript(ticketID)
