@@ -1607,7 +1607,7 @@
     },
     "TKT-296": {
       "title": "Phase 2: Remove legacy artifact path fallback after migration window",
-      "state": "draft",
+      "state": "ready",
       "priority": 1,
       "parent": "TKT-290"
     },
@@ -1619,7 +1619,7 @@
     },
     "TKT-298": {
       "title": "Add doctor/check diagnostics for legacy-new artifact layout drift",
-      "state": "draft",
+      "state": "ready",
       "priority": 2,
       "parent": "TKT-290"
     },
@@ -1637,7 +1637,7 @@
     },
     "TKT-301": {
       "title": "Auto-heal Docket ignore policy from init/bootstrap/install entrypoints",
-      "state": "draft",
+      "state": "ready",
       "priority": 2,
       "parent": "TKT-290"
     },
@@ -1649,13 +1649,13 @@
     },
     "TKT-303": {
       "title": "Add CI artifact policy drift checks for local-vs-tracked invariants",
-      "state": "draft",
+      "state": "ready",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-304": {
       "title": "Split migration engine from ignore reconciliation in rollout execution",
-      "state": "draft",
+      "state": "ready",
       "priority": 1,
       "parent": "TKT-290"
     },

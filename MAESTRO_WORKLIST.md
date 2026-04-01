@@ -111,12 +111,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Acceptance criteria: the repo stops having zero ready work; there is a first real runnable queue entry.  
   Verify with `go run . list --state ready --format context`, `go run . doctor`, and `go run . status`.
 
-- [ ] NS-14 — Expand the ready queue to at least five groomed serial leaf tickets: continue grooming and promotion until there is a small ordered ready queue suitable for dogfooding serial autorun.  
+- [x] NS-14 — Expand the ready queue to at least five groomed serial leaf tickets: continue grooming and promotion until there is a small ordered ready queue suitable for dogfooding serial autorun.  
   Code paths: `.docket/tickets/`, `.docket/manifest.json`, readiness tooling.  
   TDD: add regression tests only if ticket-tooling bugs are uncovered while grooming.  
   Tests must cover: all promoted tickets are leaves; no coordination blockers; each ticket contains AC and verification commands; queue truthfulness still holds after the larger queue is created.  
   Acceptance criteria: the repo has a real serial backlog, not just one emergency ready ticket.  
   Verify with `go run . list --state ready --format context`, `go run . doctor`, and `go run . status`.
+  Note: Promoted six existing ready-contract leaf tickets into the queue: `TKT-296`, `TKT-298`, `TKT-299`, `TKT-301`, `TKT-303`, and `TKT-304`. `go run . list --state ready --format context` now shows all six, `go run . doctor` reports `PASS queue_invariant`, and `go run . status` reports `TKT-304` as the next runnable ticket with three runnable leaves available.
 
 - [ ] NS-15 — Add failing tests that capture the remaining repo-local runtime namespace drift: write red tests proving that managed-run state lookup still varies with `DOCKET_HOME` or still emits legacy `security.*` names in runtime-facing output.  
   Code paths: `cmd/runtime_namespace.go`, `cmd/start.go`, `cmd/run_ticket.go`, `cmd/status.go`, `internal/runstate/`.  
