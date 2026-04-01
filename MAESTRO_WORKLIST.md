@@ -48,12 +48,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/store/local -count=1`.
   Note: Added `cmd/ready.go` plus a shared non-mutating readiness evaluator in `internal/store/local/ready_contract.go`. Targeted readiness command tests pass with stable human and JSON output, and `go test ./internal/store/local -count=1` passes; the broader `go test ./cmd ./internal/store/local -count=1` run still hits pre-existing `cmd/update` and proof-pipeline failures tied to queue-invariant assumptions outside this task.
 
-- [ ] NS-06 — Add failing tests for readiness promotion from `draft` to `ready`: write red tests for a command path or flag that promotes a ticket only when the ready contract passes and refuses promotion otherwise.  
+- [x] NS-06 — Add failing tests for readiness promotion from `draft` to `ready`: write red tests for a command path or flag that promotes a ticket only when the ready contract passes and refuses promotion otherwise.  
   Code paths: the readiness command from `NS-05`, `cmd/update.go` or shared mutation helpers, `internal/store/local/ready_contract.go`.  
   TDD: tests only in this task; do not implement promotion yet.  
   Tests must cover: passing draft leaf promotion; failed promotion with contract errors; non-leaf rejection; idempotent re-run on an already-ready ticket; manifest/index updates after promotion.  
   Acceptance criteria: the expected behavior for explicit readiness promotion is locked down in tests before implementation.  
   Verify with `go test ./cmd ./internal/store/local -count=1`.
+  Note: Added red promotion coverage in `cmd/ready_promote_test.go` around a new `ready --promote` path, including success, contract failure, non-leaf rejection, idempotent already-ready behavior, and manifest/index visibility. `go test ./cmd -run 'TestReadyPromoteCommand' -count=1` now fails on the missing `--promote` flag, while `go test ./internal/store/local -count=1` still passes.
 
 - [ ] NS-07 — Implement readiness promotion so grooming becomes a first-class product action: build the promotion path defined in `NS-06`, including state updates and any manifest/index refresh needed by the local store.  
   Code paths: readiness command implementation, `cmd/update.go` or shared mutation code, `internal/store/local/store.go`, `internal/store/local/index.go`.  
