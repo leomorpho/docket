@@ -155,3 +155,40 @@ func TestHelpJSONWorkflowUsesConfiguredRoleStates(t *testing.T) {
 		t.Fatalf("expected configured completed state in workflow guidance, got %q", got)
 	}
 }
+
+func TestHelpJSONStatusManifestOmitsParallelFlag(t *testing.T) {
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"help-json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("help-json failed: %v", err)
+	}
+
+	var manifest map[string]any
+	if err := json.Unmarshal(b.Bytes(), &manifest); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+
+	commands, ok := manifest["commands"].([]any)
+	if !ok {
+		t.Fatalf("commands missing from manifest")
+	}
+	for _, c := range commands {
+		entry := c.(map[string]any)
+		if entry["name"] != "status" {
+			continue
+		}
+		flags, ok := entry["flags"].(map[string]any)
+		if !ok {
+			t.Fatalf("status flags missing from manifest entry")
+		}
+		if _, exists := flags["--parallel"]; exists {
+			t.Fatalf("status manifest should not expose retired --parallel flag")
+		}
+		if strings.Contains(strings.ToLower(entry["description"].(string)), "parallel") {
+			t.Fatalf("status description should not advertise parallel safety, got %q", entry["description"])
+		}
+		return
+	}
+	t.Fatal("status command missing from manifest")
+}

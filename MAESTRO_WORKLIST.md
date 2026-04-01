@@ -143,12 +143,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Acceptance criteria: planning, execution, and validation are the default lifecycle; review is optional and not a core contract event.  
   Verify with `go test ./cmd ./internal/capabilities ./internal/hooks -count=1`.
 
-- [ ] NS-19 — Add failing tests that lock down the removal of premature parallelism surfaces: write red tests proving that `status --parallel`, `parallel-safe` relations, and related help output are still exposed.  
+- [x] NS-19 — Add failing tests that lock down the removal of premature parallelism surfaces: write red tests proving that `status --parallel`, `parallel-safe` relations, and related help output are still exposed.  
   Code paths: `cmd/status.go`, `cmd/link.go`, relation validation under `internal/store/local/` or `internal/ticket/`, `cmd/helpjson.go`.  
   TDD: tests only in this task.  
   Tests must cover: `status` help/output; relation validation for `parallel-safe`; help JSON; any README/help strings surfaced through tests.  
   Acceptance criteria: the product’s premature parallelism promises are captured in failing tests before deletion.  
   Verify with `go test ./cmd ./internal/store/local ./internal/ticket -count=1`.
+  Note: Added red regressions in `cmd/status_doctor_split_test.go`, `cmd/link_status_test.go`, and `cmd/helpjson_test.go` that assert `status` help/output no longer expose `--parallel`, `link` rejects `parallel-safe`, and `help-json` omits the retired flag. Targeted `go test ./cmd -run 'Test(StatusRejectsParallelFlag|StatusHelpOmitsParallelFlag|LinkRejectsParallelSafeRelation|HelpJSONStatusManifestOmitsParallelFlag|StatusAndDoctorOutputScopesStayDistinct)' -count=1` now fails for those expected reasons, while the broader verify command still has pre-existing unrelated failures and hangs in `cmd`/`internal/store/local`.
 
 - [ ] NS-20 — Remove `status --parallel` and retire `parallel-safe` as an active planning relation: implement the serial-first cleanup proven by `NS-19` so the shipped CLI no longer implies a mature scheduler exists.  
   Code paths: `cmd/status.go`, `cmd/link.go`, relation validation, `cmd/helpjson.go`, any docs/help copy touched by tested command output.  
