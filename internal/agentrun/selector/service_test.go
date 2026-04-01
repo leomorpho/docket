@@ -240,6 +240,48 @@ func TestServiceNextRejectsUngroomedReadyTicket(t *testing.T) {
 	}
 }
 
+func TestServiceNextUsesConfiguredStartableWorkflowState(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	cfg.States = map[string]ticket.StateConfig{
+		"queued": {Label: "Queued", Open: true, Column: 0, Next: []string{"coding"}, Roles: []string{"intake"}, Startable: true, BlocksDependents: true},
+		"coding": {Label: "Coding", Open: true, Column: 1, Next: []string{"qa"}, Roles: []string{"delivery"}, BlocksDependents: true},
+		"qa":     {Label: "QA", Open: true, Column: 2, Next: []string{"done"}, Roles: []string{"review"}, Reviewable: true, BlocksDependents: true},
+		"done":   {Label: "Done", Open: false, Column: 3, Next: []string{}, Roles: []string{"completed"}, Terminal: true},
+	}
+	cfg.DefaultState = "queued"
+	if err := ticket.SaveConfig(repoRoot, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-205",
+		Seq:         205,
+		Title:       "Queued startable ticket",
+		State:       ticket.State("queued"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: runnableSelectorDescription(),
+		AC:          runnableSelectorAC(),
+	}); err != nil {
+		t.Fatalf("create TKT-205: %v", err)
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if !selection.Found || selection.TicketID != "TKT-205" {
+		t.Fatalf("expected configured startable-state ticket, got %#v", selection)
+	}
+}
+
 func TestServiceNextSkipsNonLeafParents(t *testing.T) {
 	t.Parallel()
 

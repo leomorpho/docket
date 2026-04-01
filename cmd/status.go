@@ -6,10 +6,12 @@ import (
 	"sort"
 	"strings"
 
+	selectorpkg "github.com/leomorpho/docket/internal/agentrun/selector"
 	"github.com/leomorpho/docket/internal/lifecycle"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
+	workablepkg "github.com/leomorpho/docket/internal/workable"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +31,11 @@ var statusCmd = &cobra.Command{
 		securityMode, _ := securityEnforcementSurface(repo)
 		if !statusParallel {
 			fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
+			queueLine, err := buildQueueStatusLine(context.Background(), repo)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), queueLine)
 			fmt.Fprintln(cmd.OutOrStdout(), "Use `docket status --parallel` for active-work ticket matrix.")
 			fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
 			renderHookStatusSurface(cmd.OutOrStdout())
@@ -82,6 +89,30 @@ var statusCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func buildQueueStatusLine(ctx context.Context, repoRoot string) (string, error) {
+	s := local.New(repoRoot)
+	cfg, err := ticket.LoadConfig(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	selection, err := selectorpkg.New(selectorpkg.Dependencies{
+		Store:      s,
+		LoadConfig: func(string) (*ticket.Config, error) { return cfg, nil },
+	}).Next(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !selection.Found {
+		return fmt.Sprintf("Queue: %s", selection.Reason), nil
+	}
+
+	tickets, err := workablepkg.Tickets(ctx, s, cfg, store.Filter{})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Queue: next runnable ticket is %s (%d runnable now).", selection.TicketID, len(tickets)), nil
 }
 
 func renderHookStatusSurface(out interface{ Write([]byte) (int, error) }) {

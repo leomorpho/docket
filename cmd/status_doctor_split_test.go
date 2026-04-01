@@ -108,6 +108,67 @@ func TestStatusParallelUsesConfiguredActiveRoleStates(t *testing.T) {
 	}
 }
 
+func TestStatusReportsOnlyRunnableLeafFromSharedQueueDefinition(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	s := local.New(h.repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-950",
+			Seq:         950,
+			Title:       "Blocker",
+			State:       ticket.State("running"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
+		},
+		{
+			ID:          "TKT-951",
+			Seq:         951,
+			Title:       "Blocked ready ticket",
+			State:       ticket.State("ready"),
+			Priority:    2,
+			BlockedBy:   []string{"TKT-950"},
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
+		},
+		{
+			ID:          "TKT-952",
+			Seq:         952,
+			Title:       "Runnable ready ticket",
+			State:       ticket.State("ready"),
+			Priority:    3,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "human:test",
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("create %s: %v", tk.ID, err)
+		}
+	}
+
+	out, err := h.run("status")
+	if err != nil {
+		t.Fatalf("status failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "next runnable ticket is TKT-952") {
+		t.Fatalf("expected status to report the same runnable leaf as start/selector, got:\n%s", out)
+	}
+	if strings.Contains(out, "TKT-951") {
+		t.Fatalf("status should not present blocked ready tickets as runnable, got:\n%s", out)
+	}
+}
+
 func TestDoctorReportsSecurityEnforcementMode(t *testing.T) {
 	h := newFakeRepoHarness(t)
 

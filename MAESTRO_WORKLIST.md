@@ -24,12 +24,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/workable -count=1`.
   Note: Removed the `topo:*` enforcement gate from `cmd/queue_invariant.go`, so `doctor` and update-time invariant checks now always evaluate actual runnable work. Added `TestDoctorReportsQueueInvariantFailureWithoutTopologyLabels` to lock in the unlabeled-backlog case; targeted invariant tests and `go test ./internal/workable -count=1` pass, while the broader `cmd` queue-truth/status assertions remain for `NS-03`.
 
-- [ ] NS-03 — Align `status` and selector output with the same runnable-work definition used by `workable.go`: implement the remaining queue-truthfulness fixes so `cmd/status.go` and `internal/agentrun/selector/service.go` report the same runnable candidates as `internal/workable/workable.go`.  
+- [x] NS-03 — Align `status` and selector output with the same runnable-work definition used by `workable.go`: implement the remaining queue-truthfulness fixes so `cmd/status.go` and `internal/agentrun/selector/service.go` report the same runnable candidates as `internal/workable/workable.go`.  
   Code paths: `cmd/status.go`, `internal/agentrun/selector/service.go`, `internal/workable/workable.go`, `internal/workable/diagnosis.go`.  
   TDD: keep the `NS-01` tests red until this work is complete; add targeted selector tests before modifying selector behavior if gaps remain.  
   Tests must cover: empty queue; one runnable ticket; multiple ready tickets with only one unblocked leaf; custom workflow roles; regression that `status`, `doctor`, and `start` agree.  
   Acceptance criteria: all queue-health surfaces use one source of truth for “runnable now”; the CLI stops presenting contradictory queue state.  
   Verify with `go test ./cmd ./internal/agentrun/selector ./internal/workable -count=1`.
+  Note: Default `status` now reports queue truth from the same selector/workable path as `start` and `doctor`, and targeted regressions cover the single-runnable-leaf case plus a custom startable workflow state in selector tests.
 
 - [ ] NS-04 — Add a failing command test suite for an explicit readiness-check command: write red tests for a new CLI path that evaluates one ticket against the ready contract and reports every missing field clearly enough for an agent to repair it.  
   Code paths: new command under `cmd/`, `internal/store/local/ready_contract.go`, existing mutation/help helpers in `cmd/`.  
