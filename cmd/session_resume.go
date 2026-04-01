@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/claim"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
+	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
 
@@ -48,17 +51,17 @@ var sessionResumeCmd = &cobra.Command{
 				return fmt.Errorf("agent-managed resume must run inside bound worktree: %s", absWT)
 			}
 
-			ns := security.NewRepoNamespaceStore(docketHome)
+			ns := runstate.New(runtimeNamespaceRoot(repo))
 			activeWorkflowHash, active, err := ns.GetActiveWorkflowHash(repo)
 			if err != nil {
-				return fmt.Errorf("checking active workflow lock: %w", err)
+				return fmt.Errorf("checking active runtime policy pack: %w", err)
 			}
 			expectedWorkflow := ""
 			if active {
 				expectedWorkflow = activeWorkflowHash
 			}
 			if err := ns.VerifyRunContext(repo, id, actor, cl.Worktree, "docket/"+id, expectedWorkflow); err != nil {
-				if errors.Is(err, security.ErrRunManifestMissing) {
+				if errors.Is(err, runstate.ErrRunManifestMissing) {
 					return fmt.Errorf("agent-managed resume requires run manifest for %s", id)
 				}
 				return err
@@ -76,21 +79,32 @@ var sessionResumeCmd = &cobra.Command{
 			}
 		}
 
+		var cp checkpoint
 		paths, err := listCheckpointPaths(repo, id)
 		if err != nil {
 			return err
 		}
-		if len(paths) == 0 {
-			return fmt.Errorf("no checkpoints found for %s", id)
-		}
-		latest := paths[len(paths)-1]
-		data, err := os.ReadFile(latest)
-		if err != nil {
-			return err
-		}
-		var cp checkpoint
-		if err := json.Unmarshal(data, &cp); err != nil {
-			return err
+		if len(paths) > 0 {
+			latest := paths[len(paths)-1]
+			data, err := os.ReadFile(latest)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(data, &cp); err != nil {
+				return err
+			}
+		} else {
+			brief, ok, err := runruntime.New(repo).LoadBrief(id)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("no checkpoints or managed-run brief found for %s", id)
+			}
+			cp, err = buildResumeCheckpointFromBrief(repo, id, brief)
+			if err != nil {
+				return err
+			}
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "RESUME_CONTEXT\n")
@@ -116,6 +130,84 @@ var sessionResumeCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func buildResumeCheckpointFromBrief(repoRoot, ticketID string, brief runruntime.RunBrief) (checkpoint, error) {
+	s := local.New(repoRoot)
+	tkt, err := s.GetTicket(context.Background(), ticketID)
+	if err != nil {
+		return checkpoint{}, err
+	}
+	cp := checkpoint{
+		TicketID:     ticketID,
+		CreatedAt:    strings.TrimSpace(brief.UpdatedAt),
+		LastComments: []string{},
+		Summary:      strings.TrimSpace(brief.Summary),
+	}
+	if cp.CreatedAt == "" {
+		cp.CreatedAt = brief.UpdatedAt
+	}
+	if tkt != nil {
+		cp.TicketState = strings.TrimSpace(string(tkt.State))
+		cp.ACTotal = len(tkt.AC)
+		for _, ac := range tkt.AC {
+			if ac.Done {
+				cp.ACDone++
+			} else if strings.TrimSpace(ac.Description) != "" {
+				cp.NextSteps = append(cp.NextSteps, strings.TrimSpace(ac.Description))
+			}
+		}
+		cp.LinkedCommits = append(cp.LinkedCommits, tkt.LinkedCommits...)
+		cp.Blockers = append(cp.Blockers, tkt.BlockedBy...)
+		if len(tkt.Comments) > 0 {
+			start := len(tkt.Comments) - 3
+			if start < 0 {
+				start = 0
+			}
+			for _, c := range tkt.Comments[start:] {
+				cp.LastComments = append(cp.LastComments, strings.TrimSpace(c.Body))
+			}
+		}
+	}
+	if strings.TrimSpace(brief.CommitSHA) != "" && !containsStringValue(cp.LinkedCommits, brief.CommitSHA) {
+		cp.LinkedCommits = append(cp.LinkedCommits, brief.CommitSHA)
+	}
+	if len(brief.FilesTouched) > 0 {
+		cp.ChangedFiles = append(cp.ChangedFiles, brief.FilesTouched...)
+	} else {
+		cp.ChangedFiles = gitChangedFiles(repoRoot)
+	}
+	if strings.TrimSpace(brief.ResumeNext) != "" {
+		cp.NextSteps = append(cp.NextSteps, brief.ResumeNext)
+	}
+	if strings.TrimSpace(brief.Tests) != "" {
+		cp.LastComments = append(cp.LastComments, "Validation: "+strings.TrimSpace(brief.Tests))
+	}
+	if len(brief.ValidationErrors) > 0 {
+		cp.LastComments = append(cp.LastComments, "Validation errors: "+strings.Join(brief.ValidationErrors, "; "))
+	}
+	cp.Branch = gitCurrentBranch(repoRoot)
+	cp.WorktreePath = repoRoot
+	if strings.TrimSpace(cp.CreatedAt) == "" {
+		cp.CreatedAt = brief.UpdatedAt
+	}
+	if strings.TrimSpace(cp.CreatedAt) == "" {
+		cp.CreatedAt = "unknown"
+	}
+	return cp, nil
+}
+
+func containsStringValue(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {

@@ -150,9 +150,6 @@ func printTicketHuman(cmd *cobra.Command, t *ticket.Ticket, agg acAggregate, pro
 			if len(tr.Checks) > 0 {
 				fmt.Fprintf(out, "    checks: %s\n", strings.Join(tr.Checks, ", "))
 			}
-			if tr.WorkflowLockHash != "" {
-				fmt.Fprintf(out, "    workflow_lock: %s\n", tr.WorkflowLockHash)
-			}
 			if tr.ManagedRun {
 				fmt.Fprintf(out, "    managed_run: true (%s)\n", tr.RunBranch)
 			}

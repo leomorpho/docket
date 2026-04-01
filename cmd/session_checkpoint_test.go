@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -22,7 +23,7 @@ func TestACCompleteWritesCheckpointAndSessionResume(t *testing.T) {
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
 	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-501", Seq: 501, Title: "Checkpoint", State: "todo", Priority: 1,
+		ID: "TKT-501", Seq: 501, Title: "Checkpoint", State: "draft", Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 
@@ -55,7 +56,7 @@ func TestSessionCompressCheckpointAndListIncludesCheckpoints(t *testing.T) {
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
 	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-502", Seq: 502, Title: "Compress", State: "todo", Priority: 1,
+		ID: "TKT-502", Seq: 502, Title: "Compress", State: "draft", Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 	// attach session file
@@ -102,7 +103,7 @@ func TestSessionResume_RejectsAgentOutsideBoundWorktree(t *testing.T) {
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
 	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-503", Seq: 503, Title: "Checkpoint", State: "todo", Priority: 1,
+		ID: "TKT-503", Seq: 503, Title: "Checkpoint", State: "draft", Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 
@@ -143,7 +144,7 @@ func TestSessionResume_RejectsAgentWithoutRunManifest(t *testing.T) {
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
 	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-505", Seq: 505, Title: "Resume manifest gate", State: "todo", Priority: 1,
+		ID: "TKT-505", Seq: 505, Title: "Resume manifest gate", State: "draft", Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 
@@ -196,7 +197,7 @@ func TestBuildCheckpointIncludesStructuredResumeFields(t *testing.T) {
 		ID:            "TKT-504",
 		Seq:           504,
 		Title:         "Structured checkpoint",
-		State:         "in-progress",
+		State:         "running",
 		Priority:      1,
 		BlockedBy:     []string{"TKT-099"},
 		LinkedCommits: []string{"abc123"},
@@ -220,7 +221,7 @@ func TestBuildCheckpointIncludesStructuredResumeFields(t *testing.T) {
 	if len(cp.NextSteps) != 1 || !strings.Contains(cp.NextSteps[0], "Pending step") {
 		t.Fatalf("expected next steps in checkpoint, got %#v", cp.NextSteps)
 	}
-	if cp.TicketState != "in-progress" {
+	if cp.TicketState != "running" {
 		t.Fatalf("expected ticket state in checkpoint, got %q", cp.TicketState)
 	}
 }
@@ -237,7 +238,7 @@ func TestSessionCompressResumeContinuityPacket(t *testing.T) {
 		ID:          "TKT-506",
 		Seq:         506,
 		Title:       "Continuity packet",
-		State:       "in-progress",
+		State:       "running",
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -271,7 +272,7 @@ func TestSessionCompressResumeContinuityPacket(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "state=in-progress") {
+	if !strings.Contains(got, "state=running") {
 		t.Fatalf("expected resume packet to include ticket state, got: %s", got)
 	}
 	if !strings.Contains(got, "next_steps=[Pending step]") {
@@ -282,5 +283,67 @@ func TestSessionCompressResumeContinuityPacket(t *testing.T) {
 	}
 	if !strings.Contains(got, "last_comments=[Session compressed. Handoff updated.]") {
 		t.Fatalf("expected resume packet to include recent execution context comment, got: %s", got)
+	}
+}
+
+func TestSessionResumeFallsBackToManagedRunBrief(t *testing.T) {
+	tmp := t.TempDir()
+	repo = tmp
+	format = "human"
+
+	s := local.New(tmp)
+	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
+	now := time.Now().UTC().Truncate(time.Second)
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:            "TKT-507",
+		Seq:           507,
+		Title:         "Brief fallback",
+		State:         "running",
+		Priority:      1,
+		LinkedCommits: []string{"abc123"},
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		CreatedBy:     "me",
+		Description:   "desc",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "Done step", Done: true},
+			{Description: "Pending repair", Done: false},
+		},
+	})
+	if err := runruntime.New(tmp).WriteBrief(runruntime.RunBrief{
+		TicketID:         "TKT-507",
+		Outcome:          "failed",
+		Summary:          "Managed run failed validation before closeout.",
+		CommitSHA:        "def456",
+		FilesTouched:     []string{"feature.txt", "README.md"},
+		Tests:            "go test ./...",
+		ValidationErrors: []string{"feature.txt missing"},
+		ResumeNext:       "Repair feature.txt and rerun the managed ticket.",
+		UpdatedAt:        now.Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() failed: %v", err)
+	}
+
+	out := new(bytes.Buffer)
+	rootCmd.SetOut(out)
+	rootCmd.SetArgs([]string{"session", "resume", "TKT-507"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("session resume failed: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"RESUME_CONTEXT",
+		"ticket=TKT-507",
+		"state=running",
+		"linked_commits=[abc123, def456]",
+		"changed_files=[feature.txt, README.md]",
+		"next_steps=[Pending repair | Repair feature.txt and rerun the managed ticket.]",
+		"summary=Managed run failed validation before closeout.",
+		"last_comments=[Validation: go test ./... | Validation errors: feature.txt missing]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got: %s", want, got)
+		}
 	}
 }

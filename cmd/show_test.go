@@ -358,7 +358,6 @@ func TestShowCmd_JSONIncludesTransitionHistory(t *testing.T) {
 			"to_state":           "in-review",
 			"reason":             "update --state in-review",
 			"checks":             []any{"state_transition_validated", "managed_run_commit_linkage"},
-			"workflow_lock_hash": "hash-123",
 			"managed_run":        true,
 			"run_branch":         "docket/TKT-001",
 		},

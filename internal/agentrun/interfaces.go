@@ -61,6 +61,7 @@ type ValidationInput struct {
 	RepoRoot     string `json:"repo_root"`
 	WorktreePath string `json:"worktree_path"`
 	Branch       string `json:"branch"`
+	SessionID    string `json:"session_id,omitempty"`
 	Result       Result `json:"result"`
 }
 

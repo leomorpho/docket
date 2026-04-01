@@ -17,7 +17,7 @@ import (
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	runvalidate "github.com/leomorpho/docket/internal/agentrun/validate"
 	"github.com/leomorpho/docket/internal/claim"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/vcs"
@@ -300,6 +300,20 @@ func writeStreamLine(w *io.PipeWriter, line string) {
 	_, _ = io.WriteString(w, line+"\n")
 }
 
+func runnableOrchestrationDescription(paths ...string) string {
+	if len(paths) == 0 {
+		paths = []string{"feature.txt"}
+	}
+	return "Implement the managed-run smoke ticket with explicit execution context so the runnable contract remains satisfied throughout orchestration.\n\nLikely paths:\n- " + strings.Join(paths, "\n- ") + "\n\nOut of scope:\n- changing workflow semantics\n- editing unrelated tickets\n\nVerify commands:\n- test -f feature.txt\n- test -f README.md"
+}
+
+func runnableOrchestrationAC() []ticket.AcceptanceCriterion {
+	return []ticket.AcceptanceCriterion{
+		{Description: "feature.txt exists", Run: "test -f feature.txt", VerificationSteps: []string{"Confirm feature.txt exists in the worktree."}},
+		{Description: "README remains present", Run: "test -f README.md", VerificationSteps: []string{"Confirm README.md still exists after the run."}},
+	}
+}
+
 func TestServiceStartImplementerCreatesManagedWorktreeAndPersistsRunRecord(t *testing.T) {
 	t.Parallel()
 
@@ -312,7 +326,7 @@ func TestServiceStartImplementerCreatesManagedWorktreeAndPersistsRunRecord(t *te
 		ID:          "TKT-380",
 		Seq:         380,
 		Title:       "Implement runner",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedBy:   "human:test",
 		Description: "Build the one ticket runner",
@@ -322,7 +336,7 @@ func TestServiceStartImplementerCreatesManagedWorktreeAndPersistsRunRecord(t *te
 	}
 
 	adapter := &recordingAdapter{}
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	service := New(Dependencies{
 		RepoRoot:  repoRoot,
 		Actor:     "agent:test",
@@ -395,7 +409,7 @@ func TestServiceRunTicketUsesMonitorAndValidator(t *testing.T) {
 		ID:          "TKT-381",
 		Seq:         381,
 		Title:       "Monitor path",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
@@ -412,7 +426,7 @@ func TestServiceRunTicketUsesMonitorAndValidator(t *testing.T) {
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   adapter,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
 			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-381", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
@@ -442,7 +456,7 @@ func TestServiceRunTicketCleansRuntimeWhenValidatorRejectsSuccessfulRun(t *testi
 		ID:          "TKT-377",
 		Seq:         377,
 		Title:       "Validation reject",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -459,7 +473,7 @@ func TestServiceRunTicketCleansRuntimeWhenValidatorRejectsSuccessfulRun(t *testi
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   &recordingAdapter{},
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
 			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-377", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
@@ -477,8 +491,12 @@ func TestServiceRunTicketCleansRuntimeWhenValidatorRejectsSuccessfulRun(t *testi
 	if summary.Status != agentrun.StatusFailed || !strings.Contains(summary.Reason, "acceptance command failed") {
 		t.Fatalf("unexpected summary: %#v", summary)
 	}
-	if _, ok, err := runtimeStore.LoadStatus("TKT-377"); err != nil || ok {
-		t.Fatalf("expected runtime cleanup after validator rejection, ok=%v err=%v", ok, err)
+	status, ok, err := runtimeStore.LoadStatus("TKT-377")
+	if err != nil || !ok {
+		t.Fatalf("expected recoverable runtime after validator rejection, ok=%v err=%v", ok, err)
+	}
+	if status.Active || status.LastResultStatus != string(agentrun.StatusFailed) {
+		t.Fatalf("expected inactive failed runtime status, got %#v", status)
 	}
 }
 
@@ -496,7 +514,7 @@ func TestServiceRunNextExecutesSeriallyAndStopsOnBlockingOutcome(t *testing.T) {
 			ID:          id,
 			Seq:         376,
 			Title:       id,
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -514,7 +532,7 @@ func TestServiceRunNextExecutesSeriallyAndStopsOnBlockingOutcome(t *testing.T) {
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   adapter,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
 			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-376", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
@@ -597,7 +615,7 @@ func TestServiceRunNextHonorsStopAfterCurrentRequest(t *testing.T) {
 			ID:          id,
 			Seq:         410,
 			Title:       id,
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -617,7 +635,7 @@ func TestServiceRunNextHonorsStopAfterCurrentRequest(t *testing.T) {
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   &recordingAdapter{},
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
 			{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-410", Role: agentrun.RoleImplementer, CommitSHA: "abc123", Tests: "passed"}},
@@ -663,7 +681,7 @@ func TestServiceRunTicketWithReviewerApprovedFinalizesSuccess(t *testing.T) {
 		ID:          "TKT-375",
 		Seq:         375,
 		Title:       "Review loop",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
@@ -681,7 +699,7 @@ func TestServiceRunTicketWithReviewerApprovedFinalizesSuccess(t *testing.T) {
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   impl,
 		Reviewer:  reviewer,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
@@ -712,7 +730,7 @@ func TestServiceRunTicketWithReviewerChangesRequiredRunsOneFixLoop(t *testing.T)
 		ID:          "TKT-375",
 		Seq:         375,
 		Title:       "Review loop",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
@@ -730,7 +748,7 @@ func TestServiceRunTicketWithReviewerChangesRequiredRunsOneFixLoop(t *testing.T)
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   impl,
 		Reviewer:  reviewer,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
@@ -773,7 +791,7 @@ func TestServiceRunTicketStopsAfterSingleFixReviewLoopWhenReviewerStillRequestsC
 		ID:          "TKT-375",
 		Seq:         375,
 		Title:       "Review loop",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
@@ -791,7 +809,7 @@ func TestServiceRunTicketStopsAfterSingleFixReviewLoopWhenReviewerStillRequestsC
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   impl,
 		Reviewer:  reviewer,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
@@ -834,7 +852,7 @@ func TestServiceRunTicketFailsWhenReviewerOmitsReviewLine(t *testing.T) {
 		ID:          "TKT-375",
 		Seq:         375,
 		Title:       "Review contract",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
@@ -852,7 +870,7 @@ func TestServiceRunTicketFailsWhenReviewerOmitsReviewLine(t *testing.T) {
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   impl,
 		Reviewer:  reviewer,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
@@ -888,7 +906,7 @@ func TestServiceRunTicketFailsWhenReviewerEmitsMalformedReviewLine(t *testing.T)
 		ID:          "TKT-375",
 		Seq:         375,
 		Title:       "Review contract",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
@@ -906,7 +924,7 @@ func TestServiceRunTicketFailsWhenReviewerEmitsMalformedReviewLine(t *testing.T)
 		Actor:     "agent:test",
 		Store:     store,
 		Workflow:  workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot)),
-		Namespace: security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home")),
+		Namespace: runstate.New(filepath.Join(t.TempDir(), "home")),
 		Adapter:   impl,
 		Reviewer:  reviewer,
 		Monitor: &fakeMonitor{queue: []agentrun.Observation{
@@ -943,7 +961,7 @@ func TestServiceResumeTicketUsesHungRuntimeStateAndCleansUpOnSuccess(t *testing.
 		ID:          "TKT-376",
 		Seq:         376,
 		Title:       "Resume run",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -953,7 +971,7 @@ func TestServiceResumeTicketUsesHungRuntimeStateAndCleansUpOnSuccess(t *testing.
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	flow := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
 	_, worktreePath, err := flow.StartTask(context.Background(), "TKT-376", "agent:test", ticket.DefaultConfig())
 	if err != nil {
@@ -1040,7 +1058,7 @@ func TestServiceResumeTicketUsesResumableAdapterWhenSessionIDIsKnown(t *testing.
 		ID:          "TKT-376B",
 		Seq:         3761,
 		Title:       "Resume same session",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -1051,7 +1069,7 @@ func TestServiceResumeTicketUsesResumableAdapterWhenSessionIDIsKnown(t *testing.
 		t.Fatalf("create ticket: %v", err)
 	}
 
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	flow := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
 	_, worktreePath, err := flow.StartTask(context.Background(), "TKT-376B", "agent:test", ticket.DefaultConfig())
 	if err != nil {
@@ -1114,6 +1132,109 @@ func TestServiceResumeTicketUsesResumableAdapterWhenSessionIDIsKnown(t *testing.
 	}
 }
 
+func TestServiceRunTicketLeavesRecoverableRuntimeForStuckResult(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := buildGitRepoForOrchestrationTest(t)
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-394",
+		Seq:         394,
+		Title:       "Recover stuck run",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "desc",
+		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
+	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
+	runtimeStore := runruntime.New(repoRoot)
+	adapter := &recordingResumableAdapter{}
+	monitorStub := &fakeMonitor{queue: []agentrun.Observation{
+		{Result: agentrun.Result{Status: agentrun.StatusStuck, TicketID: "TKT-394", Role: agentrun.RoleImplementer, Reason: "waiting on operator input"}},
+	}}
+	validator := runvalidate.New(runvalidate.Dependencies{
+		RepoRoot: repoRoot,
+		Store:    store,
+		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
+	})
+	service := New(Dependencies{
+		RepoRoot:  repoRoot,
+		Actor:     "agent:test",
+		Store:     store,
+		Workflow:  workflowSvc,
+		Namespace: namespace,
+		Adapter:   adapter,
+		Monitor:   monitorStub,
+		Validator: validator,
+		Runtime:   runtimeStore,
+	})
+
+	first, err := service.RunTicket(context.Background(), "TKT-394")
+	if err != nil {
+		t.Fatalf("RunTicket() error = %v", err)
+	}
+	if first.Status != agentrun.StatusStuck {
+		t.Fatalf("unexpected first summary: %#v", first)
+	}
+	status, ok, err := runtimeStore.LoadStatus("TKT-394")
+	if err != nil || !ok {
+		t.Fatalf("expected persisted runtime status, ok=%v err=%v", ok, err)
+	}
+	if status.Active || status.Hung || status.LastResultStatus != string(agentrun.StatusStuck) {
+		t.Fatalf("expected inactive recoverable status, got %#v", status)
+	}
+	brief, ok, err := runtimeStore.LoadBrief("TKT-394")
+	if err != nil || !ok {
+		t.Fatalf("expected persisted run brief, ok=%v err=%v", ok, err)
+	}
+	if brief.Outcome != string(agentrun.StatusStuck) || strings.TrimSpace(brief.ResumeNext) == "" {
+		t.Fatalf("unexpected run brief: %#v", brief)
+	}
+
+	cl, err := claim.GetClaim(repoRoot, "TKT-394")
+	if err != nil || cl == nil {
+		t.Fatalf("expected claim-bound worktree, claim=%#v err=%v", cl, err)
+	}
+	if err := os.WriteFile(filepath.Join(cl.Worktree, "feature.txt"), []byte("ok\n"), 0o644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	runGit(t, cl.Worktree, "add", ".")
+	runGit(t, cl.Worktree, "commit", "-m", "feat: resume stuck run\n\nTicket: TKT-394")
+	sha := strings.TrimSpace(runGitOutput(t, cl.Worktree, "rev-parse", "HEAD"))
+
+	monitorStub.mu.Lock()
+	monitorStub.queue = []agentrun.Observation{
+		{Result: agentrun.Result{Status: agentrun.StatusDone, TicketID: "TKT-394", Role: agentrun.RoleImplementer, CommitSHA: sha, Tests: "passed"}},
+	}
+	monitorStub.mu.Unlock()
+
+	second, err := service.ResumeTicket(context.Background(), "TKT-394")
+	if err != nil {
+		t.Fatalf("ResumeTicket() error = %v", err)
+	}
+	if second.Status != agentrun.StatusDone {
+		t.Fatalf("unexpected resume summary: %#v", second)
+	}
+	if adapter.resumedSessionID != "session-380" {
+		t.Fatalf("Resume() used session %q, want session-380", adapter.resumedSessionID)
+	}
+	if _, ok, err := runtimeStore.LoadStatus("TKT-394"); err != nil || ok {
+		t.Fatalf("expected runtime cleanup after successful resume, ok=%v err=%v", ok, err)
+	}
+}
+
 func TestServicePingTicketUsesSameSessionAndAppendsTranscript(t *testing.T) {
 	t.Parallel()
 
@@ -1127,7 +1248,7 @@ func TestServicePingTicketUsesSameSessionAndAppendsTranscript(t *testing.T) {
 		ID:          "TKT-393",
 		Seq:         393,
 		Title:       "Ping status",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -1138,7 +1259,7 @@ func TestServicePingTicketUsesSameSessionAndAppendsTranscript(t *testing.T) {
 		t.Fatalf("create ticket: %v", err)
 	}
 
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	flow := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
 	_, worktreePath, err := flow.StartTask(context.Background(), "TKT-393", "agent:test", ticket.DefaultConfig())
 	if err != nil {
@@ -1226,20 +1347,18 @@ func TestServiceRunTicketFullLifecycleWithStreamedCodexOutput(t *testing.T) {
 		ID:          "TKT-390",
 		Seq:         390,
 		Title:       "Lifecycle smoke",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "Create feature.txt in the repo root.",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "feature.txt exists", Run: "test -f feature.txt"},
-		},
+		Description: runnableOrchestrationDescription("feature.txt", "README.md"),
+		AC:          runnableOrchestrationAC(),
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
 
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
 	runtimeStore := runruntime.New(repoRoot)
 	adapter := &streamingAdapter{behaviors: []streamBehavior{
@@ -1249,6 +1368,7 @@ func TestServiceRunTicketFullLifecycleWithStreamedCodexOutput(t *testing.T) {
 		RepoRoot: repoRoot,
 		Store:    store,
 		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
 	})
 	service := New(Dependencies{
 		RepoRoot:  repoRoot,
@@ -1275,8 +1395,8 @@ func TestServiceRunTicketFullLifecycleWithStreamedCodexOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
-	if tkt.State != ticket.State("in-review") {
-		t.Fatalf("ticket state = %q, want in-review", tkt.State)
+	if tkt.State != ticket.State("validated") {
+		t.Fatalf("ticket state = %q, want validated", tkt.State)
 	}
 	if len(tkt.LinkedCommits) == 0 {
 		t.Fatalf("expected linked commit after finalize: %#v", tkt)
@@ -1308,20 +1428,18 @@ func TestServiceRunTicketAutoResumesHungImplementer(t *testing.T) {
 		ID:          "TKT-391",
 		Seq:         391,
 		Title:       "Resume smoke",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "Create feature.txt in the repo root.",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "feature.txt exists", Run: "test -f feature.txt"},
-		},
+		Description: runnableOrchestrationDescription("feature.txt", "README.md"),
+		AC:          runnableOrchestrationAC(),
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
 
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
 	runtimeStore := runruntime.New(repoRoot)
 	adapter := &streamingAdapter{behaviors: []streamBehavior{
@@ -1332,6 +1450,7 @@ func TestServiceRunTicketAutoResumesHungImplementer(t *testing.T) {
 		RepoRoot: repoRoot,
 		Store:    store,
 		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
 	})
 	service := New(Dependencies{
 		RepoRoot:  repoRoot,
@@ -1360,8 +1479,8 @@ func TestServiceRunTicketAutoResumesHungImplementer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
-	if tkt.State != ticket.State("in-review") {
-		t.Fatalf("ticket state = %q, want in-review", tkt.State)
+	if tkt.State != ticket.State("validated") {
+		t.Fatalf("ticket state = %q, want validated", tkt.State)
 	}
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
@@ -1387,20 +1506,18 @@ func TestServiceRunTicketStopsAfterAutoResumeLimit(t *testing.T) {
 		ID:          "TKT-392",
 		Seq:         392,
 		Title:       "Retry cap",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "Retry once, then stop.",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "feature.txt exists", Run: "test -f feature.txt"},
-		},
+		Description: runnableOrchestrationDescription("feature.txt", "README.md"),
+		AC:          runnableOrchestrationAC(),
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
 
-	namespace := security.NewRepoNamespaceStore(filepath.Join(t.TempDir(), "home"))
+	namespace := runstate.New(filepath.Join(t.TempDir(), "home"))
 	workflowSvc := workflow.NewManager(store, vcs.NewGitProvider(repoRoot), claim.NewLocalClaimManager(repoRoot))
 	runtimeStore := runruntime.New(repoRoot)
 	adapter := &streamingAdapter{behaviors: []streamBehavior{
@@ -1411,6 +1528,7 @@ func TestServiceRunTicketStopsAfterAutoResumeLimit(t *testing.T) {
 		RepoRoot: repoRoot,
 		Store:    store,
 		Workflow: workflowSvc,
+		Runtime:  runtimeStore,
 	})
 	service := New(Dependencies{
 		RepoRoot:       repoRoot,
@@ -1437,7 +1555,7 @@ func TestServiceRunTicketStopsAfterAutoResumeLimit(t *testing.T) {
 		t.Fatalf("unexpected retry-cap reason: %#v", summary)
 	}
 	status, ok, err := runtimeStore.LoadStatus("TKT-392")
-	if err != nil || !ok || !status.Hung {
-		t.Fatalf("expected hung runtime state after retry cap, ok=%v status=%#v err=%v", ok, status, err)
+	if err != nil || !ok || !isRecoverableManagedRunStatus(status) {
+		t.Fatalf("expected recoverable runtime state after retry cap, ok=%v status=%#v err=%v", ok, status, err)
 	}
 }

@@ -95,6 +95,24 @@ func TestStoreInitAppendSnapshotAndCleanup(t *testing.T) {
 	if prompt != "prompt body" {
 		t.Fatalf("unexpected prompt: %q", prompt)
 	}
+	if err := store.WriteBrief(RunBrief{
+		TicketID:     record.TicketID,
+		Outcome:      "done",
+		Summary:      "Managed run completed cleanly.",
+		CommitSHA:    "abc123",
+		FilesTouched: []string{"feature.txt"},
+		ResumeNext:   "Archive if no follow-up is needed.",
+		UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	brief, ok, err := store.LoadBrief(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBrief() ok=%v err=%v", ok, err)
+	}
+	if brief.CommitSHA != "abc123" || len(brief.FilesTouched) != 1 || brief.FilesTouched[0] != "feature.txt" {
+		t.Fatalf("unexpected brief: %#v", brief)
+	}
 
 	raw, err := os.ReadFile(filepath.Join(store.RunDir(record.TicketID), stdoutFile))
 	if err != nil {
@@ -116,6 +134,13 @@ func TestStoreInitAppendSnapshotAndCleanup(t *testing.T) {
 	}
 	if _, ok, err := store.LoadStatus(record.TicketID); err != nil || ok {
 		t.Fatalf("expected cleaned status, ok=%v err=%v", ok, err)
+	}
+	brief, ok, err = store.LoadBrief(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("expected brief to survive cleanup, ok=%v err=%v", ok, err)
+	}
+	if brief.CommitSHA != "abc123" {
+		t.Fatalf("unexpected persisted brief after cleanup: %#v", brief)
 	}
 }
 

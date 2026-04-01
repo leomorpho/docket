@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/leomorpho/docket/internal/applyspec"
+	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,10 @@ var backlogScaffoldCmd = &cobra.Command{
 	Use:   "scaffold",
 	Short: "Emit a schema-valid backlog apply spec template",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := ticket.LoadConfig(repo)
+		if err != nil {
+			cfg = ticket.DefaultConfig()
+		}
 		payload := map[string]any{
 			"version": applyspec.SchemaVersionV1,
 			"tickets": []map[string]any{
@@ -20,7 +25,7 @@ var backlogScaffoldCmd = &cobra.Command{
 					"title":       "Top-level work item",
 					"description": "Root ticket created from scaffold template.",
 					"priority":    2,
-					"state":       "backlog",
+					"state":       cfg.DefaultState,
 					"labels":      []string{"feature"},
 					"ac":          []string{"define success criteria"},
 				},
@@ -30,7 +35,7 @@ var backlogScaffoldCmd = &cobra.Command{
 					"description": "Child task that depends on root.",
 					"parent_ref":  "root",
 					"priority":    2,
-					"state":       "backlog",
+					"state":       cfg.DefaultState,
 					"labels":      []string{"feature"},
 					"ac":          []string{"validate parent-child dependency"},
 				},

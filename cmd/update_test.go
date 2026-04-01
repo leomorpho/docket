@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +13,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/claim"
 	docketgit "github.com/leomorpho/docket/internal/git"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -38,6 +37,31 @@ func initGitRepoForUpdateTest(t *testing.T, repoRoot string) {
 	}
 }
 
+func updateRunnableDescription() string {
+	return "Likely paths: cmd/update.go and cmd/update_test.go. Verify commands: go test ./cmd -run TestUpdateCmd -count=1. Out of scope: unrelated security cleanup or scheduler behavior. This fixture contains enough execution context to satisfy runnable-state validation during update command coverage."
+}
+
+func updateRunnableAC() []ticket.AcceptanceCriterion {
+	return []ticket.AcceptanceCriterion{
+		{Description: "A1"},
+		{Description: "A2"},
+	}
+}
+
+func updateCompletedAC() []ticket.AcceptanceCriterion {
+	return []ticket.AcceptanceCriterion{
+		{Description: "A1", Done: true, Evidence: "ok"},
+		{Description: "A2", Done: true, Evidence: "ok"},
+	}
+}
+
+func updateStructuredHandoff(currentState, remaining string) string {
+	if strings.TrimSpace(remaining) == "" {
+		remaining = "none"
+	}
+	return "**Current state:**\n" + currentState + "\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- " + remaining + "\n\n**AC status:**\n- complete"
+}
+
 func TestUpdateCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	repo = tmpDir
@@ -52,41 +76,41 @@ func TestUpdateCmd(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Original Title",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}
 	s.CreateTicket(ctx, tick)
 
-	// 1. Update state (backlog -> todo)
+	// 1. Update state (draft -> ready)
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
 
-	updateState = "todo"
-	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "todo"})
+	updateState = "ready"
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "ready"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("update state failed: %v", err)
 	}
-	if !strings.Contains(b.String(), "state backlog → todo") {
+	if !strings.Contains(b.String(), "state draft → ready") {
 		t.Errorf("expected state transition message, got: %s", b.String())
 	}
 
 	updated, _ := s.GetTicket(ctx, "TKT-001")
-	if updated.State != ticket.State("todo") {
-		t.Errorf("expected state todo, got %s", updated.State)
+	if updated.State != ticket.State("ready") {
+		t.Errorf("expected state ready, got %s", updated.State)
 	}
 
-	// 2. Invalid transition (todo -> done)
-	updateState = "done"
-	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "done"})
+	// 2. Invalid transition (ready -> validated)
+	updateState = "validated"
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "validated"})
 	if err := rootCmd.Execute(); err == nil {
-		t.Error("expected error for invalid transition todo -> done, got nil")
+		t.Error("expected error for invalid transition ready -> validated, got nil")
 	} else if !strings.Contains(strings.ToLower(err.Error()), "cannot transition") {
-		t.Fatalf("expected invalid transition rejection for todo -> done, got: %v", err)
+		t.Fatalf("expected invalid transition rejection for ready -> validated, got: %v", err)
 	}
 
 	// 3. Labels and Blockers
@@ -141,13 +165,13 @@ func TestUpdateCmd_Handoff(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Needs Handoff",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}
 	if err := s.CreateTicket(ctx, tick); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
@@ -188,7 +212,7 @@ func TestUpdateCmd_RejectsNonLeafExecutionBlocker(t *testing.T) {
 			ID:          "TKT-001",
 			Seq:         1,
 			Title:       "Parent blocker",
-			State:       ticket.State("todo"),
+			State:       ticket.State("draft"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -201,7 +225,7 @@ func TestUpdateCmd_RejectsNonLeafExecutionBlocker(t *testing.T) {
 			Seq:         2,
 			Title:       "Child under blocker",
 			Parent:      "TKT-001",
-			State:       ticket.State("todo"),
+			State:       ticket.State("draft"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -213,7 +237,7 @@ func TestUpdateCmd_RejectsNonLeafExecutionBlocker(t *testing.T) {
 			ID:          "TKT-003",
 			Seq:         3,
 			Title:       "Target",
-			State:       ticket.State("todo"),
+			State:       ticket.State("draft"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -264,13 +288,13 @@ func TestUpdateCmd_AllowsInProgressBackToBacklog(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Deferred work",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}
 	if err := s.CreateTicket(ctx, tick); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
@@ -278,11 +302,11 @@ func TestUpdateCmd_AllowsInProgressBackToBacklog(t *testing.T) {
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
-	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "backlog"})
+	rootCmd.SetArgs([]string{"update", "TKT-001", "--state", "draft"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected in-progress -> backlog transition to succeed, got: %v", err)
+		t.Fatalf("expected running -> draft transition to succeed, got: %v", err)
 	}
-	if !strings.Contains(b.String(), "state in-progress → backlog") {
+	if !strings.Contains(b.String(), "state running → draft") {
 		t.Fatalf("expected transition output, got: %s", b.String())
 	}
 
@@ -290,8 +314,8 @@ func TestUpdateCmd_AllowsInProgressBackToBacklog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket failed: %v", err)
 	}
-	if updated.State != ticket.State("backlog") {
-		t.Fatalf("expected backlog state, got %s", updated.State)
+	if updated.State != ticket.State("draft") {
+		t.Fatalf("expected draft state, got %s", updated.State)
 	}
 }
 
@@ -310,7 +334,7 @@ func TestUpdateCmd_HandoffFromStdin(t *testing.T) {
 	tick := &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Needs Stdin Handoff",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -360,11 +384,11 @@ func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
 		Label:  "Stale",
 		Open:   false,
 		Column: 6,
-		Next:   []string{"todo", "archived"},
+		Next:   []string{"ready", "archived"},
 	}
-	todo := cfg.States["todo"]
-	todo.Next = append(todo.Next, "stale")
-	cfg.States["todo"] = todo
+	ready := cfg.States["ready"]
+	ready.Next = append(ready.Next, "stale")
+	cfg.States["ready"] = ready
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -377,13 +401,13 @@ func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Parent",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket parent failed: %v", err)
 	}
@@ -392,13 +416,13 @@ func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
 		Seq:         2,
 		Title:       "Child",
 		Parent:      "TKT-001",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    2,
 		CreatedAt:   now.Add(time.Minute),
 		UpdatedAt:   now.Add(time.Minute),
 		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket child failed: %v", err)
 	}
@@ -426,246 +450,8 @@ func TestUpdateCmd_StaleRequiresCascadeForOpenChildren(t *testing.T) {
 	}
 }
 
-func TestUpdateCmd_PrivilegedDoneRequiresSecureSurface(t *testing.T) {
+func TestUpdateCmd_ValidatedTransitionSetsCompletedAt(t *testing.T) {
 	tmpDir := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	docketHome = ""
-	repo = tmpDir
-	format = "human"
-
-	cfg := ticket.DefaultConfig()
-	cfg.SecurityEnforcement = true
-	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
-		t.Fatalf("SaveConfig failed: %v", err)
-	}
-	loadedCfg, err := ticket.LoadConfig(tmpDir)
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
-	if !loadedCfg.SecurityEnforcement {
-		t.Fatal("expected security_enforcement=true for stale manifest enforcement test")
-	}
-
-	s := local.New(tmpDir)
-	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-186",
-		Seq:         186,
-		Title:       "Privileged transition",
-		State:       ticket.State("in-review"),
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- y\n\n**AC status:**\n- done",
-	}); err != nil {
-		t.Fatalf("CreateTicket failed: %v", err)
-	}
-
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-186", "--state", "done"})
-	if err := rootCmd.Execute(); err == nil {
-		t.Fatalf("expected privileged rejection for done transition without secure surface")
-	} else if !strings.Contains(err.Error(), "--ticket is required") {
-		t.Fatalf("expected secure-surface guidance for human done transition, got: %v", err)
-	}
-
-	rootCmd.SetArgs([]string{"secure", "unlock", "--password", "pw-1", "--ttl", "5m"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("secure unlock failed: %v", err)
-	}
-
-	rootCmd.SetArgs([]string{"update", "TKT-186", "--state", "done", "--ticket", "TKT-186", "--yes"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("secure done transition failed: %v", err)
-	}
-
-	got, err := s.GetTicket(context.Background(), "TKT-186")
-	if err != nil {
-		t.Fatalf("GetTicket failed: %v", err)
-	}
-	if got.State != "done" {
-		t.Fatalf("expected done state, got %s", got.State)
-	}
-	if got.CompletedAt.IsZero() {
-		t.Fatalf("expected done transition to set completed_at")
-	}
-
-	session := security.NewSessionManager(tmpHome)
-	if err := session.RequireActive(tmpDir); err != nil {
-		t.Fatalf("expected secure session to remain active, got: %v", err)
-	}
-}
-
-func TestUpdateCmd_PrivilegedDoneWarningOnlyByDefault(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	docketHome = ""
-	repo = tmpDir
-	format = "human"
-
-	cfg := ticket.DefaultConfig()
-	cfg.SecurityEnforcement = false
-	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
-		t.Fatalf("SaveConfig failed: %v", err)
-	}
-
-	s := local.New(tmpDir)
-	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-186B",
-		Seq:         186,
-		Title:       "Privileged transition warning-only",
-		State:       ticket.State("in-review"),
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "me",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
-		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- y\n\n**AC status:**\n- done",
-	}); err != nil {
-		t.Fatalf("CreateTicket failed: %v", err)
-	}
-
-	errBuf := new(bytes.Buffer)
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetErr(errBuf)
-	rootCmd.SetArgs([]string{"update", "TKT-186B", "--state", "done"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected warning-only done transition to proceed, got: %v", err)
-	}
-	if !strings.Contains(errBuf.String(), "warning: privileged enforcement is disabled") {
-		t.Fatalf("expected warning-only privileged message, got: %s", errBuf.String())
-	}
-
-	got, err := s.GetTicket(context.Background(), "TKT-186B")
-	if err != nil {
-		t.Fatalf("GetTicket failed: %v", err)
-	}
-	if got.State != "done" {
-		t.Fatalf("expected done state, got %s", got.State)
-	}
-}
-
-func TestUpdateCmd_AgentDoneTransitionWarningOnlyProceeds(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	t.Setenv("DOCKET_AGENT_ID", "codex-test")
-	docketHome = ""
-	repo = tmpDir
-	format = "human"
-
-	cfg := ticket.DefaultConfig()
-	cfg.SecurityEnforcement = false
-	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
-		t.Fatalf("SaveConfig failed: %v", err)
-	}
-
-	s := local.New(tmpDir)
-	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-333",
-		Seq:         333,
-		Title:       "Agent closure attempt",
-		State:       ticket.State("in-review"),
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
-		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
-	}); err != nil {
-		t.Fatalf("CreateTicket failed: %v", err)
-	}
-
-	errBuf := new(bytes.Buffer)
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetErr(errBuf)
-	rootCmd.SetArgs([]string{"update", "TKT-333", "--state", "done"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected warning-only done transition to proceed for agent actor, got: %v", err)
-	}
-	if !strings.Contains(errBuf.String(), "warning: privileged enforcement is disabled") {
-		t.Fatalf("expected warning-only privileged message, got: %s", errBuf.String())
-	}
-	got, err := s.GetTicket(context.Background(), "TKT-333")
-	if err != nil {
-		t.Fatalf("GetTicket failed: %v", err)
-	}
-	if got.State != "done" {
-		t.Fatalf("expected done state, got %s", got.State)
-	}
-}
-
-func TestUpdateCmd_AgentDoneTransitionEnforcedRequiresPrivilegedSurface(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	t.Setenv("DOCKET_AGENT_ID", "codex-test")
-	docketHome = ""
-	repo = tmpDir
-	format = "human"
-
-	cfg := ticket.DefaultConfig()
-	cfg.SecurityEnforcement = true
-	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
-		t.Fatalf("SaveConfig failed: %v", err)
-	}
-
-	s := local.New(tmpDir)
-	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-334",
-		Seq:         334,
-		Title:       "Agent enforced closure attempt",
-		State:       ticket.State("in-review"),
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
-		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
-	}); err != nil {
-		t.Fatalf("CreateTicket failed: %v", err)
-	}
-
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-334", "--state", "done"})
-	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "--ticket is required") {
-		t.Fatalf("expected privileged surface guidance requiring --ticket, got: %v", err)
-	}
-
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-334", "--state", "done", "--ticket", "TKT-334", "--yes"})
-	if err := rootCmd.Execute(); !errors.Is(err, security.ErrSecureModeInactive) {
-		t.Fatalf("expected secure-mode inactive rejection when enforced, got: %v", err)
-	}
-
-	ks := security.NewFileKeystore(tmpHome)
-	if err := ks.Create("pw-1"); err != nil {
-		t.Fatalf("create keystore failed: %v", err)
-	}
-	t.Setenv("DOCKET_KEYSTORE_PASSWORD", "pw-1")
-	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"--automation", "update", "TKT-334", "--state", "done", "--ticket", "TKT-334"})
-	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "automation mode requires --yes") {
-		t.Fatalf("expected automation-mode --yes requirement, got: %v", err)
-	}
-}
-
-func TestUpdateCmd_DoneRejectsParentWithOpenOrInvalidDescendants(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	docketHome = ""
 	repo = tmpDir
 	format = "human"
 
@@ -676,69 +462,36 @@ func TestUpdateCmd_DoneRejectsParentWithOpenOrInvalidDescendants(t *testing.T) {
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-172",
-		Seq:         172,
-		Title:       "Umbrella epic",
-		State:       ticket.State("in-review"),
+		ID:          "TKT-186",
+		Seq:         186,
+		Title:       "Validated transition",
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
-		CreatedBy:   "me",
-		Description: "This umbrella ticket should not close before its children are completed and validated cleanly.",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
-		Handoff:     "**Current state:**\nready\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
+		CreatedBy:   "human:test",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
-		t.Fatalf("CreateTicket parent failed: %v", err)
-	}
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-174",
-		Seq:         174,
-		Title:       "Open child",
-		State:       ticket.State("in-progress"),
-		Parent:      "TKT-172",
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "me",
-		Description: "This child is still in progress and should block closing the parent umbrella ticket.",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
-	}); err != nil {
-		t.Fatalf("CreateTicket open child failed: %v", err)
-	}
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID:          "TKT-175",
-		Seq:         175,
-		Title:       "Invalid child",
-		State:       ticket.State("done"),
-		Parent:      "TKT-172",
-		Priority:    1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		CreatedBy:   "me",
-		Description: "This child looks done but lacks the required handoff for completed workflow states.",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A", Done: true, Evidence: "ok"}},
-	}); err != nil {
-		t.Fatalf("CreateTicket invalid child failed: %v", err)
+		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"secure", "unlock", "--password", "pw-1", "--ttl", "5m"})
+	rootCmd.SetArgs([]string{"update", "TKT-186", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("secure unlock failed: %v", err)
+		t.Fatalf("validated transition failed: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"update", "TKT-172", "--state", "done", "--ticket", "TKT-172", "--yes"})
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatalf("expected descendant closure gate to reject done transition")
+	got, err := s.GetTicket(context.Background(), "TKT-186")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
 	}
-	for _, want := range []string{
-		"descendant TKT-174 is still in-progress",
-		"descendant TKT-175 failed validation: handoff: ## Handoff section is required for review and completed workflow states",
-	} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("expected descendant closure error %q, got %v", want, err)
-		}
+	if got.State != "validated" {
+		t.Fatalf("expected validated state, got %s", got.State)
+	}
+	if got.CompletedAt.IsZero() {
+		t.Fatalf("expected validated transition to set completed_at")
 	}
 }
 
@@ -794,8 +547,7 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 				Terminal: true,
 			},
 		},
-		DefaultState:        "queued",
-		SecurityEnforcement: true,
+		DefaultState: "queued",
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -812,12 +564,9 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		Handoff:     "**Current state:**\nqueued\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- y\n\n**AC status:**\n- complete",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "A1", Done: true, Evidence: "ok"},
-			{Description: "A2", Done: true, Evidence: "ok"},
-		},
+		Description: updateRunnableDescription(),
+		Handoff:     updateStructuredHandoff("queued", "none"),
+		AC:          updateCompletedAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -852,11 +601,8 @@ func TestUpdateCmd_CustomWorkflowUsesConfiguredActiveAndReviewStates(t *testing.
 	}
 }
 
-func TestUpdateCmd_CustomWorkflowCompletedStateRequiresPrivilegedSurface(t *testing.T) {
+func TestUpdateCmd_CustomWorkflowCompletedStateUsesConfiguredCompletedState(t *testing.T) {
 	tmpDir := t.TempDir()
-	tmpHome := filepath.Join(t.TempDir(), "docket-home")
-	t.Setenv("DOCKET_HOME", tmpHome)
-	docketHome = ""
 	repo = tmpDir
 	format = "human"
 
@@ -898,8 +644,7 @@ func TestUpdateCmd_CustomWorkflowCompletedStateRequiresPrivilegedSurface(t *test
 				Terminal: true,
 			},
 		},
-		DefaultState:        "queued",
-		SecurityEnforcement: true,
+		DefaultState: "queued",
 	}
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -916,22 +661,28 @@ func TestUpdateCmd_CustomWorkflowCompletedStateRequiresPrivilegedSurface(t *test
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		Handoff:     "**Current state:**\nqa\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- done",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "A1", Done: true, Evidence: "ok"},
-			{Description: "A2", Done: true, Evidence: "ok"},
-		},
+		Description: updateRunnableDescription(),
+		Handoff:     updateStructuredHandoff("qa", "none"),
+		AC:          updateCompletedAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetArgs([]string{"update", "TKT-441", "--state", "shipped"})
-	if err := rootCmd.Execute(); err == nil {
-		t.Fatalf("expected privileged rejection for custom completed state")
-	} else if !strings.Contains(err.Error(), "--ticket is required") {
-		t.Fatalf("expected secure-surface guidance for custom completed state, got: %v", err)
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected qa -> shipped transition to succeed, got: %v", err)
+	}
+
+	got, err := s.GetTicket(context.Background(), "TKT-441")
+	if err != nil {
+		t.Fatalf("GetTicket failed: %v", err)
+	}
+	if got.State != "shipped" {
+		t.Fatalf("expected shipped state, got %s", got.State)
+	}
+	if got.CompletedAt.IsZero() {
+		t.Fatalf("expected shipped transition to set completed_at")
 	}
 }
 
@@ -964,19 +715,19 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 		ID:          "TKT-198",
 		Seq:         198,
 		Title:       "Managed run linkage",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	worktreePath := filepath.Join(tmpDir, "wt", "TKT-198")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("mkdir worktree path failed: %v", err)
@@ -986,7 +737,7 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "validated"})
 	err := rootCmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "no commit on HEAD references Ticket: TKT-198") {
 		t.Fatalf("expected commit-linkage rejection, got: %v", err)
@@ -999,9 +750,9 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 	runGitSession(t, tmpDir, "commit", "-m", "feat: managed run linkage\n\nTicket: TKT-198")
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-198", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected in-review transition after linked commit, got: %v", err)
+		t.Fatalf("expected validated transition after linked commit, got: %v", err)
 	}
 }
 
@@ -1034,19 +785,19 @@ func TestUpdateCmd_ManagedRunLinkageWarningOnlyByDefault(t *testing.T) {
 		ID:          "TKT-198B",
 		Seq:         198,
 		Title:       "Managed run linkage warning-only",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	worktreePath := filepath.Join(tmpDir, "wt", "TKT-198B")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("mkdir worktree path failed: %v", err)
@@ -1058,7 +809,7 @@ func TestUpdateCmd_ManagedRunLinkageWarningOnlyByDefault(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetErr(errBuf)
-	rootCmd.SetArgs([]string{"update", "TKT-198B", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-198B", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected warning-only linkage mode to proceed, got: %v", err)
 	}
@@ -1097,14 +848,14 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 		ID:          "TKT-287",
 		Seq:         287,
 		Title:       "Managed branch drift",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -1114,7 +865,7 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	if err := ns.RecordRunStart(tmpDir, "TKT-287", "agent:test", worktreePath, "docket/TKT-287", "hash-287"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1126,9 +877,9 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 	runGitSession(t, tmpDir, "commit", "-m", "feat: drifted commit\n\nTicket: TKT-287")
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-287", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-287", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected in-review transition after auto-repair, got: %v", err)
+		t.Fatalf("expected validated transition after auto-repair, got: %v", err)
 	}
 	ok, err := docketgit.HasTicketTrailerSince(tmpDir, "docket/TKT-287", "TKT-287", now.Add(-time.Minute).Format(time.RFC3339))
 	if err != nil {
@@ -1139,7 +890,7 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 	}
 }
 
-func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
+func TestUpdateCmd_ManagedRunValidatedPassesFromBoundWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -1166,14 +917,14 @@ func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
 		ID:          "TKT-270",
 		Seq:         270,
 		Title:       "Bound worktree review transition",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -1185,7 +936,7 @@ func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	if err := ns.RecordRunStart(tmpDir, "TKT-270", "agent:test-agent", worktreePath, "docket/TKT-270", "hash-270"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1204,9 +955,9 @@ func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
 	t.Cleanup(func() { repo = oldRepo })
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-270", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-270", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected in-review transition from bound worktree, got: %v", err)
+		t.Fatalf("expected validated transition from bound worktree, got: %v", err)
 	}
 
 	mainStore := local.New(tmpDir)
@@ -1214,12 +965,12 @@ func TestUpdateCmd_ManagedRunInReviewPassesFromBoundWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load ticket from main checkout failed: %v", err)
 	}
-	if got == nil || got.State != "in-review" {
-		t.Fatalf("expected main checkout ticket state in-review after merge-back, got %#v", got)
+	if got == nil || got.State != "validated" {
+		t.Fatalf("expected main checkout ticket state validated after merge-back, got %#v", got)
 	}
 }
 
-func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testing.T) {
+func TestUpdateCmd_ManagedRunValidatedRecoversWhenManifestBranchMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -1249,14 +1000,14 @@ func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testin
 		ID:          "TKT-496",
 		Seq:         496,
 		Title:       "Missing managed branch fallback",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -1268,7 +1019,7 @@ func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testin
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	if err := ns.RecordRunStart(tmpDir, "TKT-496", "agent:test-agent", worktreePath, "docket/TKT-496", "hash-496"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1283,9 +1034,9 @@ func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testin
 	runGitSession(t, worktreePath, "commit", "-m", "feat: worktree fallback\n\nTicket: TKT-496")
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-496", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-496", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected in-review transition to recover when manifest branch is missing, got: %v", err)
+		t.Fatalf("expected validated transition to recover when manifest branch is missing, got: %v", err)
 	}
 
 	mainStore := local.New(tmpDir)
@@ -1293,8 +1044,8 @@ func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testin
 	if err != nil {
 		t.Fatalf("load ticket from main checkout failed: %v", err)
 	}
-	if got == nil || got.State != "in-review" {
-		t.Fatalf("expected main checkout ticket state in-review after fallback merge-back, got %#v", got)
+	if got == nil || got.State != "validated" {
+		t.Fatalf("expected main checkout ticket state validated after fallback merge-back, got %#v", got)
 	}
 
 	featureData, err := os.ReadFile(filepath.Join(tmpDir, "feature.txt"))
@@ -1306,7 +1057,7 @@ func TestUpdateCmd_ManagedRunInReviewRecoversWhenManifestBranchMissing(t *testin
 	}
 }
 
-func TestUpdateCmd_ManagedRunInReviewAutostashesDirtyMainCheckout(t *testing.T) {
+func TestUpdateCmd_ManagedRunValidatedAutostashesDirtyMainCheckout(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -1338,14 +1089,14 @@ func TestUpdateCmd_ManagedRunInReviewAutostashesDirtyMainCheckout(t *testing.T) 
 		ID:          "TKT-271",
 		Seq:         271,
 		Title:       "Bound worktree review with dirty main checkout",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -1357,7 +1108,7 @@ func TestUpdateCmd_ManagedRunInReviewAutostashesDirtyMainCheckout(t *testing.T) 
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	if err := ns.RecordRunStart(tmpDir, "TKT-271", "agent:test-agent", worktreePath, "docket/TKT-271", "hash-271"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1381,9 +1132,9 @@ func TestUpdateCmd_ManagedRunInReviewAutostashesDirtyMainCheckout(t *testing.T) 
 	t.Cleanup(func() { repo = oldRepo })
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-271", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-271", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("expected in-review transition from bound worktree with dirty main checkout, got: %v", err)
+		t.Fatalf("expected validated transition from bound worktree with dirty main checkout, got: %v", err)
 	}
 
 	mainStore := local.New(tmpDir)
@@ -1391,8 +1142,8 @@ func TestUpdateCmd_ManagedRunInReviewAutostashesDirtyMainCheckout(t *testing.T) 
 	if err != nil {
 		t.Fatalf("load ticket from main checkout failed: %v", err)
 	}
-	if got == nil || got.State != "in-review" {
-		t.Fatalf("expected main checkout ticket state in-review after merge-back, got %#v", got)
+	if got == nil || got.State != "validated" {
+		t.Fatalf("expected main checkout ticket state validated after merge-back, got %#v", got)
 	}
 	featureData, err := os.ReadFile(filepath.Join(tmpDir, "feature.txt"))
 	if err != nil {
@@ -1439,19 +1190,19 @@ func TestUpdateCmd_ManagedRunWarnsOnStaleRunManifestByDefault(t *testing.T) {
 		ID:          "TKT-209",
 		Seq:         209,
 		Title:       "Managed run stale manifest",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
-		Handoff:     "handoff",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	worktreePath := filepath.Join(tmpDir, "wt", "TKT-209")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("mkdir worktree path failed: %v", err)
@@ -1486,7 +1237,7 @@ func TestUpdateCmd_ManagedRunWarnsOnStaleRunManifestByDefault(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetErr(errBuf)
-	rootCmd.SetArgs([]string{"update", "TKT-209", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-209", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected stale run manifest warning-only behavior, got: %v", err)
 	}
@@ -1510,12 +1261,12 @@ func TestUpdateCmd_RejectsEmptyTitle(t *testing.T) {
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Current title",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "me",
-		Description: "D",
+		Description: "Simple draft description",
 		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
@@ -1543,12 +1294,12 @@ func TestUpdateCmd_RejectsEmptyState(t *testing.T) {
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
 		ID:          "TKT-001",
 		Title:       "Current title",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "me",
-		Description: "D",
+		Description: "Simple draft description",
 		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
@@ -1582,7 +1333,7 @@ func TestEnforceStructuredACClosureGateRejectsIncompleteHumanVerification(t *tes
 	}
 }
 
-func TestUpdateAutoTransitionsReviewReadyTickets(t *testing.T) {
+func TestUpdateDoesNotAutoTransitionReadyTickets(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -1595,29 +1346,26 @@ func TestUpdateAutoTransitionsReviewReadyTickets(t *testing.T) {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	handoff := "**Current state:** in-progress\n**Decisions made:** none\n**Files touched:** x\n**Remaining work:** review\n**AC status:** complete"
+	handoff := updateStructuredHandoff("running", "none")
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
 		ID:          "TKT-901",
 		Seq:         901,
 		Title:       "Auto transition ready",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
+		Description: updateRunnableDescription(),
 		Handoff:     handoff,
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "A1", Done: true, Evidence: "done"},
-			{Description: "A2", Done: true, Evidence: "done"},
-		},
+		AC:          updateCompletedAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
-	rootCmd.SetArgs([]string{"update", "TKT-901", "--desc", "updated desc"})
+	rootCmd.SetArgs([]string{"update", "TKT-901", "--title", "Updated auto transition title"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
@@ -1626,11 +1374,8 @@ func TestUpdateAutoTransitionsReviewReadyTickets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket failed: %v", err)
 	}
-	if got.State != ticket.State("in-review") {
-		t.Fatalf("expected auto transition to in-review, got %s", got.State)
-	}
-	if !strings.Contains(out.String(), "Auto-transitioned TKT-901") {
-		t.Fatalf("expected auto-transition diagnostic, got: %s", out.String())
+	if got.State != ticket.State("running") {
+		t.Fatalf("expected ticket to remain running, got %s", got.State)
 	}
 }
 
@@ -1651,14 +1396,15 @@ func TestUpdateDoesNotAutoTransitionWhenReadinessFails(t *testing.T) {
 		ID:          "TKT-902",
 		Seq:         902,
 		Title:       "Auto transition not ready",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
+		Description: updateRunnableDescription(),
 		AC: []ticket.AcceptanceCriterion{
 			{Description: "A1", Done: false},
+			{Description: "A2", Done: true, Evidence: "ok"},
 		},
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
@@ -1666,7 +1412,7 @@ func TestUpdateDoesNotAutoTransitionWhenReadinessFails(t *testing.T) {
 
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
-	rootCmd.SetArgs([]string{"update", "TKT-902", "--desc", "updated desc"})
+	rootCmd.SetArgs([]string{"update", "TKT-902", "--title", "Updated not-ready title"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
@@ -1675,18 +1421,12 @@ func TestUpdateDoesNotAutoTransitionWhenReadinessFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket failed: %v", err)
 	}
-	if got.State != ticket.State("in-progress") {
-		t.Fatalf("expected ticket to remain in-progress, got %s", got.State)
-	}
-	if !strings.Contains(out.String(), "Auto-review skipped for TKT-902") {
-		t.Fatalf("expected skip diagnostic, got: %s", out.String())
-	}
-	if !strings.Contains(out.String(), "acceptance criteria incomplete") || !strings.Contains(out.String(), "handoff missing") {
-		t.Fatalf("expected readiness-failure reasons in diagnostic, got: %s", out.String())
+	if got.State != ticket.State("running") {
+		t.Fatalf("expected ticket to remain running, got %s", got.State)
 	}
 }
 
-func TestUpdateAutoTransitionsReviewReadyTicketsWithCustomWorkflow(t *testing.T) {
+func TestUpdateDoesNotAutoTransitionReadyTicketsWithCustomWorkflow(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpHome := filepath.Join(t.TempDir(), "docket-home")
 	t.Setenv("DOCKET_HOME", tmpHome)
@@ -1750,7 +1490,7 @@ func TestUpdateAutoTransitionsReviewReadyTicketsWithCustomWorkflow(t *testing.T)
 
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
-	handoff := "Current state\n\nDecisions made"
+	handoff := updateStructuredHandoff("testing", "none")
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
 		ID:          "TKT-903",
 		Seq:         903,
@@ -1760,19 +1500,16 @@ func TestUpdateAutoTransitionsReviewReadyTicketsWithCustomWorkflow(t *testing.T)
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
+		Description: updateRunnableDescription(),
 		Handoff:     handoff,
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "A1", Done: true, Evidence: "done"},
-			{Description: "A2", Done: true, Evidence: "done"},
-		},
+		AC:          updateCompletedAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
-	rootCmd.SetArgs([]string{"update", "TKT-903", "--desc", "updated desc"})
+	rootCmd.SetArgs([]string{"update", "TKT-903", "--title", "Updated custom auto transition"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
@@ -1781,10 +1518,7 @@ func TestUpdateAutoTransitionsReviewReadyTicketsWithCustomWorkflow(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetTicket failed: %v", err)
 	}
-	if got.State != ticket.State("qa") {
-		t.Fatalf("expected auto transition to qa, got %s", got.State)
-	}
-	if !strings.Contains(out.String(), "Auto-transitioned TKT-903") {
-		t.Fatalf("expected auto-transition diagnostic, got: %s", out.String())
+	if got.State != ticket.State("testing") {
+		t.Fatalf("expected ticket to remain testing, got %s", got.State)
 	}
 }

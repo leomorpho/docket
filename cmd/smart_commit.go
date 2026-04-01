@@ -27,7 +27,7 @@ var (
 
 var smartCommitCmd = &cobra.Command{
 	Use:   "smart-commit <TKT-NNN>",
-	Short: "Generate or validate a review-ready commit message with ticket trailer",
+	Short: "Generate or validate a closeout-ready commit message with ticket trailer",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := strings.TrimSpace(args[0])
@@ -62,7 +62,7 @@ var smartCommitCmd = &cobra.Command{
 			if format == "json" {
 				printJSON(cmd, report)
 			}
-			return fmt.Errorf("ticket %s is not ready for smart commit: %s", id, strings.Join(failedWrapChecks(wrapReport.Checks), "; "))
+			return fmt.Errorf("ticket %s is not ready for closeout commit: %s", id, strings.Join(failedWrapChecks(wrapReport.Checks), "; "))
 		}
 
 		validateMode := strings.TrimSpace(smartCommitValidate) != ""

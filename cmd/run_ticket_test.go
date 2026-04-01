@@ -56,15 +56,18 @@ func (s stubRunOrchestrator) PingTicket(ctx context.Context, ticketID string) (a
 
 func TestRunTicketCmdRendersJSONSummary(t *testing.T) {
 	prev := newRunOrchestrator
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	t.Cleanup(func() {
 		newRunOrchestrator = prev
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 	})
+	runEnableReview = false
 	runDisableReview = false
 	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
-		if !enableReview {
-			t.Fatalf("expected review enabled by default")
+		if enableReview {
+			t.Fatalf("expected review disabled by default")
 		}
 		return stubRunOrchestrator{
 			runTicket: func(ctx context.Context, ticketID string) (agentrun.TicketRunSummary, error) {
@@ -94,15 +97,18 @@ func TestRunTicketCmdRendersJSONSummary(t *testing.T) {
 
 func TestRunNextCmdRendersHumanSummary(t *testing.T) {
 	prev := newRunOrchestrator
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	t.Cleanup(func() {
 		newRunOrchestrator = prev
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 	})
+	runEnableReview = false
 	runDisableReview = false
 	newRunOrchestrator = func(repoRoot string, enableReview bool) agentrun.Orchestrator {
-		if !enableReview {
-			t.Fatalf("expected review enabled by default")
+		if enableReview {
+			t.Fatalf("expected review disabled by default")
 		}
 		return stubRunOrchestrator{
 			runNext: func(ctx context.Context) (agentrun.CycleSummary, error) {
@@ -132,13 +138,16 @@ func TestRunNextCmdRendersHumanSummary(t *testing.T) {
 	}
 }
 
-func TestRunTicketCmdNoReviewDisablesReviewerLoop(t *testing.T) {
+func TestRunTicketCmdReviewEnablesReviewerLoop(t *testing.T) {
 	prev := newRunOrchestrator
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	t.Cleanup(func() {
 		newRunOrchestrator = prev
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 	})
+	runEnableReview = false
 	runDisableReview = false
 
 	var gotReview bool
@@ -156,22 +165,24 @@ func TestRunTicketCmdNoReviewDisablesReviewerLoop(t *testing.T) {
 	format = "human"
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"run-ticket", "TKT-376", "--no-review"})
+	rootCmd.SetArgs([]string{"run-ticket", "TKT-376", "--review"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("run-ticket --no-review failed: %v\n%s", err, out.String())
+		t.Fatalf("run-ticket --review failed: %v\n%s", err, out.String())
 	}
-	if gotReview {
-		t.Fatalf("expected --no-review to disable reviewer loop")
+	if !gotReview {
+		t.Fatalf("expected --review to enable reviewer loop")
 	}
 }
 
 func TestRunNextCmdStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
 	prev := newRunOrchestrator
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
 	t.Cleanup(func() {
 		newRunOrchestrator = prev
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
@@ -180,6 +191,7 @@ func TestRunNextCmdStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
 	repoRoot := t.TempDir()
 	repo = repoRoot
 	format = "human"
+	runEnableReview = false
 	runDisableReview = false
 	store := runruntime.New(repoRoot)
 
@@ -360,6 +372,81 @@ func TestRunStatusCmdRendersRuntimeWarning(t *testing.T) {
 	}
 	if !bytes.Contains(out.Bytes(), []byte("Warning: optional MCP server mcp.instantdb.com rejected authentication; continuing without it")) {
 		t.Fatalf("expected runtime warning in output, got: %s", out.String())
+	}
+}
+
+func TestRunStatusCmdRendersRecoverableResumeHint(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-377R", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-377R", SessionID: "session-377R"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteStatus(runruntime.StatusSnapshot{
+		TicketID:         "TKT-377R",
+		SessionID:        "session-377R",
+		Active:           false,
+		Hung:             false,
+		LastResultStatus: string(agentrun.StatusStuck),
+		LastVisibleText:  "waiting on operator input",
+	}); err != nil {
+		t.Fatalf("WriteStatus() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-377R"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TKT-377R: active=false hung=false recoverable=true",
+		"Resume with: docket run-resume TKT-377R",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunStatusCmdFallsBackToPersistedRunBrief(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	if err := store.WriteBrief(runruntime.RunBrief{
+		TicketID:         "TKT-378",
+		Outcome:          "failed",
+		Summary:          "Managed run failed validation before closeout.",
+		ValidationErrors: []string{"feature.txt missing", "tests failed"},
+		ResumeNext:       "Inspect the validation failures, repair the worktree, and rerun the ticket.",
+		UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-378"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TKT-378: no active run",
+		"Last outcome: failed",
+		"Summary: Managed run failed validation before closeout.",
+		"Validation errors: feature.txt missing; tests failed",
+		"Resume next: Inspect the validation failures, repair the worktree, and rerun the ticket.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
 	}
 }
 
@@ -563,7 +650,7 @@ func TestCycleSummaryError(t *testing.T) {
 	}
 
 	if err := cycleSummaryError(agentrun.CycleSummary{
-		StopReason: "no runnable tickets remain: No workable tickets found. Startable states in current config: backlog, todo. Queue warning: none are runnable right now; 3 actionable tickets are in startable states, 3 blocked. Top unresolved blockers: TKT-101 x3.",
+		StopReason: "no runnable tickets remain: No workable tickets found. Startable states in current config: ready. Queue warning: none are runnable right now; 3 actionable tickets are in startable states, 3 blocked. Top unresolved blockers: TKT-101 x3.",
 	}); err != nil {
 		t.Fatalf("diagnostic no-runnable stop should not error: %v", err)
 	}
@@ -585,13 +672,13 @@ func TestLaunchManagedSingleRunWithModeReturnsSummaryFailure(t *testing.T) {
 		ID:          "TKT-700",
 		Seq:         700,
 		Title:       "single failure",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -630,13 +717,13 @@ func TestLaunchManagedSingleRunWithModeReturnsOperatorStopMessage(t *testing.T) 
 		ID:          "TKT-701",
 		Seq:         701,
 		Title:       "single stop",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -674,26 +761,26 @@ func TestLaunchManagedSingleRunWithModeReturnsDiagnosisWhenNoRunnableTicketExist
 			ID:          "TKT-710",
 			Seq:         710,
 			Title:       "Current blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-711",
 			Seq:         711,
 			Title:       "Blocked leaf",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-710"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "human:test",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 	} {
 		if err := store.CreateTicket(context.Background(), tk); err != nil {
@@ -787,27 +874,27 @@ func TestLaunchManagedAutoCycleWithModeResumesActiveTicketWhenNoRunnableButStart
 			ID:          "TKT-820",
 			Seq:         820,
 			Title:       "Active blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			StartedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-821",
 			Seq:         821,
-			Title:       "Blocked todo",
-			State:       ticket.State("todo"),
+			Title:       "Blocked ready",
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-820"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "human:test",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 	} {
 		if err := s.CreateTicket(context.Background(), tk); err != nil {
@@ -834,7 +921,7 @@ func TestLaunchManagedAutoCycleWithModeResumesActiveTicketWhenNoRunnableButStart
 				if err != nil {
 					t.Fatalf("GetTicket(TKT-821) failed: %v", err)
 				}
-				next.State = ticket.State("in-review")
+				next.State = ticket.State("validated")
 				next.UpdatedAt = time.Now().UTC()
 				if err := s.UpdateTicket(ctx, next); err != nil {
 					t.Fatalf("UpdateTicket(TKT-821) failed: %v", err)
@@ -877,14 +964,14 @@ func TestLaunchManagedAutoCycleWithModeRetriesNoRunnableWhenStartableRemain(t *t
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
 		ID:          "TKT-830",
 		Seq:         830,
-		Title:       "Pending todo",
-		State:       ticket.State("todo"),
+		Title:       "Pending ready",
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -969,8 +1056,8 @@ func TestWorkspaceRunWatchLaunchOptionsIncludePerRepoActions(t *testing.T) {
 		}
 		s := local.New(item.repoPath)
 		if err := s.CreateTicket(ctx, &ticket.Ticket{
-			ID: item.id, Seq: 1, Title: "Runnable", State: ticket.State("todo"), Priority: 1,
-			CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+			ID: item.id, Seq: 1, Title: "Runnable", State: ticket.State("ready"), Priority: 1,
+			CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 		}); err != nil {
 			t.Fatalf("create ticket failed: %v", err)
 		}

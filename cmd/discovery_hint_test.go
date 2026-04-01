@@ -12,9 +12,10 @@ func TestShouldEmitGlobalSkillHint_ScaffoldCommandsAreExcluded(t *testing.T) {
 	ticketScaffold := &cobra.Command{Use: "scaffold"}
 	backlog := &cobra.Command{Use: "backlog"}
 	backlogScaffold := &cobra.Command{Use: "scaffold"}
+	helpJSON := &cobra.Command{Use: "help-json"}
 	list := &cobra.Command{Use: "list"}
 
-	root.AddCommand(ticket, backlog, list)
+	root.AddCommand(ticket, backlog, helpJSON, list)
 	ticket.AddCommand(ticketScaffold)
 	backlog.AddCommand(backlogScaffold)
 
@@ -23,6 +24,9 @@ func TestShouldEmitGlobalSkillHint_ScaffoldCommandsAreExcluded(t *testing.T) {
 	}
 	if shouldEmitGlobalSkillHint(backlogScaffold, "human") {
 		t.Fatalf("expected backlog scaffold to suppress global skill hint")
+	}
+	if shouldEmitGlobalSkillHint(helpJSON, "human") {
+		t.Fatalf("expected help-json to suppress global skill hint")
 	}
 	if !shouldEmitGlobalSkillHint(list, "human") {
 		t.Fatalf("expected non-scaffold human command to emit global skill hint")

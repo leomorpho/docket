@@ -101,9 +101,34 @@ exit 0
 `
 }
 
-func commitMsgHookScript() string {
+func defaultClosedStatePattern() string {
+	cfg := ticket.DefaultConfig()
+	states := make([]string, 0, len(cfg.States))
+	for name, stateCfg := range cfg.States {
+		if !stateCfg.Open {
+			states = append(states, name)
+		}
+	}
+	sort.Strings(states)
+	return strings.Join(states, "|")
+}
+
+func commitMsgHookScript(repoRoot string) string {
 	ticketsRelDir := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoTicketsDir))
 	configRelPath := filepath.ToSlash(artifacts.MustRelPath(artifacts.RepoConfigJSON))
+	closedStatePattern := defaultClosedStatePattern()
+	if cfg, err := ticket.LoadConfig(repoRoot); err == nil {
+		states := make([]string, 0, len(cfg.States))
+		for name, stateCfg := range cfg.States {
+			if !stateCfg.Open {
+				states = append(states, name)
+			}
+		}
+		if len(states) > 0 {
+			sort.Strings(states)
+			closedStatePattern = strings.Join(states, "|")
+		}
+	}
 	return `#!/bin/sh
 set -eu
 
@@ -147,7 +172,7 @@ if not match:
     raise SystemExit(0)
 state = match.group(1).strip()
 
-closed_states = {"done", "archived"}
+closed_states = {"validated", "archived"}
 config_path = repo_root / pathlib.PurePosixPath("` + configRelPath + `")
 try:
     config = json.loads(config_path.read_text())
@@ -162,8 +187,8 @@ if state in closed_states:
     print(f"docket: error: referenced ticket {ticket_id} is already in closed state {state}", file=sys.stderr)
     raise SystemExit(1)
 PY
-  elif [ -f "$TICKET_FILE" ] && grep -Eq '^state:[[:space:]]*done$' "$TICKET_FILE"; then
-    echo "docket: error: referenced ticket $ID is already in done state" >&2
+  elif [ -f "$TICKET_FILE" ] && grep -Eq '^state:[[:space:]]*(` + closedStatePattern + `)$' "$TICKET_FILE"; then
+    echo "docket: error: referenced ticket $ID is already in a closed state" >&2
     exit 1
   fi
 done
@@ -261,7 +286,7 @@ func writeHook(repoRoot string) (bool, error) {
 		script string
 	}{
 		{path: prePath, script: preCommitHookScript()},
-		{path: commitPath, script: commitMsgHookScript()},
+		{path: commitPath, script: commitMsgHookScript(repoRoot)},
 		{path: postMergePath, script: postMergeHookScript()},
 	}
 	for _, hook := range hooks {
@@ -310,7 +335,8 @@ func ensurePortableSkillPack(repoRoot string) error {
 		return err
 	}
 	block := skillPackStart + "\n" + rendered.Content + skillPackEnd + "\n"
-	return upsertManagedTextBlock(filepath.Join(repoRoot, ".docket", "skills", "portable-codex.md"), skillPackStart, skillPackEnd, block)
+	skillsDir := filepath.Join(repoRoot, filepath.Dir(artifacts.MustRelPath(artifacts.RepoConfigJSON)), "skills")
+	return upsertManagedTextBlock(filepath.Join(skillsDir, "portable-codex.md"), skillPackStart, skillPackEnd, block)
 }
 
 func ensurePortableRepoMCP(repoRoot string) error {
@@ -377,7 +403,7 @@ func artifactStatus(repoRoot string) (hookStale bool, claudeStale bool, err erro
 		script string
 	}{
 		{path: preCommitHookPath(repoRoot), script: preCommitHookScript()},
-		{path: commitMsgHookPath(repoRoot), script: commitMsgHookScript()},
+		{path: commitMsgHookPath(repoRoot), script: commitMsgHookScript(repoRoot)},
 	}
 	for _, hook := range hooks {
 		hookData, readErr := os.ReadFile(hook.path)

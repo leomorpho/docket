@@ -44,7 +44,7 @@ func TestMerge(t *testing.T) {
 
 	runGit("checkout", def)
 
-	if err := MergeBranch(tmpDir, "feature-1"); err != nil {
+	if err := MergeBranch(tmpDir, "feature-1", ""); err != nil {
 		t.Fatalf("MergeBranch failed: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func TestMerge(t *testing.T) {
 	}
 
 	// 4. Merge non-existent
-	if err := MergeBranch(tmpDir, "no-such-branch"); err == nil {
+	if err := MergeBranch(tmpDir, "no-such-branch", ""); err == nil {
 		t.Error("expected error merging non-existent branch")
 	}
 
@@ -108,7 +108,7 @@ func TestMergeBranch_AutostashesUnrelatedDirtyTrackedChanges(t *testing.T) {
 		t.Fatalf("dirty docs.txt: %v", err)
 	}
 
-	if err := MergeBranch(tmpDir, "feature-1"); err != nil {
+	if err := MergeBranch(tmpDir, "feature-1", ""); err != nil {
 		t.Fatalf("MergeBranch with dirty tracked file failed: %v", err)
 	}
 
@@ -129,5 +129,52 @@ func TestMergeBranch_AutostashesUnrelatedDirtyTrackedChanges(t *testing.T) {
 	}
 	if got := strings.TrimSpace(string(out)); got != " M docs.txt" && got != "M docs.txt" {
 		t.Fatalf("expected only docs.txt to remain dirty after merge, got %q", got)
+	}
+}
+
+func TestMergeBranch_UsesExplicitMessage(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		c := exec.Command("git", append([]string{"-C", tmpDir}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "README"), []byte("root\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGit("add", "README")
+	runGit("commit", "-m", "initial")
+
+	def, err := GetDefaultBranch(tmpDir)
+	if err != nil {
+		t.Fatalf("GetDefaultBranch failed: %v", err)
+	}
+
+	runGit("checkout", "-b", "feature-1")
+	if err := os.WriteFile(filepath.Join(tmpDir, "feature.txt"), []byte("feat\n"), 0o644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	runGit("add", "feature.txt")
+	runGit("commit", "-m", "feature")
+	runGit("checkout", def)
+
+	message := "docket: close out TKT-001\n\nTicket: TKT-001"
+	if err := MergeBranch(tmpDir, "feature-1", message); err != nil {
+		t.Fatalf("MergeBranch failed: %v", err)
+	}
+
+	c := exec.Command("git", "-C", tmpDir, "log", "-1", "--format=%B")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git log failed: %v (%s)", err, string(out))
+	}
+	if got := strings.TrimSpace(string(out)); got != message {
+		t.Fatalf("merge commit message = %q, want %q", got, message)
 	}
 }

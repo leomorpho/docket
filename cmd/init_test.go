@@ -27,8 +27,8 @@ func TestInitCmd(t *testing.T) {
 	if !strings.Contains(b.String(), "Initialized docket") {
 		t.Errorf("expected 'Initialized docket' in output, got: %s", b.String())
 	}
-	if !strings.Contains(b.String(), "DOCKET_HOME") {
-		t.Errorf("expected DOCKET_HOME setup hint in output, got: %s", b.String())
+	if !strings.Contains(b.String(), "Runtime namespace:") {
+		t.Errorf("expected runtime namespace hint in output, got: %s", b.String())
 	}
 
 	cfgPath := filepath.Join(tmpDir, ".docket", "config.json")
@@ -79,14 +79,14 @@ func TestInitCmd(t *testing.T) {
 	}
 }
 
-func TestInitHelpMentionsDocketHome(t *testing.T) {
+func TestInitHelpDoesNotMentionDocketHome(t *testing.T) {
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
 	rootCmd.SetArgs([]string{"init", "--help"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("init --help failed: %v", err)
 	}
-	if !strings.Contains(b.String(), "DOCKET_HOME") {
-		t.Fatalf("expected init help to mention DOCKET_HOME, got: %s", b.String())
+	if strings.Contains(b.String(), "DOCKET_HOME") {
+		t.Fatalf("did not expect init help to mention DOCKET_HOME, got: %s", b.String())
 	}
 }

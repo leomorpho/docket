@@ -30,7 +30,7 @@ func TestTicketApplyCreateAndUpdateTransactional(t *testing.T) {
     "title": "Create by apply",
     "description": "Create a fully groomed ticket in one transaction.",
     "priority": 1,
-    "state": "backlog",
+    "state": "draft",
     "labels": ["feature", "llm-only"],
     "ac": ["unit checks", "integration checks"]
   }
@@ -224,13 +224,14 @@ func TestTicketApplyUsesConfiguredWorkflowStates(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 
-	spec := `{
+spec := `{
   "version": "docket.apply/v1",
   "operation": "create",
   "ticket": {
     "title": "Custom state create",
-    "description": "Create ticket in renamed workflow.",
-    "state": "building"
+    "description": "Likely paths: cmd/ticket_apply.go and internal/store/local/ready_contract.go. Verify commands: go test ./cmd -run TestTicketApplyUsesConfiguredWorkflowStates -count=1. Out of scope: unrelated scheduler behavior. This ticket is intentionally detailed enough to enter the configured active state directly through ticket apply.",
+    "state": "building",
+    "ac": ["unit validation remains green", "integration path is exercised"]
   }
 }`
 	specPath := writeSpecFile(t, tmpDir, "custom-state.json", spec)
@@ -276,7 +277,7 @@ func TestTicketApplyCreateRejectsDisconnectedGraph(t *testing.T) {
 		Seq:         1,
 		Title:       "Existing",
 		Description: "Existing anchor ticket",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -323,7 +324,7 @@ func TestTicketApplyRejectsNonLeafExecutionBlocker(t *testing.T) {
 			Seq:         1,
 			Title:       "Parent blocker",
 			Description: "Parent blocker",
-			State:       ticket.State("backlog"),
+			State:       ticket.State("draft"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -336,7 +337,7 @@ func TestTicketApplyRejectsNonLeafExecutionBlocker(t *testing.T) {
 			Title:       "Child",
 			Description: "Child ticket",
 			Parent:      "TKT-001",
-			State:       ticket.State("backlog"),
+			State:       ticket.State("draft"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -388,7 +389,7 @@ func TestTicketApplyUpdateRollsBackDisconnectedMutation(t *testing.T) {
 		Seq:         1,
 		Title:       "Root",
 		Description: "Root ticket",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -399,7 +400,7 @@ func TestTicketApplyUpdateRollsBackDisconnectedMutation(t *testing.T) {
 		Seq:         2,
 		Title:       "Child",
 		Description: "Child ticket",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		Parent:      "TKT-001",
 		CreatedAt:   now,
@@ -503,7 +504,7 @@ func TestTicketApplyDeterministicUpdatedAt(t *testing.T) {
 	base := &ticket.Ticket{
 		ID:          "TKT-001",
 		Seq:         1,
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		Title:       "Base",
 		Description: "Base ticket for deterministic update timestamp coverage.",

@@ -11,6 +11,6 @@ type Provider interface {
 	IsPrimaryCheckout(ctx context.Context) (bool, error)
 	GetRepoRoot(ctx context.Context) (string, error)
 	CommitAll(ctx context.Context, worktreePath, message string) error
-	MergeBranch(ctx context.Context, branch string) error
+	MergeBranch(ctx context.Context, branch, message string) error
 	DeleteBranch(ctx context.Context, branch string) error
 }

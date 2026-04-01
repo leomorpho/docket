@@ -71,9 +71,6 @@ const (
 	RepoTemplatesDir        Key = "repo.templates"
 	RepoTicketsDir          Key = "repo.tickets"
 	RepoTicketSessions      Key = "repo.tickets.sessions"
-	RepoWorkflowPolicy      Key = "repo.workflow.policy"
-	RepoWorkflowLock        Key = "repo.workflow.lock"
-	RepoInstructionPack     Key = "repo.workflow.instruction_pack"
 	RepoLedgerEvents        Key = "repo.security.ledger"
 	HomeIdentity            Key = "home.identity"
 	HomeSecurityKeystore    Key = "home.security.keystore"
@@ -115,9 +112,6 @@ var registry = map[Key]Entry{
 	RepoTemplatesDir:        {Key: RepoTemplatesDir, Category: CategoryConfig, Root: RootRepo, Kind: KindDir, RelPath: ".docket/templates", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoTicketsDir:          {Key: RepoTicketsDir, Category: CategoryTickets, Root: RootRepo, Kind: KindDir, RelPath: ".docket/tickets", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoTicketSessions:      {Key: RepoTicketSessions, Category: CategoryTickets, Root: RootRepo, Kind: KindDir, RelPath: ".docket/tickets", CanonicalRelPath: ".docket/local/tickets", Policy: PolicyLocalOnly, Migration: MigrationMigrateToLocal, IgnorePattern: ".docket/tickets/*/sessions/"},
-	RepoWorkflowPolicy:      {Key: RepoWorkflowPolicy, Category: CategoryWorkflow, Root: RootRepo, Kind: KindFile, RelPath: ".docket/workflow.proposal.json", Policy: PolicyTracked, Migration: MigrationStable},
-	RepoWorkflowLock:        {Key: RepoWorkflowLock, Category: CategoryWorkflow, Root: RootRepo, Kind: KindFile, RelPath: ".docket/workflow.lock.json", Policy: PolicyTracked, Migration: MigrationStable},
-	RepoInstructionPack:     {Key: RepoInstructionPack, Category: CategoryWorkflow, Root: RootRepo, Kind: KindFile, RelPath: ".docket/instruction-pack.json", Policy: PolicyTracked, Migration: MigrationStable},
 	RepoLedgerEvents:        {Key: RepoLedgerEvents, Category: CategorySecurity, Root: RootRepo, Kind: KindFile, RelPath: ".docket/ledger/events.jsonl", Policy: PolicyTracked, Migration: MigrationStable},
 	HomeIdentity:            {Key: HomeIdentity, Category: CategorySecurity, Root: RootHome, Kind: KindFile, RelPath: "identity/identity.json", Policy: PolicyLocalOnly, Migration: MigrationStable},
 	HomeSecurityKeystore:    {Key: HomeSecurityKeystore, Category: CategorySecurity, Root: RootHome, Kind: KindFile, RelPath: "security/keystore.json", Policy: PolicyLocalOnly, Migration: MigrationStable},

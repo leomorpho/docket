@@ -10,7 +10,7 @@ import (
 
 func TestMutatingCommandsEmitStructuredJSONErrorEnvelope(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-970", 970, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-970", 970, ticket.State("draft"), []ticket.AcceptanceCriterion{{Description: "ac"}})
 
 	badSpec := map[string]any{
 		"version": "docket.apply/v1",
@@ -43,7 +43,7 @@ func TestMutatingCommandsEmitStructuredJSONErrorEnvelope(t *testing.T) {
 		t.Fatalf("expected suggested_fix in validation envelope, got %#v", validationEnvelope)
 	}
 
-	transitionOut, err := h.run("--format", "json", "update", "TKT-970", "--state", "in-review")
+	transitionOut, err := h.run("--format", "json", "update", "TKT-970", "--state", "validated")
 	if err == nil {
 		t.Fatalf("expected transition failure, output=%s", transitionOut)
 	}

@@ -25,7 +25,7 @@ func TestSessionAttachListCompress(t *testing.T) {
 
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Sess", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Sess", State: ticket.State("draft"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
 	cfg := ticket.DefaultConfig()
@@ -74,7 +74,7 @@ func TestSessionAttachListCompress(t *testing.T) {
 	}
 
 	summary := filepath.Join(tmpDir, "summary.md")
-	content := "## Handoff\n\n*Last updated: 2026-03-09T15:00:00Z by agent:test*\n\n**Current state:** done\n\n**Decisions made:** x\n\n**Files touched:** y\n\n**Remaining work:** z\n\n**AC status:** 0/1\n"
+	content := "## Handoff\n\n*Last updated: 2026-03-09T15:00:00Z by agent:test*\n\n**Current state:** validated\n\n**Decisions made:** x\n\n**Files touched:** y\n\n**Remaining work:** z\n\n**AC status:** 0/1\n"
 	if err := os.WriteFile(summary, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}

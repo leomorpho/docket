@@ -59,7 +59,7 @@ func (f *fakeBackend) Validate(ctx context.Context, id string) ([]store.Validati
 
 func TestChecker_R001AndR008(t *testing.T) {
 	now := time.Now().UTC()
-	b := newFake(&ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), UpdatedAt: now.Add(-8 * 24 * time.Hour)})
+	b := newFake(&ticket.Ticket{ID: "TKT-001", State: ticket.State("running"), UpdatedAt: now.Add(-8 * 24 * time.Hour)})
 	b.validate["TKT-001"] = []store.ValidationError{{Field: "state", Message: "bad"}}
 
 	c := NewChecker(b, ticket.DefaultConfig())
@@ -75,8 +75,8 @@ func TestChecker_R001AndR008(t *testing.T) {
 
 func TestChecker_R006Fix(t *testing.T) {
 	now := time.Now().UTC()
-	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.State("done"), UpdatedAt: now}
-	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now.Add(-8 * 24 * time.Hour)}
+	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.State("validated"), UpdatedAt: now}
+	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("running"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now.Add(-8 * 24 * time.Hour)}
 	b := newFake(blocker, target)
 
 	c := NewChecker(b, ticket.DefaultConfig())
@@ -98,12 +98,12 @@ func TestChecker_R006Fix(t *testing.T) {
 func TestChecker_R006FixHonorsConfigForReviewState(t *testing.T) {
 	now := time.Now().UTC()
 	cfg := ticket.DefaultConfig()
-	review := cfg.States["in-review"]
+	review := cfg.States["validated"]
 	review.BlocksDependents = false
-	cfg.States["in-review"] = review
+	cfg.States["validated"] = review
 
-	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.State("in-review"), UpdatedAt: now}
-	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("in-progress"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now}
+	blocker := &ticket.Ticket{ID: "TKT-002", State: ticket.State("validated"), UpdatedAt: now}
+	target := &ticket.Ticket{ID: "TKT-001", State: ticket.State("running"), BlockedBy: []string{"TKT-002"}, UpdatedAt: now}
 	b := newFake(blocker, target)
 
 	c := NewChecker(b, cfg)
@@ -113,7 +113,7 @@ func TestChecker_R006FixHonorsConfigForReviewState(t *testing.T) {
 
 	updated, _ := b.GetTicket(context.Background(), "TKT-001")
 	if len(updated.BlockedBy) != 0 {
-		t.Fatalf("expected in-review blocker removed when config allows it, got %v", updated.BlockedBy)
+		t.Fatalf("expected validated blocker removed when config allows it, got %v", updated.BlockedBy)
 	}
 }
 
@@ -143,11 +143,11 @@ func TestChecker_R001UsesConfiguredActiveRole(t *testing.T) {
 
 func TestChecker_ReportsDescendantClosureIssues(t *testing.T) {
 	now := time.Now().UTC()
-	parent := &ticket.Ticket{ID: "TKT-172", State: ticket.State("in-review"), UpdatedAt: now}
-	childOpen := &ticket.Ticket{ID: "TKT-174", State: ticket.State("in-progress"), Parent: "TKT-172", UpdatedAt: now}
-	childInvalid := &ticket.Ticket{ID: "TKT-175", State: ticket.State("done"), Parent: "TKT-172", UpdatedAt: now}
-	childBlocked := &ticket.Ticket{ID: "TKT-176", State: ticket.State("done"), Parent: "TKT-172", BlockedBy: []string{"TKT-177"}, UpdatedAt: now}
-	blocker := &ticket.Ticket{ID: "TKT-177", State: ticket.State("in-progress"), UpdatedAt: now}
+	parent := &ticket.Ticket{ID: "TKT-172", State: ticket.State("validated"), UpdatedAt: now}
+	childOpen := &ticket.Ticket{ID: "TKT-174", State: ticket.State("running"), Parent: "TKT-172", UpdatedAt: now}
+	childInvalid := &ticket.Ticket{ID: "TKT-175", State: ticket.State("validated"), Parent: "TKT-172", UpdatedAt: now}
+	childBlocked := &ticket.Ticket{ID: "TKT-176", State: ticket.State("validated"), Parent: "TKT-172", BlockedBy: []string{"TKT-177"}, UpdatedAt: now}
+	blocker := &ticket.Ticket{ID: "TKT-177", State: ticket.State("running"), UpdatedAt: now}
 
 	b := newFake(parent, childOpen, childInvalid, childBlocked, blocker)
 	b.validate["TKT-175"] = []store.ValidationError{{Field: "handoff", Message: "missing required subsection: AC status"}}
@@ -171,9 +171,9 @@ func TestChecker_ReportsDescendantClosureIssues(t *testing.T) {
 	}
 	joined := strings.Join(messages, "\n")
 	for _, want := range []string{
-		"descendant TKT-174 is still in-progress",
+		"descendant TKT-174 is still running",
 		"descendant TKT-175 failed validation: handoff: missing required subsection: AC status",
-		"descendant TKT-176 is still blocked by TKT-177 (in-progress)",
+		"descendant TKT-176 is still blocked by TKT-177 (running)",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected descendant finding %q in %q", want, joined)

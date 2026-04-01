@@ -102,6 +102,74 @@ var canonicalDefaultWorkflow = mustLoadDefaultWorkflowConfig()
 
 // defaultStates is derived from the shipped default workflow definition.
 var defaultStates = statesFromWorkflow(canonicalDefaultWorkflow)
+var legacyDefaultStates = map[string]StateConfig{
+	"backlog": {
+		Label:            "Backlog",
+		Open:             true,
+		Column:           0,
+		Next:             []string{"todo", "in-progress", "archived"},
+		Roles:            []string{"intake"},
+		Terminal:         false,
+		Startable:        true,
+		Reviewable:       false,
+		BlocksDependents: true,
+	},
+	"todo": {
+		Label:            "To Do",
+		Open:             true,
+		Column:           1,
+		Next:             []string{"in-progress", "backlog", "archived"},
+		Roles:            []string{"intake"},
+		Terminal:         false,
+		Startable:        true,
+		Reviewable:       false,
+		BlocksDependents: true,
+	},
+	"in-progress": {
+		Label:            "In Progress",
+		Open:             true,
+		Column:           2,
+		Next:             []string{"in-review", "todo", "backlog", "archived"},
+		Roles:            []string{"active"},
+		Terminal:         false,
+		Startable:        false,
+		Reviewable:       false,
+		BlocksDependents: true,
+	},
+	"in-review": {
+		Label:            "In Review",
+		Open:             true,
+		Column:           3,
+		Next:             []string{"done", "in-progress", "archived"},
+		Roles:            []string{"review"},
+		Terminal:         false,
+		Startable:        false,
+		Reviewable:       true,
+		BlocksDependents: false,
+	},
+	"done": {
+		Label:            "Done",
+		Open:             false,
+		Column:           4,
+		Next:             []string{"archived", "in-progress"},
+		Roles:            []string{"completed"},
+		Terminal:         true,
+		Startable:        false,
+		Reviewable:       false,
+		BlocksDependents: false,
+	},
+	"archived": {
+		Label:            "Archived",
+		Open:             false,
+		Column:           5,
+		Next:             []string{"backlog"},
+		Roles:            []string{"archived"},
+		Terminal:         true,
+		Startable:        false,
+		Reviewable:       false,
+		BlocksDependents: false,
+	},
+}
 
 var defaultHandoffSections = []string{
 	"Current state",
@@ -122,7 +190,7 @@ func DefaultConfig() *Config {
 		Labels:          []string{"bug", "feature", "refactor", "chore", "llm-only", "human-only"},
 		CommitSessions:  false,
 		SecurityEnforcement: false,
-		DefaultState:    "backlog",
+		DefaultState:    "draft",
 		DefaultPriority: 10,
 		HandoffSections: append([]string(nil), defaultHandoffSections...),
 		Backends:        map[string]BackendConfig{},
@@ -525,7 +593,10 @@ func normalizeLegacyStateSemantics(raw json.RawMessage, states map[string]StateC
 	for name, state := range states {
 		def, ok := defaultStates[name]
 		if !ok {
-			continue
+			def, ok = legacyDefaultStates[name]
+			if !ok {
+				continue
+			}
 		}
 		rawState, ok := rawStates[name]
 		if !ok {
@@ -611,6 +682,8 @@ func migrateStateNames(names []string) map[string]StateConfig {
 	result := make(map[string]StateConfig, len(names))
 	for i, name := range names {
 		if sc, ok := defaultStates[name]; ok {
+			result[name] = sc
+		} else if sc, ok := legacyDefaultStates[name]; ok {
 			result[name] = sc
 		} else {
 			result[name] = StateConfig{

@@ -17,6 +17,7 @@ type EmptyDiagnosis struct {
 	BlockedTickets      int
 	ClaimedTickets      int
 	CoordinationTickets int
+	UngroomedTickets    int
 	NonTransitionable   int
 	NeedsPromotion      int    // startable leaf tickets with no direct active-role next, but valid non-terminal next states
 	NeedsPromotionNext  string // the next state they should be advanced to
@@ -59,6 +60,10 @@ func DiagnoseEmpty(ctx context.Context, s *local.Store, cfg *ticket.Config) (Emp
 		}
 		if ticket.IsCoordinationTicket(full) || !localIsLeaf(idx, full.ID) {
 			diagnosis.CoordinationTickets++
+			continue
+		}
+		if len(local.RunnableContractErrors(cfg, idx, full)) > 0 {
+			diagnosis.UngroomedTickets++
 			continue
 		}
 		stateCfg, ok := cfg.States[string(full.State)]
@@ -161,6 +166,8 @@ func (d EmptyDiagnosis) Summary() string {
 		)
 	case d.StartableTickets == 0 && d.CoordinationTickets > 0:
 		return fmt.Sprintf("%s Queue warning: only coordination tickets are sitting in startable states (%d coordination tickets); no actionable leaf tickets are startable.", base, d.CoordinationTickets)
+	case d.StartableTickets == 0 && d.UngroomedTickets > 0:
+		return fmt.Sprintf("%s Queue warning: %d ready ticket(s) are not runnable yet because the ready contract is incomplete. Groom ready tickets with explicit context, verification, and out-of-scope boundaries before rerunning autorun.", base, d.UngroomedTickets)
 	case d.StartableTickets == 0:
 		return fmt.Sprintf("%s Queue warning: there are no actionable tickets in startable states. Check ticket state wiring and parent/blocker links.", base)
 	}
@@ -172,6 +179,9 @@ func (d EmptyDiagnosis) Summary() string {
 	if d.ClaimedTickets > 0 {
 		parts = append(parts, fmt.Sprintf("%d claimed", d.ClaimedTickets))
 	}
+	if d.UngroomedTickets > 0 {
+		parts = append(parts, fmt.Sprintf("%d ungroomed", d.UngroomedTickets))
+	}
 	if d.CoordinationTickets > 0 {
 		parts = append(parts, fmt.Sprintf("%d coordination-only hidden", d.CoordinationTickets))
 	}
@@ -181,7 +191,10 @@ func (d EmptyDiagnosis) Summary() string {
 
 	summary := fmt.Sprintf("%s Queue warning: none are runnable right now; %s.", base, strings.Join(parts, ", "))
 	if len(d.TopBlockers) == 0 {
-		return summary + " Check blocker wiring and in-review handoff policy."
+		if d.UngroomedTickets > 0 {
+			return summary + " Groom ready tickets with explicit context, verification, and out-of-scope boundaries before rerunning autorun."
+		}
+		return summary + " Check blocker wiring and ready/validated workflow policy."
 	}
 
 	blockers := make([]string, 0, len(d.TopBlockers))

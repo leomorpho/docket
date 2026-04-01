@@ -226,7 +226,7 @@ func handleUpdate(
 		switch {
 		case cfg.StateHasRole(string(ns), "active"):
 			lifecycleState = ns
-		case cfg.StateHasRole(string(ns), "review"):
+		case cfg.StateHasRole(string(ns), "review"), cfg.StateHasRole(string(ns), "completed"):
 			lifecycleState = ns
 		default:
 			t.State = ns
@@ -274,7 +274,7 @@ func handleUpdate(
 		if wtPath != repoRoot {
 			resp["new_worktree_path"] = wtPath
 		}
-	} else if cfg.StateHasRole(string(lifecycleState), "review") && !cfg.StateHasRole(string(oldState), "review") {
+	} else if cfg.StateHasRole(string(lifecycleState), "review") || cfg.StateHasRole(string(lifecycleState), "completed") {
 		res, err := wf.FinishTask(ctx, t.ID, cfg)
 		if err != nil {
 			return nil, err
@@ -668,7 +668,7 @@ func buildAgentQuickstartView(repoRoot string) map[string]any {
 		"core_workflow": []string{
 			"docket list --state open --format context",
 			"docket show TKT-NNN --format context",
-			fmt.Sprintf("docket update TKT-NNN --state %s", preferredRoleState(cfg, "active", "in-progress")),
+			fmt.Sprintf("docket update TKT-NNN --state %s", preferredRoleState(cfg, "active", "running")),
 			"docket ac check TKT-NNN",
 		},
 		"capability_discovery": []string{

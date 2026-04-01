@@ -132,6 +132,7 @@ func (s *Store) ValidateFile(id string) (errs []store.ValidationError, warns []s
 			})
 		}
 	}
+	errs = append(errs, RunnableContractErrors(cfg, idx, t)...)
 
 	// 4. Structure
 	if t.Description == "" {

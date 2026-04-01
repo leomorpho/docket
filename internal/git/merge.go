@@ -6,8 +6,11 @@ import (
 )
 
 // MergeBranch merges the given branch into the current HEAD of repoRoot.
-func MergeBranch(repoRoot, branch string) error {
-	args := []string{"merge", "--no-ff", "--autostash", "-m", fmt.Sprintf("Merge ticket branch %s", branch), branch}
+func MergeBranch(repoRoot, branch, message string) error {
+	if strings.TrimSpace(message) == "" {
+		message = fmt.Sprintf("Merge ticket branch %s", branch)
+	}
+	args := []string{"merge", "--no-ff", "--autostash", "-m", message, branch}
 	out, err := runGit(repoRoot, args...)
 	if err != nil {
 		// If merge failed, we might want to abort it to keep the main repo clean

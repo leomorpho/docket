@@ -27,14 +27,14 @@ func TestCheckDoctor(t *testing.T) {
 	
 	// Create a valid ticket
 	s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "This is a long enough description for the doctor to not complain about it.",
 		AC: []ticket.AcceptanceCriterion{{Description: "A"}, {Description: "B"}},
 	})
 
 	// Create an invalid ticket (manual edit)
 	s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "T2", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-002", Seq: 2, Title: "T2", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 	p := filepath.Join(tmpDir, ".docket", "tickets", "TKT-002.md")

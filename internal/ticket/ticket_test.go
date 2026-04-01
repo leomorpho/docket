@@ -53,11 +53,10 @@ func TestIsValidState(t *testing.T) {
 		state    string
 		expected bool
 	}{
-		{"backlog", true},
-		{"todo", true},
-		{"in-progress", true},
-		{"in-review", true},
-		{"done", true},
+		{"draft", true},
+		{"ready", true},
+		{"running", true},
+		{"validated", true},
 		{"archived", true},
 		{"blocked", false},
 		{"unknown", false},

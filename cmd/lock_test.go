@@ -53,8 +53,12 @@ func TestUpdateAutoReleasesLockOnDoneState(t *testing.T) {
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-010", Seq: 10, Title: "Lock release", State: ticket.State("todo"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
+		ID: "TKT-010", Seq: 10, Title: "Lock release", State: ticket.State("ready"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "Likely paths: cmd/update.go and cmd/lock_test.go. Verify commands: go test ./cmd -run TestUpdateAutoReleasesLockOnDoneState -count=1. Out of scope: unrelated lock ownership behavior. This ticket has enough context to move through the runnable workflow during lock-release coverage.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A", Done: true},
+			{Description: "B", Done: true},
+		},
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
@@ -63,14 +67,14 @@ func TestUpdateAutoReleasesLockOnDoneState(t *testing.T) {
 	}
 
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-010", "--state", "in-progress"})
+	rootCmd.SetArgs([]string{"update", "TKT-010", "--state", "running"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("update in-progress failed: %v", err)
+		t.Fatalf("update running failed: %v", err)
 	}
 	rootCmd.SetOut(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"update", "TKT-010", "--state", "in-review"})
+	rootCmd.SetArgs([]string{"update", "TKT-010", "--state", "validated"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("update in-review failed: %v", err)
+		t.Fatalf("update validated failed: %v", err)
 	}
 
 	st, err := loadLocks(tmp)
@@ -109,7 +113,7 @@ func TestHookLockCheckWarnsOnOverlap(t *testing.T) {
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
 	_ = s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-777", Seq: 777, Title: "Other lock", State: ticket.State("in-progress"), Priority: 1,
+		ID: "TKT-777", Seq: 777, Title: "Other lock", State: ticket.State("running"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 	_ = upsertLock(tmp, fileLock{TicketID: "TKT-777", WorktreePath: tmp, Files: []string{"a.txt"}, UpdatedAt: now.Format(time.RFC3339)})

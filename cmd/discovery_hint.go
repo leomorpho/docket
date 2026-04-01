@@ -17,7 +17,7 @@ func shouldEmitGlobalSkillHint(cmd *cobra.Command, outputFormat string) bool {
 		return false
 	}
 	switch strings.TrimSpace(cmd.CommandPath()) {
-	case "docket ticket scaffold", "docket backlog scaffold":
+	case "docket ticket scaffold", "docket backlog scaffold", "docket help-json":
 		return false
 	}
 	return true

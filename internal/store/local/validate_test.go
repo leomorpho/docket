@@ -22,16 +22,16 @@ func TestValidateFile(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Valid Ticket",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		Labels:      []string{"bug"},
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:tester",
-		Description: "Has description with enough words to pass the quality check so that agents can execute this ticket without asking clarifying questions",
+		Description: "Likely paths: internal/store/local/validate.go and internal/store/local/ready_contract.go. Verify commands: go test ./internal/store/local -run TestValidateFile -count=1. This ticket has enough execution context to pass the quality check so that agents can execute it without asking clarifying questions. Out of scope: unrelated workflow cleanup.",
 		AC: []ticket.AcceptanceCriterion{
-			{Description: "Has AC item one", Done: false},
-			{Description: "Has AC item two", Done: false},
+			{Description: "Has AC item one", Done: false, Run: "test -f README.md"},
+			{Description: "Has AC item two", Done: false, VerificationSteps: []string{"Inspect validation output"}},
 		},
 		Handoff: "Has handoff",
 	}
@@ -91,9 +91,9 @@ func TestDetectCycles(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", BlockedBy: []string{"TKT-002"}, Title: "T1", State: "todo", CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", BlockedBy: []string{"TKT-003"}, Title: "T2", State: "todo", CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", BlockedBy: []string{"TKT-001"}, Title: "T3", State: "todo", CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", BlockedBy: []string{"TKT-002"}, Title: "T1", State: "draft", CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", BlockedBy: []string{"TKT-003"}, Title: "T2", State: "draft", CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", BlockedBy: []string{"TKT-001"}, Title: "T3", State: "draft", CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
 	err := s.detectCycles()
 	if err == nil {
@@ -114,7 +114,7 @@ func TestValidateFile_RequiresStructuredHandoffForReviewAndDone(t *testing.T) {
 		ID:          "TKT-010",
 		Seq:         10,
 		Title:       "Needs handoff",
-		State:       ticket.State("in-review"),
+		State:       ticket.State("validated"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -135,7 +135,7 @@ func TestValidateFile_RequiresStructuredHandoffForReviewAndDone(t *testing.T) {
 		t.Fatal("expected handoff structure validation errors")
 	}
 
-	t1.Handoff = "*Last updated: 2026-03-09T15:00:00Z by agent:test*\n\n**Current state:** done.\n\n**Decisions made:** decision.\n\n**Files touched:** file.\n\n**Remaining work:** none.\n\n**AC status:** complete."
+	t1.Handoff = "*Last updated: 2026-03-09T15:00:00Z by agent:test*\n\n**Current state:** validated.\n\n**Decisions made:** decision.\n\n**Files touched:** file.\n\n**Remaining work:** none.\n\n**AC status:** complete."
 	if err := s.UpdateTicket(ctx, t1); err != nil {
 		t.Fatalf("UpdateTicket failed: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestValidateFile_HandoffSectionsConfigDriven(t *testing.T) {
 		ID:          "TKT-011",
 		Seq:         11,
 		Title:       "Config handoff sections",
-		State:       ticket.State("in-review"),
+		State:       ticket.State("validated"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -217,7 +217,7 @@ func TestValidateFile_RejectsNonLeafExecutionBlocker(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Parent",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		Labels:      []string{"epic"},
 		CreatedAt:   now,
@@ -231,7 +231,7 @@ func TestValidateFile_RejectsNonLeafExecutionBlocker(t *testing.T) {
 		Seq:         2,
 		Title:       "Child",
 		Parent:      "TKT-001",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -243,7 +243,7 @@ func TestValidateFile_RejectsNonLeafExecutionBlocker(t *testing.T) {
 		ID:          "TKT-003",
 		Seq:         3,
 		Title:       "Blocked leaf",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		BlockedBy:   []string{"TKT-001"},
 		CreatedAt:   now,
@@ -344,10 +344,10 @@ func TestValidateFile_UsesWorkflowRolesForHandoffAndComments(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "This description is long enough to avoid the short description warning in validation for this ticket.",
+		Description: "Likely paths: internal/store/local/validate.go and internal/store/local/ready_contract.go. Verify commands: go test ./internal/store/local -run TestValidateFile_UsesWorkflowRolesForHandoffAndComments -count=1. This description is long enough to avoid the short description warning in validation for this ticket, and it includes enough execution context for runnable-state validation. Out of scope: unrelated backlog migration or ticket taxonomy cleanup.",
 		AC: []ticket.AcceptanceCriterion{
-			{Description: "A1"},
-			{Description: "A2"},
+			{Description: "A1", Run: "printf ok >/dev/null"},
+			{Description: "A2", VerificationSteps: []string{"Inspect active warning behavior"}},
 		},
 	}
 	if err := s.CreateTicket(ctx, active); err != nil {
@@ -450,7 +450,7 @@ func TestValidate(t *testing.T) {
 
 	// Valid ticket
 	t1 := &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "This is a long description so it passes validation quality checks easily and without any issues.",
 		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
 	}
@@ -499,8 +499,8 @@ func TestValidateAll(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
 	allErrs, allWarns, err := s.ValidateAll(ctx)
 	if err != nil {
@@ -511,5 +511,94 @@ func TestValidateAll(t *testing.T) {
 	}
 	if len(allWarns) != 2 {
 		t.Errorf("expected warnings for 2 tickets, got %d", len(allWarns))
+	}
+}
+
+func TestValidateFile_ReadyContractRejectsCoordinationTicketInReady(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	tk := &ticket.Ticket{
+		ID:          "TKT-100",
+		Seq:         100,
+		Title:       "[Epic] Coordination only",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		Labels:      []string{"epic"},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Likely paths: docs/north-star.md. This structural ticket should never become runnable. Out of scope: implementation details.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1", Run: "printf ok >/dev/null"},
+			{Description: "A2", VerificationSteps: []string{"Inspect queue status"}},
+		},
+	}
+	if err := s.CreateTicket(ctx, tk); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	errs, _, err := s.ValidateFile("TKT-100")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	found := false
+	for _, issue := range errs {
+		if issue.Field == "state" && strings.Contains(issue.Message, "coordination tickets") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ready-contract coordination error, got %v", errs)
+	}
+}
+
+func TestValidateFile_ReadyContractRequiresVerificationAndSections(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	tk := &ticket.Ticket{
+		ID:          "TKT-101",
+		Seq:         101,
+		Title:       "Runnable but underspecified",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "This ticket lacks the sections required for runnable work even though it is marked ready for execution by the runtime.",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "A1"},
+			{Description: "A2"},
+		},
+	}
+	if err := s.CreateTicket(ctx, tk); err != nil {
+		t.Fatalf("CreateTicket failed: %v", err)
+	}
+
+	errs, _, err := s.ValidateFile("TKT-101")
+	if err != nil {
+		t.Fatalf("ValidateFile failed: %v", err)
+	}
+	joined := []string{}
+	for _, issue := range errs {
+		joined = append(joined, issue.Message)
+	}
+	msg := strings.Join(joined, "\n")
+	for _, want := range []string{"Likely paths", "Out of scope", "run` or `verification_steps"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("expected ready-contract error containing %q, got %s", want, msg)
+		}
 	}
 }

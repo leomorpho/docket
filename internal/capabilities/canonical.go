@@ -16,7 +16,6 @@ func CanonicalContractV1() Contract {
 				{Name: "run.start", Mode: HookModeEnforcement},
 				{Name: "ticket.review", Mode: HookModeEnforcement},
 				{Name: "ticket.qa", Mode: HookModeAdvisory},
-				{Name: "ticket.privileged", Mode: HookModeEnforcement},
 			},
 		},
 		Skills: SkillInventory{
@@ -60,10 +59,10 @@ func CanonicalContractV1() Contract {
 				{
 					Name:     "wrap-up-readiness",
 					Title:    "End-of-Session Wrap-Up",
-					Summary:  "Run wrap-up readiness checks for AC completion, handoff quality, blockers, and review transition readiness.",
-					Intent:   "review",
+					Summary:  "Run wrap-up readiness checks for AC completion, handoff quality, blockers, and the next step toward validated/completed closeout.",
+					Intent:   "closeout",
 					Command:  "docket wrap-up {ticket_id}",
-					Triggers: []string{"session_end", "pre_review", "handoff"},
+					Triggers: []string{"session_end", "pre_closeout", "handoff"},
 					Optional: true,
 				},
 			},

@@ -30,7 +30,7 @@ func readyHandoffFixture() string {
 
 func TestSmartCommit_GeneratesMessageAndTrailerWhenReady(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-971", 971, ticket.State("in-progress"), []ticket.AcceptanceCriterion{{Description: "ac", Done: true}})
+	h.seedTicket("TKT-971", 971, ticket.State("running"), []ticket.AcceptanceCriterion{{Description: "ac", Done: true, Evidence: "verified"}, {Description: "second ac", Done: true, Evidence: "verified"}})
 
 	s := local.New(h.repo)
 	tkt, err := s.GetTicket(context.Background(), "TKT-971")
@@ -60,7 +60,7 @@ func TestSmartCommit_GeneratesMessageAndTrailerWhenReady(t *testing.T) {
 
 func TestSmartCommit_ValidateEnforcesTicketTrailer(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-972", 972, ticket.State("in-progress"), []ticket.AcceptanceCriterion{{Description: "ac", Done: true}})
+	h.seedTicket("TKT-972", 972, ticket.State("running"), []ticket.AcceptanceCriterion{{Description: "ac", Done: true, Evidence: "verified"}, {Description: "second ac", Done: true, Evidence: "verified"}})
 
 	s := local.New(h.repo)
 	tkt, err := s.GetTicket(context.Background(), "TKT-972")
@@ -96,7 +96,7 @@ func TestSmartCommit_ValidateEnforcesTicketTrailer(t *testing.T) {
 
 func TestSmartCommit_FailsWhenTicketNotReady(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-973", 973, ticket.State("in-progress"), []ticket.AcceptanceCriterion{{Description: "ac", Done: false}})
+	h.seedTicket("TKT-973", 973, ticket.State("running"), []ticket.AcceptanceCriterion{{Description: "ac", Done: false}, {Description: "second ac", Done: false}})
 
 	out, err := h.run("smart-commit", "TKT-973")
 	if err == nil {

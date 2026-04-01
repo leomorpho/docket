@@ -27,13 +27,16 @@ func TestTicketsReleaseStaleClaimForStartableTicket(t *testing.T) {
 		ID:          "TKT-101",
 		Seq:         101,
 		Title:       "Runnable",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "desc",
-		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		Description: "Implement the runnable workable ticket with enough execution context to satisfy the ready contract during stale-claim coverage.\n\nLikely paths:\n- internal/workable/workable.go\n- internal/workable/workable_test.go\n\nOut of scope:\n- unrelated queue migration work\n\nVerify commands:\n- go test ./internal/workable",
+		AC: []ticket.AcceptanceCriterion{
+			{Description: "stale claims release correctly", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm the stale-claim test passes."}},
+			{Description: "ready selection still returns the ticket", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm runnable selection still includes the ticket."}},
+		},
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
@@ -57,6 +60,37 @@ func TestTicketsReleaseStaleClaimForStartableTicket(t *testing.T) {
 	}
 }
 
+func TestTicketsSkipUngroomedStartableLeaf(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-111",
+		Seq:         111,
+		Title:       "Ungroomed ready ticket",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Short description without runnable sections.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "Only one AC"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	got, err := Tickets(context.Background(), s, ticket.DefaultConfig(), store.Filter{})
+	if err != nil {
+		t.Fatalf("Tickets() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected ungroomed ready ticket to be skipped, got %#v", got)
+	}
+}
+
 func TestDiagnoseEmptySummarizesBlockedBacklog(t *testing.T) {
 	repoRoot := t.TempDir()
 	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
@@ -69,39 +103,48 @@ func TestDiagnoseEmptySummarizesBlockedBacklog(t *testing.T) {
 			ID:          "TKT-101",
 			Seq:         101,
 			Title:       "Blocker one",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: "Implement blocker coverage for workable diagnosis with enough execution context to satisfy the ready contract while the blocker itself stays active.\n\nLikely paths:\n- internal/workable/diagnosis.go\n- internal/workable/workable_test.go\n\nOut of scope:\n- unrelated scheduler work\n\nVerify commands:\n- go test ./internal/workable",
+			AC: []ticket.AcceptanceCriterion{
+				{Description: "active blocker remains addressable", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm diagnosis tests still pass."}},
+				{Description: "blocker relationships remain visible", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm blocker summaries still render."}},
+			},
 		},
 		{
 			ID:          "TKT-102",
 			Seq:         102,
 			Title:       "Blocked child one",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-101"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: "Implement blocked child diagnosis coverage with explicit execution context so the ready contract remains satisfied.\n\nLikely paths:\n- internal/workable/diagnosis.go\n- internal/workable/workable_test.go\n\nOut of scope:\n- unrelated ticket taxonomy changes\n\nVerify commands:\n- go test ./internal/workable",
+			AC: []ticket.AcceptanceCriterion{
+				{Description: "blocked child remains counted", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm blocked child diagnosis still passes."}},
+				{Description: "top blockers remain visible", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm blocker counts still render."}},
+			},
 		},
 		{
 			ID:          "TKT-103",
 			Seq:         103,
 			Title:       "Blocked child two",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    3,
 			BlockedBy:   []string{"TKT-101"},
 			CreatedAt:   now.Add(2 * time.Minute),
 			UpdatedAt:   now.Add(2 * time.Minute),
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: "Implement second blocked child diagnosis coverage with explicit execution context so the ready contract remains satisfied.\n\nLikely paths:\n- internal/workable/diagnosis.go\n- internal/workable/workable_test.go\n\nOut of scope:\n- unrelated ticket taxonomy changes\n\nVerify commands:\n- go test ./internal/workable",
+			AC: []ticket.AcceptanceCriterion{
+				{Description: "second blocked child remains counted", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm blocked child diagnosis still passes."}},
+				{Description: "shared blocker remains top-ranked", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm blocker aggregation still renders."}},
+			},
 		},
 	} {
 		if err := s.CreateTicket(context.Background(), tk); err != nil {
@@ -122,6 +165,45 @@ func TestDiagnoseEmptySummarizesBlockedBacklog(t *testing.T) {
 	}
 	if !strings.Contains(summary, "Top unresolved blockers: TKT-101 x2") {
 		t.Fatalf("expected top blocker in summary, got %q", summary)
+	}
+}
+
+func TestDiagnoseEmptyReportsUngroomedReadyTickets(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := ticket.DefaultConfig()
+	if err := ticket.SaveConfig(repoRoot, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	s := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-121",
+		Seq:         121,
+		Title:       "Ungroomed ready ticket",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Short description without runnable sections.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "Only one AC"}},
+	}); err != nil {
+		t.Fatalf("create ticket: %v", err)
+	}
+
+	got, err := DiagnoseEmpty(context.Background(), s, cfg)
+	if err != nil {
+		t.Fatalf("DiagnoseEmpty() error = %v", err)
+	}
+	if got.UngroomedTickets != 1 {
+		t.Fatalf("expected one ungroomed ready ticket, got %#v", got)
+	}
+	summary := got.Summary()
+	if !strings.Contains(summary, "ready contract is incomplete") {
+		t.Fatalf("expected ready-contract summary, got %q", summary)
+	}
+	if !strings.Contains(summary, "Groom ready tickets") {
+		t.Fatalf("expected grooming guidance in summary, got %q", summary)
 	}
 }
 

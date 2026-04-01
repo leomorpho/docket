@@ -13,7 +13,7 @@ import (
 	ck "github.com/leomorpho/docket/internal/check"
 	docketgit "github.com/leomorpho/docket/internal/git"
 	"github.com/leomorpho/docket/internal/hooks"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
@@ -32,8 +32,6 @@ var (
 	updateCascade             bool
 	updateDesc                string
 	updateHandoff             string
-	updatePrivTicket          string
-	updatePrivYes             bool
 	updateAllowEmptyStartable bool
 )
 
@@ -139,7 +137,6 @@ var updateCmd = &cobra.Command{
 			isActiveTarget := cfg.StateHasRole(nextState, "active")
 			isReviewTarget := cfg.StateHasRole(nextState, "review")
 			isCompletedTarget := cfg.StateHasRole(nextState, "completed")
-			isArchivedTarget := cfg.StateHasRole(nextState, "archived")
 			if isReviewTarget || isCompletedTarget {
 				if err := enforceManagedRunCommitLinkage(t.ID, newState, cfg); err != nil {
 					return err
@@ -154,15 +151,6 @@ var updateCmd = &cobra.Command{
 					return err
 				}
 				transitionChecks = append(transitionChecks, "structured_ac_closure_gate")
-			}
-			if isCompletedTarget || isArchivedTarget {
-				if err := requirePrivilegedSurface(cmd, updatePrivTicket, "state transition "+t.ID+" -> "+string(newState), updatePrivYes); err != nil {
-					return err
-				}
-				if err := runPrivilegedHooks(cmd, t.ID, string(newState), cfg); err != nil {
-					return err
-				}
-				transitionChecks = append(transitionChecks, "privileged_surface_authorized")
 			}
 			if err := ticket.ValidateTransition(cfg, t.State, newState); err != nil {
 				return err
@@ -184,13 +172,13 @@ var updateCmd = &cobra.Command{
 				}
 				// Reload ticket after StartTask
 				t, _ = s.GetTicket(ctx, t.ID)
-			} else if isReviewTarget {
+			} else if isCompletedTarget {
 				_, err := deps.workflow.FinishTask(ctx, t.ID, cfg)
 				if err != nil {
 					return fmt.Errorf("finishing task: %w", err)
 				}
 				// Reload ticket after FinishTask from the shared repo root because
-				// managed review transitions may merge back and prune the bound worktree.
+				// managed completion transitions may merge back and prune the bound worktree.
 				repoRoot, rootErr := deps.vcs.GetRepoRoot(ctx)
 				if rootErr != nil {
 					return fmt.Errorf("resolving repo root after finish: %w", rootErr)
@@ -341,6 +329,9 @@ var updateCmd = &cobra.Command{
 		if err := enforceLeafExecutionBlockers(ctx, s, t.BlockedBy); err != nil {
 			return err
 		}
+		if err := enforceRunnableTicketContract(ctx, s, cfg, t); err != nil {
+			return err
+		}
 
 		t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 
@@ -370,13 +361,6 @@ var updateCmd = &cobra.Command{
 		if cmd.Flags().Changed("parent") && t.Parent != "" {
 			if depth, err := s.ParentDepth(ctx, t.ID); err == nil && depth > 3 {
 				fmt.Fprintf(cmd.OutOrStdout(), "Warning: %s depth is %d (>3)\n", t.ID, depth)
-			}
-		}
-		if !cmd.Flags().Changed("state") {
-			updatedTicket, transitioned := maybeAutoTransitionReviewReady(ctx, cmd.OutOrStdout(), s, cfg, t, actor)
-			if transitioned {
-				t = updatedTicket
-				updatedFields = append(updatedFields, "state")
 			}
 		}
 		if err := enforceStartableLeafInvariantDelta(ctx, s, cfg, updateAllowEmptyStartable, beforeWorkableCount); err != nil {
@@ -432,8 +416,6 @@ func resetUpdateGlobals() {
 	updateCascade = false
 	updateDesc = ""
 	updateHandoff = ""
-	updatePrivTicket = ""
-	updatePrivYes = false
 	updateAllowEmptyStartable = false
 }
 
@@ -486,15 +468,9 @@ func init() {
 	updateCmd.Flags().StringVar(&updateParent, "parent", "", "set parent ticket ID (use 'none' to clear)")
 	updateCmd.Flags().BoolVar(&updateCascade, "cascade", false, "cascade state change to open descendants when required")
 	updateCmd.Flags().StringVar(&updateDesc, "desc", "", "new description (use - for stdin)")
-	updateCmd.Flags().StringVar(&updatePrivTicket, "ticket", "", "ticket ID authorizing privileged terminal transitions")
-	updateCmd.Flags().BoolVar(&updatePrivYes, "yes", false, "skip interactive confirmation for privileged terminal transitions")
 	addAllowEmptyStartableLeafFlag(updateCmd, &updateAllowEmptyStartable)
 
 	rootCmd.AddCommand(updateCmd)
-}
-
-func preferredReviewState(cfg *ticket.Config) string {
-	return preferredStateForRole(cfg, "review", "in-review")
 }
 
 func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id string) ([]*ticket.Ticket, error) {
@@ -517,7 +493,7 @@ func openDescendants(ctx context.Context, s *local.Store, cfg *ticket.Config, id
 
 func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *ticket.Config) error {
 	enforce := cfg != nil && cfg.SecurityEnforcement
-	ns := security.NewRepoNamespaceStore(docketHome)
+	ns := runstate.New(runtimeNamespaceRoot(repo))
 	run, ok, err := ns.GetRunManifest(repo, ticketID)
 	if err != nil {
 		if !enforce {
@@ -530,7 +506,7 @@ func enforceManagedRunCommitLinkage(ticketID string, target ticket.State, cfg *t
 		return nil
 	}
 	if err := ns.VerifyRunContext(repo, ticketID, "", "", "", ""); err != nil {
-		if errors.Is(err, security.ErrRunManifestMissing) {
+		if errors.Is(err, runstate.ErrRunManifestMissing) {
 			return nil
 		}
 		if !enforce {
@@ -609,29 +585,6 @@ func isMissingGitRefError(err error) bool {
 		}
 	}
 	return false
-}
-
-func runPrivilegedHooks(cmd *cobra.Command, ticketID, targetState string, cfg *ticket.Config) error {
-	enforce := cfg != nil && cfg.SecurityEnforcement
-	manager := hooks.NewManager()
-	hooks.RegisterCoreHooks(manager)
-	advisory, err := manager.Run(hooks.EventPrivileged, hooks.Context{
-		Repo:                 repo,
-		TicketID:             ticketID,
-		TargetState:          targetState,
-		PrivilegedAuthorized: true,
-	})
-	for _, msg := range advisory {
-		fmt.Fprintf(cmd.OutOrStdout(), "hook advisory: %s\n", msg)
-	}
-	if err != nil {
-		if !enforce {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: privileged hook enforcement disabled (security_enforcement=false): %v\n", err)
-			return nil
-		}
-		return fmt.Errorf("privileged hook failed: %w", err)
-	}
-	return nil
 }
 
 func enforceStructuredACClosureGate(t *ticket.Ticket) error {

@@ -154,6 +154,9 @@ var createCmd = &cobra.Command{
 		if err := enforceCreateConnectivity(ctx, s, t); err != nil {
 			return err
 		}
+		if err := enforceRunnableTicketContract(ctx, s, cfg, t); err != nil {
+			return err
+		}
 		if err := s.CreateTicket(ctx, t); err != nil {
 			return fmt.Errorf("creating ticket: %w", err)
 		}

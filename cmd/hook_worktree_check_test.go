@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
 func TestHookWorktreeCheckRejectsPrimaryCheckoutForTicketCommit(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-910", 910, ticket.State("in-progress"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-910", 910, ticket.State("running"), updateRunnableAC())
 
 	err := runHookWorktreeCheck("TKT-910")
 	if err == nil || !strings.Contains(err.Error(), "primary repo") {
@@ -22,12 +22,12 @@ func TestHookWorktreeCheckRejectsPrimaryCheckoutForTicketCommit(t *testing.T) {
 
 func TestHookWorktreeCheckAcceptsBoundDedicatedWorktree(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-911", 911, ticket.State("in-progress"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-911", 911, ticket.State("running"), updateRunnableAC())
 
 	wtPath := filepath.Join(t.TempDir(), "wt-TKT-911")
 	runGitSession(t, h.repo, "worktree", "add", "-b", "docket/TKT-911-test", wtPath)
 
-	ns := security.NewRepoNamespaceStore(h.home)
+	ns := runstate.New(h.home)
 	if err := ns.RecordRunStart(h.repo, "TKT-911", "human:test", wtPath, "docket/TKT-911-test", ""); err != nil {
 		t.Fatalf("record run manifest failed: %v", err)
 	}

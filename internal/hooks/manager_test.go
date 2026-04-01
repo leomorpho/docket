@@ -41,12 +41,12 @@ func TestEnforcementHookBlocksAtBoundary(t *testing.T) {
 	m := NewManager()
 	RegisterCoreHooks(m)
 
-	_, err := m.Run(EventPrivileged, Context{
-		TicketID:             "TKT-199",
-		TargetState:          "done",
-		PrivilegedAuthorized: false,
+	_, err := m.Run(EventReviewGate, Context{
+		TicketID:    "TKT-199",
+		TargetState: "validated",
+		ManagedRun:  true,
 	})
 	if err == nil {
-		t.Fatalf("expected privileged enforcement failure")
+		t.Fatalf("expected review enforcement failure without worktree context")
 	}
 }

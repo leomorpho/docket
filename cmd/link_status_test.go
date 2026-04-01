@@ -19,8 +19,8 @@ func TestLinkPersistsAndShowDisplaysRelations(t *testing.T) {
 	s := local.New(tmp)
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
-	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-201", Seq: 201, Title: "A", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
-	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-202", Seq: 202, Title: "B", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "B"}}})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-201", Seq: 201, Title: "A", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-202", Seq: 202, Title: "B", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "B"}}})
 
 	rootCmd.SetOut(new(bytes.Buffer))
 	rootCmd.SetArgs([]string{"link", "TKT-201", "TKT-202", "--relation", "blocks"})
@@ -50,8 +50,8 @@ func TestWorktreeStartBlockedByRelationUnlessForce(t *testing.T) {
 	s := local.New(tmp)
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
-	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-301", Seq: 301, Title: "A", State: "in-progress", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
-	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-302", Seq: 302, Title: "B", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "B"}}})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-301", Seq: 301, Title: "A", State: "running", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-302", Seq: 302, Title: "B", State: "ready", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC()})
 	_ = upsertRelation(tmp, relationEntry{From: "TKT-301", To: "TKT-302", Relation: "blocks"})
 
 	rootCmd.SetOut(new(bytes.Buffer))
@@ -68,8 +68,8 @@ func TestStatusParallelMatrixUsesRelationsAndLockOverlap(t *testing.T) {
 	s := local.New(tmp)
 	_ = ticket.SaveConfig(tmp, ticket.DefaultConfig())
 	now := time.Now().UTC().Truncate(time.Second)
-	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-401", Seq: 401, Title: "A", State: "in-progress", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
-	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-402", Seq: 402, Title: "B", State: "in-progress", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "desc", AC: []ticket.AcceptanceCriterion{{Description: "B"}}})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-401", Seq: 401, Title: "A", State: "running", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	_ = s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-402", Seq: 402, Title: "B", State: "running", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC()})
 	_ = upsertLock(tmp, fileLock{TicketID: "TKT-401", WorktreePath: tmp, Files: []string{"same.go"}, UpdatedAt: now.Format(time.RFC3339)})
 	_ = upsertLock(tmp, fileLock{TicketID: "TKT-402", WorktreePath: tmp, Files: []string{"same.go"}, UpdatedAt: now.Format(time.RFC3339)})
 

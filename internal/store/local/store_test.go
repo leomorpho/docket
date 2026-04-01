@@ -544,19 +544,19 @@ func TestUpdateTransitions(t *testing.T) {
 	s := New(tmpDir)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
-	tkt := &ticket.Ticket{ID: "TKT-001", Title: "T1", State: "todo", CreatedAt: now, UpdatedAt: now, CreatedBy: "me"}
+	tkt := &ticket.Ticket{ID: "TKT-001", Title: "T1", State: "ready", CreatedAt: now, UpdatedAt: now, CreatedBy: "me"}
 	s.CreateTicket(ctx, tkt)
 
-	// 1. Transition to in-progress
-	tkt.State = "in-progress"
+	// 1. Transition to running
+	tkt.State = "running"
 	s.UpdateTicket(ctx, tkt)
 	res, _ := s.GetTicket(ctx, "TKT-001")
 	if res.StartedAt.IsZero() {
 		t.Error("expected StartedAt to be set")
 	}
 
-	// 2. Transition to done
-	tkt.State = "done"
+	// 2. Transition to validated
+	tkt.State = "validated"
 	s.UpdateTicket(ctx, tkt)
 	res, _ = s.GetTicket(ctx, "TKT-001")
 	if res.CompletedAt.IsZero() {

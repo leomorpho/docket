@@ -79,9 +79,10 @@ func (s *Store) syncIndexOnce(ctx context.Context) error {
 	entries, err := os.ReadDir(ticketsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			entries = nil
+		} else {
+			return err
 		}
-		return err
 	}
 
 	type ticketRow struct {

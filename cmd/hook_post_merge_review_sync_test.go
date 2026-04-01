@@ -14,7 +14,7 @@ import (
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
-func TestHookPostMergeReviewSync_TransitionsMergedTicketToReview(t *testing.T) {
+func TestHookPostMergeReviewSync_DoesNotMutateMergedTicketState(t *testing.T) {
 	repoRoot := t.TempDir()
 	initGitRepoForHookSync(t, repoRoot)
 	writeAndCommitFile(t, repoRoot, "seed.txt", "seed\n", "chore: seed")
@@ -33,13 +33,14 @@ func TestHookPostMergeReviewSync_TransitionsMergedTicketToReview(t *testing.T) {
 		ID:          "TKT-401",
 		Seq:         401,
 		Title:       "Merged leaf",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "test",
-		Description: "desc",
-		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("running", "none"),
 	}); err != nil {
 		t.Fatalf("create ticket failed: %v", err)
 	}
@@ -52,11 +53,11 @@ func TestHookPostMergeReviewSync_TransitionsMergedTicketToReview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload ticket failed: %v", err)
 	}
-	if got == nil || got.State != ticket.State("in-review") {
-		t.Fatalf("expected TKT-401 in-review after merge sync, got %#v", got)
+	if got == nil || got.State != ticket.State("running") {
+		t.Fatalf("expected TKT-401 unchanged after merge sync, got %#v", got)
 	}
-	if !strings.Contains(stderr.String(), "auto-transitioned TKT-401") {
-		t.Fatalf("expected transition log, got: %s", stderr.String())
+	if !strings.Contains(stderr.String(), "post-merge review sync is disabled for TKT-401") {
+		t.Fatalf("expected legacy no-op log, got: %s", stderr.String())
 	}
 }
 
@@ -74,13 +75,13 @@ func TestHookPostMergeReviewSync_NoOpWhenHeadIsNotMergeCommit(t *testing.T) {
 		ID:          "TKT-402",
 		Seq:         402,
 		Title:       "No merge",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "test",
-		Description: "desc",
-		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create ticket failed: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestHookPostMergeReviewSync_NoOpWhenHeadIsNotMergeCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload ticket failed: %v", err)
 	}
-	if got == nil || got.State != ticket.State("in-progress") {
+	if got == nil || got.State != ticket.State("running") {
 		t.Fatalf("expected TKT-402 unchanged, got %#v", got)
 	}
 	if stderr.Len() != 0 {

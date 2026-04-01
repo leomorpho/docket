@@ -26,10 +26,10 @@ func TestListCmd(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Workable Ticket", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Title: "Epic Ticket", State: ticket.State("todo"), Priority: 2, Labels: []string{"epic"}, CreatedAt: now.Add(2 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-005", Title: "Program: Wrapper", State: ticket.State("todo"), Priority: 1, Labels: []string{"program", "topo:coordination"}, CreatedAt: now.Add(3 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Done Ticket", State: ticket.State("done"), Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Title: "Workable Ticket", State: ticket.State("ready"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Title: "Epic Ticket", State: ticket.State("draft"), Priority: 2, Labels: []string{"epic"}, CreatedAt: now.Add(2 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-005", Title: "Program: Wrapper", State: ticket.State("draft"), Priority: 1, Labels: []string{"program", "topo:coordination"}, CreatedAt: now.Add(3 * time.Hour), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Title: "Validated Ticket", State: ticket.State("validated"), Priority: 1, CreatedAt: now.Add(time.Hour), UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateCompletedAC(), Handoff: updateStructuredHandoff("validated", "none")})
 	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Title: "Archived Ticket", State: ticket.State("archived"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{}}})
 
 	// 1. Default list shows workable tickets only.
@@ -55,10 +55,10 @@ func TestListCmd(t *testing.T) {
 
 	// 2. Explicit state filters bypass workable compaction.
 	b.Reset()
-	rootCmd.SetArgs([]string{"list", "--state", "done"})
-	listState = "done"
+	rootCmd.SetArgs([]string{"list", "--state", "validated"})
+	listState = "validated"
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("list done failed: %v", err)
+		t.Fatalf("list validated failed: %v", err)
 	}
 	if !strings.Contains(b.String(), "TKT-002") {
 		t.Errorf("expected TKT-002 in done list, got:\n%s", b.String())
@@ -72,7 +72,7 @@ func TestListCmd(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("list context failed: %v", err)
 	}
-	if !strings.Contains(b.String(), "[TKT-001] P1 todo") {
+	if !strings.Contains(b.String(), "[TKT-001] P1 ready") {
 		t.Errorf("expected compact context line, got:\n%s", b.String())
 	}
 
@@ -108,8 +108,8 @@ func TestListCmd_GlobalSkillHintShownForHumanButNotJSON(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Hint fixture", State: ticket.State("todo"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-001", Seq: 1, Title: "Hint fixture", State: ticket.State("ready"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create ticket failed: %v", err)
 	}
@@ -183,26 +183,26 @@ func TestListCmd_EmptyWorkableViewExplainsBlockedBacklog(t *testing.T) {
 			ID:          "TKT-001",
 			Seq:         1,
 			Title:       "Blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "me",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "x"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-002",
 			Seq:         2,
 			Title:       "Blocked backlog",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-001"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "me",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "x"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 	} {
 		if err := s.CreateTicket(ctx, tk); err != nil {
@@ -232,9 +232,6 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	listFull = false
 
 	cfg := ticket.DefaultConfig()
-	review := cfg.States["in-review"]
-	review.BlocksDependents = false
-	cfg.States["in-review"] = review
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("save config failed: %v", err)
 	}
@@ -243,14 +240,14 @@ func TestListCmd_ContextHonorsConfigForReviewBlockers(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Reviewed blocker", State: ticket.State("in-review"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-001", Seq: 1, Title: "Reviewed blocker", State: ticket.State("validated"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateCompletedAC(), Handoff: updateStructuredHandoff("validated", "none"),
 	}); err != nil {
 		t.Fatalf("create blocker failed: %v", err)
 	}
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "Dependent", State: ticket.State("todo"), Priority: 2, BlockedBy: []string{"TKT-001"},
-		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-002", Seq: 2, Title: "Dependent", State: ticket.State("ready"), Priority: 2, BlockedBy: []string{"TKT-001"},
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create dependent failed: %v", err)
 	}
@@ -304,8 +301,8 @@ func TestListCmd_WorkspaceAggregatesTicketsAcrossRepos(t *testing.T) {
 		}
 		s := local.New(item.repoPath)
 		if err := s.CreateTicket(ctx, &ticket.Ticket{
-			ID: item.id, Seq: 1, Title: item.title, State: ticket.State("todo"), Priority: 1,
-			CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+			ID: item.id, Seq: 1, Title: item.title, State: ticket.State("ready"), Priority: 1,
+			CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 		}); err != nil {
 			t.Fatalf("create ticket failed for %s: %v", item.repoPath, err)
 		}
@@ -341,8 +338,8 @@ func TestListCmd_UsesSharedRepoRootWhenInvokedFromWorktree(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Canonical ticket", State: ticket.State("todo"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-001", Seq: 1, Title: "Canonical ticket", State: ticket.State("ready"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
 	}
@@ -357,7 +354,7 @@ func TestListCmd_UsesSharedRepoRootWhenInvokedFromWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read worktree ticket: %v", err)
 	}
-	stale := strings.Replace(string(raw), "state: todo", "state: in-progress", 1)
+	stale := strings.Replace(string(raw), "state: ready", "state: running", 1)
 	if stale == string(raw) {
 		t.Fatal("expected worktree ticket state line to be rewritten")
 	}
@@ -375,10 +372,10 @@ func TestListCmd_UsesSharedRepoRootWhenInvokedFromWorktree(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("list from worktree failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "[TKT-001] P1 todo") {
+	if !strings.Contains(out.String(), "[TKT-001] P1 ready") {
 		t.Fatalf("expected list to read canonical root state, got:\n%s", out.String())
 	}
-	if strings.Contains(out.String(), "[TKT-001] P1 in-progress") {
+	if strings.Contains(out.String(), "[TKT-001] P1 running") {
 		t.Fatalf("expected stale worktree state to be ignored, got:\n%s", out.String())
 	}
 }
@@ -433,14 +430,14 @@ func prepareFullHierarchyTickets(t *testing.T, repoDir string) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Epic", State: ticket.State("todo"), Priority: 1, Labels: []string{"epic"},
+		ID: "TKT-001", Seq: 1, Title: "Epic", State: ticket.State("draft"), Priority: 1, Labels: []string{"epic"},
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("create epic failed: %v", err)
 	}
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "Child", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2,
-		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-002", Seq: 2, Title: "Child", Parent: "TKT-001", State: ticket.State("ready"), Priority: 2,
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create child failed: %v", err)
 	}
@@ -459,26 +456,26 @@ func TestListCmd_DefaultHidesBlockedBranch(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-099", Seq: 99, Title: "Active blocker", State: ticket.State("in-progress"), Priority: 1,
-		CreatedAt: now.Add(-time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-099", Seq: 99, Title: "Active blocker", State: ticket.State("running"), Priority: 1,
+		CreatedAt: now.Add(-time.Minute), UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create blocker failed: %v", err)
 	}
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Blocked epic", State: ticket.State("todo"), Priority: 1, Labels: []string{"epic"}, BlockedBy: []string{"TKT-099"},
+		ID: "TKT-001", Seq: 1, Title: "Blocked epic", State: ticket.State("draft"), Priority: 1, Labels: []string{"epic"}, BlockedBy: []string{"TKT-099"},
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("create epic failed: %v", err)
 	}
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "Blocked child", Parent: "TKT-001", State: ticket.State("todo"), Priority: 2, BlockedBy: []string{"TKT-099"},
-		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-002", Seq: 2, Title: "Blocked child", Parent: "TKT-001", State: ticket.State("ready"), Priority: 2, BlockedBy: []string{"TKT-099"},
+		CreatedAt: now.Add(time.Minute), UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create child failed: %v", err)
 	}
 	if err := s.CreateTicket(ctx, &ticket.Ticket{
-		ID: "TKT-003", Seq: 3, Title: "Ready", State: ticket.State("todo"), Priority: 3,
-		CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now, CreatedBy: "me", Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-003", Seq: 3, Title: "Ready", State: ticket.State("ready"), Priority: 3,
+		CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now, CreatedBy: "me", Description: updateRunnableDescription(), AC: updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("create ready ticket failed: %v", err)
 	}

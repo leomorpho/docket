@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/leomorpho/docket/internal/learning"
+	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
@@ -53,8 +55,40 @@ func TestBuildLearnReplayNoDataBehavior(t *testing.T) {
 
 func TestStartOutputIncludesTop3LearnRulesAndSnapshots(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-960", 960, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
-	h.seedTicket("TKT-961", 961, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "parser reliability and testing coverage"}})
+	s := local.New(h.repo)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, tk := range []*ticket.Ticket{
+		{
+			ID:          "TKT-960",
+			Seq:         960,
+			Title:       "Improve parser reliability during start replay",
+			State:       ticket.State("ready"),
+			Priority:    1,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			CreatedBy:   "agent:harness-agent",
+			Labels:      []string{"parser", "reliability"},
+			Description: "Improve parser reliability for start replay with enough execution context to satisfy the ready contract.\n\nLikely paths:\n- cmd/start_learning.go\n- cmd/start_learning_test.go\n\nOut of scope:\n- unrelated UI work\n\nVerify commands:\n- go test ./cmd -run TestStartOutputIncludesTop3LearnRulesAndSnapshots",
+			AC:          updateRunnableAC(),
+		},
+		{
+			ID:          "TKT-961",
+			Seq:         961,
+			Title:       "Parser testing coverage follow-up",
+			State:       ticket.State("ready"),
+			Priority:    2,
+			CreatedAt:   now.Add(time.Second),
+			UpdatedAt:   now.Add(time.Second),
+			CreatedBy:   "agent:harness-agent",
+			Labels:      []string{"parser", "testing"},
+			Description: "Improve parser testing coverage for start replay with enough execution context to satisfy the ready contract.\n\nLikely paths:\n- cmd/start_learning.go\n- cmd/start_learning_test.go\n\nOut of scope:\n- unrelated UI work\n\nVerify commands:\n- go test ./cmd -run TestStartOutputIncludesTop3LearnRulesAndSnapshots",
+			AC:          updateRunnableAC(),
+		},
+	} {
+		if err := s.CreateTicket(context.Background(), tk); err != nil {
+			t.Fatalf("seed ticket %s failed: %v", tk.ID, err)
+		}
+	}
 
 	beforeOut, err := h.run("start", "--format", "json")
 	if err != nil {
@@ -69,13 +103,21 @@ func TestStartOutputIncludesTop3LearnRulesAndSnapshots(t *testing.T) {
 	}
 
 	store := learning.NewStore(h.repo, fixedLearnClock(time.Date(2026, 3, 16, 17, 10, 0, 0, time.UTC)))
-	if _, err := store.IngestText("session:TKT-961", `
+	if _, err := store.IngestText("session:TKT-960", `
 LEARN[parser]: preserve nested markdown headings.
 LEARN[reliability]: retry sqlite busy write paths.
 LEARN[testing]: deterministic integration fixtures for parser.
 LEARN[ui]: use denser sidebar spacing.
 `); err != nil {
 		t.Fatalf("seed learn store failed: %v", err)
+	}
+	if _, err := store.IngestText("session:TKT-961", `
+LEARN[parser]: preserve nested markdown headings.
+LEARN[reliability]: retry sqlite busy write paths.
+LEARN[testing]: deterministic integration fixtures for parser.
+LEARN[ui]: use denser sidebar spacing.
+`); err != nil {
+		t.Fatalf("seed secondary learn store failed: %v", err)
 	}
 
 	afterOut, err := h.run("start", "--format", "json")

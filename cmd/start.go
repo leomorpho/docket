@@ -12,7 +12,7 @@ import (
 	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/hooks"
 	"github.com/leomorpho/docket/internal/lifecycle"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -44,20 +44,13 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		if err != nil {
 			return err
 		}
-		securityMode, securityNote := securityEnforcementSurfaceFromConfig(cfg)
 		if startRun || startAuto {
 			return runStartManaged(cmd, ctx, s, cfg)
 		}
-		ns := security.NewRepoNamespaceStore(docketHome)
-		activeWorkflowHash, active, err := ns.GetActiveWorkflowHash(repo)
+		ns := runstate.New(runtimeNamespaceRoot(repo))
+		activeWorkflowHash, _, err := ns.GetActiveWorkflowHash(repo)
 		if err != nil {
 			return fmt.Errorf("checking active workflow policy: %w", err)
-		}
-		runtimePolicyMode := "unsecured"
-		runtimePolicyMessage := "No active workflow.lock is approved; privileged and terminal transitions remain blocked."
-		if active {
-			runtimePolicyMode = "approved-lock"
-			runtimePolicyMessage = fmt.Sprintf("Using approved workflow.lock %s.", activeWorkflowHash)
 		}
 
 		// 1. Select the next ticket
@@ -104,26 +97,22 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 			agentQuickstart := buildStartAgentQuickstart(repo, "", "")
 			if format == "json" {
 				printJSON(cmd, map[string]interface{}{
-					"ticket":                    nil,
-					"no_workable_ticket":        true,
-					"message":                   message,
-					"runtime_policy_mode":       runtimePolicyMode,
-					"runtime_policy_note":       runtimePolicyMessage,
-					"security_enforcement_mode": securityMode,
-					"security_enforcement_note": securityNote,
-					"active_workflow_hash":      activeWorkflowHash,
-					"capability_digest":         capabilityDigest,
-					"llm_quick_path":            quickPath,
-					"agent_quickstart":          agentQuickstart,
-					"queue_heal":                autoHealResult,
-					"resume_mode":               resumeMode,
+					"ticket":               nil,
+					"no_workable_ticket":   true,
+					"message":              message,
+					"active_workflow_hash": activeWorkflowHash,
+					"capability_digest":    capabilityDigest,
+					"llm_quick_path":       quickPath,
+					"agent_quickstart":     agentQuickstart,
+					"queue_heal":           autoHealResult,
+					"resume_mode":          resumeMode,
 				})
 				return nil
 			}
 			if autoHealResult != nil {
 				fmt.Fprintf(cmd.OutOrStdout(), "Auto-heal: %s\n", autoHealResult.Summary)
 			}
-			renderStartNoTicketIntro(cmd, message, runtimePolicyMode, runtimePolicyMessage, capabilityDigest, quickPath, agentQuickstart)
+			renderStartNoTicketIntro(cmd, message, capabilityDigest, quickPath, agentQuickstart)
 			return nil
 		}
 
@@ -229,23 +218,19 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		// 3. Provide the Agent Prompt
 		if format == "json" {
 			payload := map[string]interface{}{
-				"ticket":                    t,
-				"model_tier":                decision.SelectedTier,
-				"model_id":                  model.ID,
-				"routing_rationale":         decision.Rationale,
-				"runtime_policy_mode":       runtimePolicyMode,
-				"runtime_policy_note":       runtimePolicyMessage,
-				"security_enforcement_mode": securityMode,
-				"security_enforcement_note": securityNote,
-				"active_workflow_hash":      activeWorkflowHash,
-				"managed_run_branch":        managedBranch,
-				"managed_run_worktree":      worktreePath,
-				"agent_instruction":         instruction,
-				"capability_digest":         capabilityDigest,
-				"learn_replay":              learnReplay,
-				"llm_quick_path":            quickPath,
-				"agent_quickstart":          agentQuickstart,
-				"resume_mode":               resumeMode,
+				"ticket":               t,
+				"model_tier":           decision.SelectedTier,
+				"model_id":             model.ID,
+				"routing_rationale":    decision.Rationale,
+				"active_workflow_hash": activeWorkflowHash,
+				"managed_run_branch":   managedBranch,
+				"managed_run_worktree": worktreePath,
+				"agent_instruction":    instruction,
+				"capability_digest":    capabilityDigest,
+				"learn_replay":         learnReplay,
+				"llm_quick_path":       quickPath,
+				"agent_quickstart":     agentQuickstart,
+				"resume_mode":          resumeMode,
 			}
 			if autoHealResult != nil {
 				payload["queue_heal"] = autoHealResult
@@ -262,10 +247,6 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 		fmt.Fprintf(cmd.OutOrStdout(), "Title: %s\n", t.Title)
 		fmt.Fprintf(cmd.OutOrStdout(), "Description: %s\n", t.Description)
 		fmt.Fprintf(cmd.OutOrStdout(), "Model tier: %s (%s)\n", decision.SelectedTier, model.ID)
-		fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
-		fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
-		fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
-		fmt.Fprintf(cmd.OutOrStdout(), "Enforcement note: %s\n", securityNote)
 		fmt.Fprintf(cmd.OutOrStdout(), "Managed run binding: branch=%s | worktree=%s\n", managedBranch, worktreePath)
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartAgentQuickstartHuman(agentQuickstart))
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
@@ -377,12 +358,10 @@ func runStartManaged(cmd *cobra.Command, ctx context.Context, s *local.Store, cf
 	return renderTicketRunSummary(cmd, summary)
 }
 
-func renderStartNoTicketIntro(cmd *cobra.Command, message, runtimePolicyMode, runtimePolicyMessage string, capabilityDigest startCapabilityDigest, quickPath llmQuickPath, agentQuickstart startAgentQuickstart) {
+func renderStartNoTicketIntro(cmd *cobra.Command, message string, capabilityDigest startCapabilityDigest, quickPath llmQuickPath, agentQuickstart startAgentQuickstart) {
 	fmt.Fprintln(cmd.OutOrStdout(), message)
 	fmt.Fprintf(cmd.OutOrStdout(), "\n=== Docket Intro ===\n")
 	fmt.Fprintf(cmd.OutOrStdout(), "Docket is ready even without an active ticket.\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "Runtime policy: %s\n", runtimePolicyMode)
-	fmt.Fprintf(cmd.OutOrStdout(), "Policy note: %s\n", runtimePolicyMessage)
 	fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartAgentQuickstartHuman(agentQuickstart))
 	fmt.Fprintf(cmd.OutOrStdout(), "%s\n", renderStartCapabilityDigestHuman(capabilityDigest))
 	fmt.Fprintf(
@@ -612,7 +591,8 @@ func init() {
 	startCmd.Flags().BoolVar(&startAuto, "auto", false, "automatically continue to the next ticket after completion; implies --run")
 	startCmd.Flags().BoolVar(&startRun, "run", false, "run the next workable ticket through the Codex flow instead of printing a prompt")
 	startCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
-	startCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
+	startCmd.Flags().BoolVar(&runEnableReview, "review", false, "run the optional reviewer pass and capped fix loop after implementer validation")
+	startCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "compatibility alias; reviewer pass is disabled by default")
 	startCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode (exec or session)")
 	startCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	rootCmd.AddCommand(startCmd)

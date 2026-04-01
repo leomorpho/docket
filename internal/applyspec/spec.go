@@ -28,15 +28,6 @@ const (
 var (
 	ticketIDPattern = regexp.MustCompile(`^TKT-\d+$`)
 	refPattern      = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]*$`)
-
-	defaultAllowedStates = map[string]struct{}{
-		"backlog":     {},
-		"todo":        {},
-		"in-progress": {},
-		"in-review":   {},
-		"done":        {},
-		"archived":    {},
-	}
 )
 
 // Versioning defines supported schema versions and upgrade policy.
@@ -330,7 +321,7 @@ func parseTicketObject(obj map[string]any, path string, allowRefs bool, allowedS
 	if val, ok := readOptionalString(obj, "state", path+".state", v); ok {
 		present.State = true
 		out.State = val
-		if val != "" {
+		if val != "" && len(allowedStates) > 0 {
 			if !containsString(allowedStates, val) {
 				v.add(path+".state", CodeInvalidValue, fmt.Sprintf("must be one of %s", strings.Join(allowedStates, ",")))
 			}
@@ -586,7 +577,7 @@ type validator struct {
 
 func allowedStateNames(allowedStates map[string]struct{}) []string {
 	if len(allowedStates) == 0 {
-		allowedStates = defaultAllowedStates
+		return nil
 	}
 	names := make([]string, 0, len(allowedStates))
 	for state := range allowedStates {

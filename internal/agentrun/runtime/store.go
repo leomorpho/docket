@@ -73,6 +73,21 @@ type CycleCompletedRun struct {
 	Length   string `json:"length,omitempty"`
 }
 
+type RunBrief struct {
+	TicketID          string   `json:"ticket_id"`
+	Outcome           string   `json:"outcome"`
+	Summary           string   `json:"summary,omitempty"`
+	SessionID         string   `json:"session_id,omitempty"`
+	CommitSHA         string   `json:"commit_sha,omitempty"`
+	CloseoutCommitSHA string   `json:"closeout_commit_sha,omitempty"`
+	Tests             string   `json:"tests,omitempty"`
+	FilesTouched      []string `json:"files_touched,omitempty"`
+	Decisions         []string `json:"decisions,omitempty"`
+	ValidationErrors  []string `json:"validation_errors,omitempty"`
+	ResumeNext        string   `json:"resume_next,omitempty"`
+	UpdatedAt         string   `json:"updated_at,omitempty"`
+}
+
 type Store struct {
 	repoRoot string
 }
@@ -89,8 +104,16 @@ func (s *Store) RuntimeRootDir() string {
 	return filepath.Dir(s.RunsRootDir())
 }
 
+func (s *Store) BriefsRootDir() string {
+	return filepath.Join(s.RuntimeRootDir(), "briefs")
+}
+
 func (s *Store) RunDir(ticketID string) string {
 	return artifacts.WriteRepoPath(s.repoRoot, artifacts.RepoAgentRunsDir, ticketID)
+}
+
+func (s *Store) briefPath(ticketID string) string {
+	return filepath.Join(s.BriefsRootDir(), ticketID+".json")
 }
 
 func (s *Store) Init(record agentrun.RunRecord, prompt string, inactivity time.Duration) error {
@@ -240,6 +263,28 @@ func (s *Store) LoadPrompt(ticketID string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func (s *Store) WriteBrief(brief RunBrief) error {
+	if strings.TrimSpace(brief.TicketID) == "" {
+		return fmt.Errorf("ticket_id is required")
+	}
+	return writeJSON(s.briefPath(brief.TicketID), brief)
+}
+
+func (s *Store) LoadBrief(ticketID string) (RunBrief, bool, error) {
+	data, err := os.ReadFile(s.briefPath(ticketID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return RunBrief{}, false, nil
+		}
+		return RunBrief{}, false, err
+	}
+	var brief RunBrief
+	if err := json.Unmarshal(data, &brief); err != nil {
+		return RunBrief{}, false, err
+	}
+	return brief, true, nil
 }
 
 func (s *Store) Cleanup(ticketID string) error {

@@ -13,6 +13,17 @@ import (
 	"github.com/leomorpho/docket/internal/ticket"
 )
 
+func runnableSelectorDescription() string {
+	return "Implement the selector test fixture with explicit execution context so startable tickets satisfy the runnable contract.\n\nLikely paths:\n- internal/agentrun/selector/service.go\n- internal/workable/diagnosis.go\n\nOut of scope:\n- changing workflow semantics\n- editing unrelated tickets\n\nVerify commands:\n- go test ./internal/agentrun/selector\n- go test ./internal/workable"
+}
+
+func runnableSelectorAC() []ticket.AcceptanceCriterion {
+	return []ticket.AcceptanceCriterion{
+		{Description: "selector path remains covered", Run: "go test ./internal/agentrun/selector", VerificationSteps: []string{"Confirm selector tests still pass."}},
+		{Description: "workable diagnosis remains covered", Run: "go test ./internal/workable", VerificationSteps: []string{"Confirm workable diagnosis tests still pass."}},
+	}
+}
+
 func TestServiceNextReturnsHighestPriorityRunnableTicket(t *testing.T) {
 	t.Parallel()
 
@@ -28,9 +39,9 @@ func TestServiceNextReturnsHighestPriorityRunnableTicket(t *testing.T) {
 		state    ticket.State
 		blocked  []string
 	}{
-		{id: "TKT-101", priority: 2, state: ticket.State("todo")},
-		{id: "TKT-102", priority: 1, state: ticket.State("todo")},
-		{id: "TKT-103", priority: 1, state: ticket.State("todo"), blocked: []string{"TKT-101"}},
+		{id: "TKT-101", priority: 2, state: ticket.State("ready")},
+		{id: "TKT-102", priority: 1, state: ticket.State("ready")},
+		{id: "TKT-103", priority: 1, state: ticket.State("ready"), blocked: []string{"TKT-101"}},
 	} {
 		if err := store.CreateTicket(context.Background(), &ticket.Ticket{
 			ID:          tc.id,
@@ -41,8 +52,8 @@ func TestServiceNextReturnsHighestPriorityRunnableTicket(t *testing.T) {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 			BlockedBy:   tc.blocked,
 		}); err != nil {
 			t.Fatalf("create %s: %v", tc.id, err)
@@ -73,8 +84,8 @@ func TestServiceNextSkipsClaimedActiveTicket(t *testing.T) {
 		priority int
 		state    ticket.State
 	}{
-		{id: "TKT-101", priority: 1, state: ticket.State("in-progress")},
-		{id: "TKT-102", priority: 2, state: ticket.State("todo")},
+		{id: "TKT-101", priority: 1, state: ticket.State("running")},
+		{id: "TKT-102", priority: 2, state: ticket.State("ready")},
 	} {
 		if err := store.CreateTicket(context.Background(), &ticket.Ticket{
 			ID:          tc.id,
@@ -85,8 +96,8 @@ func TestServiceNextSkipsClaimedActiveTicket(t *testing.T) {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 		}); err != nil {
 			t.Fatalf("create %s: %v", tc.id, err)
 		}
@@ -118,13 +129,13 @@ func TestServiceNextReleasesStaleClaimForStartableTicket(t *testing.T) {
 		ID:          "TKT-150",
 		Seq:         150,
 		Title:       "Runnable",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "desc",
-		AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+		Description: runnableSelectorDescription(),
+		AC:          runnableSelectorAC(),
 	}); err != nil {
 		t.Fatalf("create TKT-150: %v", err)
 	}
@@ -171,14 +182,14 @@ func TestServiceNextSkipsCoordinationTickets(t *testing.T) {
 			ID:          tc.id,
 			Seq:         200 + tc.priority,
 			Title:       tc.title,
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    tc.priority,
 			Labels:      tc.labels,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 		}); err != nil {
 			t.Fatalf("create %s: %v", tc.id, err)
 		}
@@ -190,6 +201,42 @@ func TestServiceNextSkipsCoordinationTickets(t *testing.T) {
 	}
 	if !selection.Found || selection.TicketID != "TKT-203" {
 		t.Fatalf("unexpected selection: %#v", selection)
+	}
+}
+
+func TestServiceNextRejectsUngroomedReadyTicket(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	store := local.New(repoRoot)
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.CreateTicket(context.Background(), &ticket.Ticket{
+		ID:          "TKT-204",
+		Seq:         204,
+		Title:       "Ungroomed ready ticket",
+		State:       ticket.State("ready"),
+		Priority:    1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		CreatedBy:   "human:test",
+		Description: "Short description without runnable sections.",
+		AC:          []ticket.AcceptanceCriterion{{Description: "Only one AC"}},
+	}); err != nil {
+		t.Fatalf("create TKT-204: %v", err)
+	}
+
+	selection, err := New(Dependencies{Store: store}).Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if selection.Found {
+		t.Fatalf("expected no runnable selection, got %#v", selection)
+	}
+	if !strings.Contains(selection.Reason, "ready contract is incomplete") {
+		t.Fatalf("expected ready-contract diagnosis in selection reason, got %q", selection.Reason)
 	}
 }
 
@@ -207,26 +254,26 @@ func TestServiceNextSkipsNonLeafParents(t *testing.T) {
 			ID:          "TKT-211",
 			Seq:         211,
 			Title:       "Parent ticket",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "Parent ticket",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 		},
 		{
 			ID:          "TKT-212",
 			Seq:         212,
 			Title:       "Child ticket",
 			Parent:      "TKT-211",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "Child ticket",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 		},
 	} {
 		if err := store.CreateTicket(context.Background(), tk); err != nil {
@@ -257,26 +304,26 @@ func TestServiceNextExplainsBlockedBacklogWhenNothingRunnable(t *testing.T) {
 			ID:          "TKT-301",
 			Seq:         301,
 			Title:       "Current work",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 		},
 		{
 			ID:          "TKT-302",
 			Seq:         302,
 			Title:       "Blocked backlog",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-301"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: runnableSelectorDescription(),
+			AC:          runnableSelectorAC(),
 		},
 	} {
 		if err := store.CreateTicket(context.Background(), tk); err != nil {

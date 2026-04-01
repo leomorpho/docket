@@ -65,7 +65,7 @@ var backlogApplyCmd = &cobra.Command{
 
 		var spec applyspec.BacklogApplySpec
 		if strings.TrimSpace(backlogApplyWorklistPath) != "" {
-			spec, err = buildBacklogSpecFromWorklist(cmd, backlogApplyWorklistPath, backlogApplyParent)
+			spec, err = buildBacklogSpecFromWorklist(cmd, cfg, backlogApplyWorklistPath, backlogApplyParent)
 			if err != nil {
 				return err
 			}
@@ -233,6 +233,12 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 			}
 			return backlogApplyOutput{}, err
 		}
+		if err := enforceRunnableTicketContract(ctx, s, cfg, t); err != nil {
+			if rbErr := rollback(createdFiles); rbErr != nil {
+				return backlogApplyOutput{}, fmt.Errorf("%v (rollback failed: %v)", err, rbErr)
+			}
+			return backlogApplyOutput{}, err
+		}
 		if err := s.CreateTicket(ctx, t); err != nil {
 			if rbErr := rollback(createdFiles); rbErr != nil {
 				return backlogApplyOutput{}, fmt.Errorf("creating %s failed: %v (rollback failed: %v)", id, err, rbErr)
@@ -258,7 +264,7 @@ func executeBacklogApply(ctx context.Context, repoRoot string, cfg *ticket.Confi
 		CreatedIDs:   createdIDs,
 		CreatedOrder: createdOrder,
 		NextActions: []string{
-			"docket list --state backlog",
+			"docket list --state open --format context",
 			fmt.Sprintf("docket show %s", createdOrder[0]),
 		},
 	}, nil
@@ -278,10 +284,13 @@ func plannedBacklogParentTargets(spec applyspec.BacklogApplySpec) (map[string]st
 	return ids, refs
 }
 
-func buildBacklogSpecFromWorklist(cmd *cobra.Command, path, parent string) (applyspec.BacklogApplySpec, error) {
+func buildBacklogSpecFromWorklist(cmd *cobra.Command, cfg *ticket.Config, path, parent string) (applyspec.BacklogApplySpec, error) {
 	raw, err := readTicketApplySpec(cmd, path)
 	if err != nil {
 		return applyspec.BacklogApplySpec{}, err
+	}
+	if cfg == nil {
+		cfg = ticket.DefaultConfig()
 	}
 	parent = strings.TrimSpace(parent)
 	lines := strings.Split(string(raw), "\n")
@@ -296,7 +305,7 @@ func buildBacklogSpecFromWorklist(cmd *cobra.Command, path, parent string) (appl
 			Title:       title,
 			Description: "Draft ticket imported from worklist. Refine details during grooming.",
 			Parent:      parent,
-			State:       "backlog",
+			State:       cfg.DefaultState,
 		})
 	}
 	if len(tickets) == 0 {

@@ -12,7 +12,7 @@ import (
 
 func TestLearningCaptureFromSessionAndCommentArtifacts(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-950", 950, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-950", 950, ticket.State("draft"), []ticket.AcceptanceCriterion{{Description: "ac"}})
 
 	sessionCorpus := "noise line\nLEARN[reliability]: retry flaky network calls once.\nLEARN parser: tolerate noisy text around markers.\n"
 	sessionPath := filepath.Join(h.repo, "session.log")

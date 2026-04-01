@@ -10,7 +10,6 @@ const (
 	EventRunStart   Event = "run.start"
 	EventReviewGate Event = "ticket.review"
 	EventQAGate     Event = "ticket.qa"
-	EventPrivileged Event = "ticket.privileged"
 )
 
 type Mode string
@@ -29,7 +28,6 @@ type Context struct {
 	WorktreePath         string
 	Branch               string
 	RunStartedAt         string
-	PrivilegedAuthorized bool
 }
 
 type HookFunc func(Context) error

@@ -18,11 +18,7 @@ var (
 	installVSCode bool
 )
 
-const installLongDesc = `Install docket-managed git hook and CLAUDE.md instructions.
-
-Secure workflows rely on DOCKET_HOME to keep trusted artifacts outside the repository.
-Set DOCKET_HOME to an absolute folder you control (for example: DOCKET_HOME=/home/alice/.docket-home) before running this command.
-`
+const installLongDesc = `Install docket-managed git hook and CLAUDE.md instructions.`
 
 var installCmd = &cobra.Command{
 	Use:   "install",
@@ -73,8 +69,6 @@ var installCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "  hook: %s\n", commitMsgHookPath(repo))
 		fmt.Fprintf(cmd.OutOrStdout(), "  hook: %s\n", postMergeHookPath(repo))
 		fmt.Fprintf(cmd.OutOrStdout(), "  manifest: %s\n", installManifestPath(repo))
-		fmt.Fprintf(cmd.OutOrStdout(), "  secure storage (DOCKET_HOME): %s\n", docketHome)
-		fmt.Fprintf(cmd.OutOrStdout(), "    Set DOCKET_HOME to a different writable directory if you prefer (example: DOCKET_HOME=%s)\n", filepath.Join(os.TempDir(), "docket-home"))
 		return nil
 	},
 }
@@ -99,8 +93,7 @@ func installCursorRules(cmd *cobra.Command) error {
     3. **update** the ticket to the repo's configured active work state. This will automatically claim the ticket and may create a dedicated git worktree for your changes.
     4. If a worktree was created, perform your work within that directory and stay on the managed Docket branch/worktree for the ticket.
     5. Once finished, ensure all acceptance criteria are met and tests pass.
-    6. **update** the ticket to the repo's configured review state. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
-    7. A human reviewer advances the ticket to the repo's configured completed state after verification.
+    6. **update** the ticket to the repo's configured validated/completed state. This will automatically commit your changes, merge them back to the main branch, prune the linked worktree, and cleanup the claim.
 - **Large Payloads:** If your content is > 1000 characters, write it to a temporary file and pass the path to the 'content_file' parameter in MCP calls.
 `
 

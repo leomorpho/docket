@@ -5,29 +5,29 @@ import "testing"
 func TestWorkflowEvaluatorDefaultConfigSemantics(t *testing.T) {
 	ev := NewWorkflowEvaluator(DefaultConfig())
 
-	if !ev.CanTransition("todo", "in-progress") {
-		t.Fatal("expected todo -> in-progress transition to be allowed")
+	if !ev.CanTransition("ready", "running") {
+		t.Fatal("expected ready -> running transition to be allowed")
 	}
-	if ev.CanTransition("todo", "done") {
-		t.Fatal("expected todo -> done transition to be disallowed")
+	if ev.CanTransition("ready", "validated") {
+		t.Fatal("expected ready -> validated transition to be disallowed")
 	}
-	if !ev.StateHasRole("in-progress", "active") {
-		t.Fatal("expected in-progress to have active role")
+	if !ev.StateHasRole("running", "active") {
+		t.Fatal("expected running to have active role")
 	}
-	if !ev.IsStartable("backlog") || !ev.IsStartable("todo") {
-		t.Fatal("expected backlog/todo to be startable")
+	if ev.IsStartable("draft") || !ev.IsStartable("ready") {
+		t.Fatal("expected only ready to be startable in the default config")
 	}
-	if !ev.IsReviewable("in-review") {
-		t.Fatal("expected in-review to be reviewable")
+	if ev.IsReviewable("validated") {
+		t.Fatal("expected validated to not be reviewable")
 	}
-	if ev.BlocksDependents("in-review") {
-		t.Fatal("expected in-review to be non-blocking in default config")
+	if ev.BlocksDependents("validated") {
+		t.Fatal("expected validated to be non-blocking in default config")
 	}
-	if !ev.DependencyBlocks(&Ticket{State: "in-progress"}) {
+	if !ev.DependencyBlocks(&Ticket{State: "running"}) {
 		t.Fatal("expected active dependency to block")
 	}
-	if ev.DependencyBlocks(&Ticket{State: "in-review"}) {
-		t.Fatal("expected review dependency to be non-blocking in default config")
+	if ev.DependencyBlocks(&Ticket{State: "validated"}) {
+		t.Fatal("expected validated dependency to be non-blocking in default config")
 	}
 	if !ev.DependencyBlocks(nil) {
 		t.Fatal("expected missing dependency to be treated as blocking")
@@ -98,4 +98,3 @@ func TestWorkflowEvaluatorCustomConfigSemantics(t *testing.T) {
 		t.Fatal("expected qa dependency to block in custom config")
 	}
 }
-

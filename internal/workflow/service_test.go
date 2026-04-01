@@ -50,6 +50,7 @@ type MockVCS struct {
 	deleteBranchErr   error
 	commitCalls       int
 	mergeCalls        int
+	lastMergeMessage  string
 	deleteCalls       int
 	removeCalls       int
 	ops               []string
@@ -95,8 +96,9 @@ func (m *MockVCS) CommitAll(ctx context.Context, path, msg string) error {
 	m.ops = append(m.ops, "commit")
 	return nil
 }
-func (m *MockVCS) MergeBranch(ctx context.Context, branch string) error {
+func (m *MockVCS) MergeBranch(ctx context.Context, branch, message string) error {
 	m.mergeCalls++
+	m.lastMergeMessage = message
 	m.ops = append(m.ops, "merge")
 	return nil
 }
@@ -127,7 +129,7 @@ func (m *MockClaim) GetClaim(ctx context.Context, ticketID string) (*claim.Claim
 }
 
 func TestWorkflowStartTask(t *testing.T) {
-	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "ready"}}
 	v := &MockVCS{currentCheckout: "/tmp/repo", isPrimary: true}
 	c := &MockClaim{claims: make(map[string]string)}
 	mgr := NewManager(s, v, c)
@@ -144,8 +146,8 @@ func TestWorkflowStartTask(t *testing.T) {
 		t.Fatalf("expected dedicated worktree path for agent-managed start, got repo root %s", wtPath)
 	}
 
-	if res.State != "in-progress" {
-		t.Errorf("expected state in-progress, got %s", res.State)
+	if res.State != "running" {
+		t.Errorf("expected state running, got %s", res.State)
 	}
 	if res.StartedAt.IsZero() {
 		t.Error("expected StartedAt to be set")
@@ -278,7 +280,7 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	cfg := ticket.DefaultConfig()
 
 	t.Run("fails when worktree path lookup fails", func(t *testing.T) {
-		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "ready"}}
 		v := &MockVCS{getWorktreeDirErr: errors.New("no cache dir")}
 		c := &MockClaim{claims: make(map[string]string)}
 		mgr := NewManager(s, v, c)
@@ -290,7 +292,7 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	})
 
 	t.Run("fails when worktree creation fails", func(t *testing.T) {
-		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "ready"}}
 		v := &MockVCS{createWorktreeErr: errors.New("git worktree add failed")}
 		c := &MockClaim{claims: make(map[string]string)}
 		mgr := NewManager(s, v, c)
@@ -302,7 +304,7 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	})
 
 	t.Run("human flow no longer falls back to repo root", func(t *testing.T) {
-		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "ready"}}
 		v := &MockVCS{
 			repoRoot:          "/tmp/repo",
 			createWorktreeErr: errors.New("git worktree add failed"),
@@ -317,7 +319,7 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 	})
 
 	t.Run("reuses current dedicated worktree instead of creating another", func(t *testing.T) {
-		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "todo"}}
+		s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "ready"}}
 		v := &MockVCS{
 			repoRoot:          "/tmp/repo",
 			currentCheckout:   "/tmp/wt-TKT-001",
@@ -335,14 +337,14 @@ func TestWorkflowStartTask_RequiresDedicatedWorktree(t *testing.T) {
 		if wtPath != "/tmp/wt-TKT-001" {
 			t.Fatalf("expected reused worktree path, got %s", wtPath)
 		}
-		if got.State != "in-progress" {
-			t.Fatalf("expected state in-progress, got %s", got.State)
+		if got.State != "running" {
+			t.Fatalf("expected state running, got %s", got.State)
 		}
 	})
 }
 
 func TestWorkflowFinishTask(t *testing.T) {
-	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "running"}}
 	v := &MockVCS{}
 	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
 	mgr := NewManager(s, v, c)
@@ -353,11 +355,11 @@ func TestWorkflowFinishTask(t *testing.T) {
 		t.Fatalf("FinishTask failed: %v", err)
 	}
 
-	if res.State != "in-review" {
-		t.Errorf("expected default review state in-review, got %s", res.State)
+	if res.State != "validated" {
+		t.Errorf("expected default completed state validated, got %s", res.State)
 	}
-	if !res.CompletedAt.IsZero() {
-		t.Error("expected CompletedAt to remain unset at review state")
+	if res.CompletedAt.IsZero() {
+		t.Error("expected CompletedAt to be stamped at validated state")
 	}
 	if _, ok := c.claims["TKT-001"]; ok {
 		t.Error("expected claim to be released")
@@ -370,7 +372,7 @@ func TestWorkflowFinishTask(t *testing.T) {
 	}
 }
 
-func TestWorkflowFinishTask_UsesConfiguredReviewState(t *testing.T) {
+func TestWorkflowFinishTask_UsesReachableCompletedState(t *testing.T) {
 	cfg := &ticket.Config{
 		States: map[string]ticket.StateConfig{
 			"queued": {
@@ -420,16 +422,117 @@ func TestWorkflowFinishTask_UsesConfiguredReviewState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FinishTask failed: %v", err)
 	}
-	if res.State != "qa" {
-		t.Fatalf("expected configured review state qa, got %s", res.State)
+	if res.State != "shipped" {
+		t.Fatalf("expected reachable completed state shipped, got %s", res.State)
 	}
-	if !res.CompletedAt.IsZero() {
-		t.Fatal("expected review transition to leave CompletedAt unset")
+	if res.CompletedAt.IsZero() {
+		t.Fatal("expected completed transition to stamp CompletedAt")
 	}
 }
 
+func TestWorkflowFinishTask_FailsWhenNoCompletedStateIsReachable(t *testing.T) {
+	cfg := &ticket.Config{
+		States: map[string]ticket.StateConfig{
+			"queued": {
+				Label:            "Queued",
+				Open:             true,
+				Column:           0,
+				Next:             []string{"building"},
+				Roles:            []string{"intake"},
+				Startable:        true,
+				BlocksDependents: true,
+			},
+			"building": {
+				Label:            "Building",
+				Open:             true,
+				Column:           1,
+				Next:             []string{"qa"},
+				Roles:            []string{"active"},
+				BlocksDependents: true,
+			},
+			"qa": {
+				Label:            "QA",
+				Open:             true,
+				Column:           2,
+				Next:             []string{},
+				Roles:            []string{"review"},
+				Reviewable:       true,
+				BlocksDependents: true,
+			},
+		},
+		DefaultState: "queued",
+	}
+
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-404", State: "building"}}
+	v := &MockVCS{}
+	c := &MockClaim{claims: map[string]string{"TKT-404": "agent-1"}}
+	mgr := NewManager(s, v, c)
+
+	_, err := mgr.FinishTask(context.Background(), "TKT-404", cfg)
+	if err == nil {
+		t.Fatal("expected finish failure when no completed state is reachable")
+	}
+	if !strings.Contains(err.Error(), "configured completed state") {
+		t.Fatalf("expected completed-state error, got %v", err)
+	}
+}
+
+func TestWorkflowFinishTaskWithSummaryPassesMergeCommitMessage(t *testing.T) {
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "running"}}
+	v := &MockVCS{
+		repoRoot:        "/tmp/repo",
+		currentCheckout: "/tmp/repo",
+		isPrimary:       true,
+	}
+	c := &MockClaim{claims: make(map[string]string)}
+	mgr := NewManager(s, v, c)
+	cfg := ticket.DefaultConfig()
+	message := "docket: close out TKT-001\n\nTicket: TKT-001"
+
+	_, err := mgr.FinishTaskWithSummary(context.Background(), "TKT-001", cfg, message)
+	if err != nil {
+		t.Fatalf("FinishTaskWithSummary failed: %v", err)
+	}
+	if v.lastMergeMessage != "" {
+		t.Fatalf("expected no merge message for non-worktree closeout, got %q", v.lastMergeMessage)
+	}
+
+	wtStore := &MockStore{t: &ticket.Ticket{ID: "TKT-002", State: "running"}}
+	wtVCS := &MockVCS{
+		repoRoot:        "/tmp/repo",
+		currentCheckout: "/tmp/repo",
+		isPrimary:       true,
+	}
+	wtClaim := &MockClaim{claims: map[string]string{"TKT-002": "agent:1"}}
+	wtMgr := NewManager(wtStore, wtVCS, wtClaim)
+
+	wtMgr.claimer = &mockClaimWithWorktree{MockClaim: wtClaim, worktree: "/tmp/wt-TKT-002"}
+
+	_, err = wtMgr.FinishTaskWithSummary(context.Background(), "TKT-002", cfg, message)
+	if err != nil {
+		t.Fatalf("FinishTaskWithSummary worktree failed: %v", err)
+	}
+	if wtVCS.lastMergeMessage != message {
+		t.Fatalf("merge message = %q, want %q", wtVCS.lastMergeMessage, message)
+	}
+}
+
+type mockClaimWithWorktree struct {
+	*MockClaim
+	worktree string
+}
+
+func (m *mockClaimWithWorktree) GetClaim(ctx context.Context, ticketID string) (*claim.ClaimMetadata, error) {
+	meta, err := m.MockClaim.GetClaim(ctx, ticketID)
+	if err != nil || meta == nil {
+		return meta, err
+	}
+	meta.Worktree = m.worktree
+	return meta, nil
+}
+
 func TestWorkflowFinishTask_FailsWhenWorktreeCleanupFails(t *testing.T) {
-	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "running"}}
 	v := &MockVCS{removeWorktreeErr: errors.New("prune failed")}
 	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
 	mgr := NewManager(s, v, c)
@@ -442,7 +545,7 @@ func TestWorkflowFinishTask_FailsWhenWorktreeCleanupFails(t *testing.T) {
 	if got := err.Error(); got == "" || !strings.Contains(got, "cleanup merged worktree") {
 		t.Fatalf("expected cleanup error, got %v", err)
 	}
-	if s.t.State != "in-progress" {
+	if s.t.State != "running" {
 		t.Fatalf("expected ticket state unchanged on cleanup failure, got %s", s.t.State)
 	}
 	if _, ok := c.claims["TKT-001"]; !ok {
@@ -454,7 +557,7 @@ func TestWorkflowFinishTask_FailsWhenWorktreeCleanupFails(t *testing.T) {
 }
 
 func TestWorkflowFinishTask_FailsWhenBranchDeletionFails(t *testing.T) {
-	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "running"}}
 	v := &MockVCS{deleteBranchErr: errors.New("branch locked")}
 	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
 	mgr := NewManager(s, v, c)
@@ -467,7 +570,7 @@ func TestWorkflowFinishTask_FailsWhenBranchDeletionFails(t *testing.T) {
 	if got := err.Error(); got == "" || !strings.Contains(got, "delete merged branch") {
 		t.Fatalf("expected branch deletion error, got %v", err)
 	}
-	if s.t.State != "in-progress" {
+	if s.t.State != "running" {
 		t.Fatalf("expected ticket state unchanged on branch deletion failure, got %s", s.t.State)
 	}
 	if _, ok := c.claims["TKT-001"]; !ok {
@@ -476,7 +579,7 @@ func TestWorkflowFinishTask_FailsWhenBranchDeletionFails(t *testing.T) {
 }
 
 func TestWorkflowFinishTask_ContinuesWhenWorktreeCleanupPathIsInaccessible(t *testing.T) {
-	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "running"}}
 	v := &MockVCS{removeWorktreeErr: errors.New("permission denied")}
 	c := &MockClaim{claims: map[string]string{"TKT-001": "agent-1"}}
 	mgr := NewManager(s, v, c)
@@ -486,8 +589,8 @@ func TestWorkflowFinishTask_ContinuesWhenWorktreeCleanupPathIsInaccessible(t *te
 	if err != nil {
 		t.Fatalf("expected recoverable cleanup error to proceed, got: %v", err)
 	}
-	if res.State != "in-review" {
-		t.Fatalf("expected review state in-review, got %s", res.State)
+	if res.State != "validated" {
+		t.Fatalf("expected validated state, got %s", res.State)
 	}
 	if _, ok := c.claims["TKT-001"]; ok {
 		t.Fatal("expected claim to be released on recoverable cleanup failure")
@@ -495,7 +598,7 @@ func TestWorkflowFinishTask_ContinuesWhenWorktreeCleanupPathIsInaccessible(t *te
 }
 
 func TestWorkflowFinishTask_ContinuesWhenBranchDeleteBlockedByStaleWorktree(t *testing.T) {
-	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "in-progress"}}
+	s := &MockStore{t: &ticket.Ticket{ID: "TKT-001", State: "running"}}
 	v := &MockVCS{
 		removeWorktreeErr: errors.New("permission denied"),
 		deleteBranchErr:   errors.New("branch is checked out at /tmp/wt-TKT-001"),
@@ -508,8 +611,8 @@ func TestWorkflowFinishTask_ContinuesWhenBranchDeleteBlockedByStaleWorktree(t *t
 	if err != nil {
 		t.Fatalf("expected recoverable stale-branch deletion error to proceed, got: %v", err)
 	}
-	if res.State != "in-review" {
-		t.Fatalf("expected review state in-review, got %s", res.State)
+	if res.State != "validated" {
+		t.Fatalf("expected validated state, got %s", res.State)
 	}
 	if _, ok := c.claims["TKT-001"]; ok {
 		t.Fatal("expected claim to be released when stale branch deletion is recoverable")
@@ -540,7 +643,7 @@ func TestWorkflowFinishTask_RealGitWorktreeCleanup(t *testing.T) {
 		ID:          "TKT-999",
 		Seq:         999,
 		Title:       "Real finish cleanup",
-		State:       ticket.State("in-progress"),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -571,8 +674,8 @@ func TestWorkflowFinishTask_RealGitWorktreeCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FinishTask failed: %v", err)
 	}
-	if res.State != "in-review" {
-		t.Fatalf("expected default review state in-review, got %s", res.State)
+	if res.State != "validated" {
+		t.Fatalf("expected default completed state validated, got %s", res.State)
 	}
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 		t.Fatalf("expected worktree path removed, got err=%v", err)

@@ -7,21 +7,20 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/lifecycle"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 )
 
 type transitionHistoryEntry struct {
-	At               string   `json:"at"`
-	Command          string   `json:"command"`
-	Actor            string   `json:"actor"`
-	FromState        string   `json:"from_state"`
-	ToState          string   `json:"to_state"`
-	Reason           string   `json:"reason"`
-	Checks           []string `json:"checks,omitempty"`
-	WorkflowLockHash string   `json:"workflow_lock_hash,omitempty"`
-	ManagedRun       bool     `json:"managed_run,omitempty"`
-	RunBranch        string   `json:"run_branch,omitempty"`
-	RunWorktree      string   `json:"run_worktree,omitempty"`
+	At          string   `json:"at"`
+	Command     string   `json:"command"`
+	Actor       string   `json:"actor"`
+	FromState   string   `json:"from_state"`
+	ToState     string   `json:"to_state"`
+	Reason      string   `json:"reason"`
+	Checks      []string `json:"checks,omitempty"`
+	ManagedRun  bool     `json:"managed_run,omitempty"`
+	RunBranch   string   `json:"run_branch,omitempty"`
+	RunWorktree string   `json:"run_worktree,omitempty"`
 }
 
 func emitStateTransitionEvent(out io.Writer, command, ticketID, actor, fromState, toState, reason string, checks []string) {
@@ -35,10 +34,7 @@ func emitStateTransitionEvent(out io.Writer, command, ticketID, actor, fromState
 		"checks":     normalizeChecks(checks),
 	}
 
-	ns := security.NewRepoNamespaceStore(docketHome)
-	if hash, active, err := ns.GetActiveWorkflowHash(repo); err == nil && active && strings.TrimSpace(hash) != "" {
-		payload["workflow_lock_hash"] = hash
-	}
+	ns := runstate.New(runtimeNamespaceRoot(repo))
 	if run, ok, err := ns.GetRunManifest(repo, ticketID); err == nil && ok {
 		payload["managed_run"] = true
 		payload["run_branch"] = strings.TrimSpace(run.Branch)
@@ -70,17 +66,16 @@ func loadTicketTransitionHistory(repoRoot, ticketID string) ([]transitionHistory
 			continue
 		}
 		entry := transitionHistoryEntry{
-			At:               coerceTime(ev.EmittedAt),
-			Command:          coerceString(ev.Payload["command"]),
-			Actor:            coerceString(ev.Payload["actor"]),
-			FromState:        coerceString(ev.Payload["from_state"]),
-			ToState:          coerceString(ev.Payload["to_state"]),
-			Reason:           coerceString(ev.Payload["reason"]),
-			Checks:           coerceStringSlice(ev.Payload["checks"]),
-			WorkflowLockHash: coerceString(ev.Payload["workflow_lock_hash"]),
-			ManagedRun:       coerceBool(ev.Payload["managed_run"]),
-			RunBranch:        coerceString(ev.Payload["run_branch"]),
-			RunWorktree:      coerceString(ev.Payload["run_worktree"]),
+			At:          coerceTime(ev.EmittedAt),
+			Command:     coerceString(ev.Payload["command"]),
+			Actor:       coerceString(ev.Payload["actor"]),
+			FromState:   coerceString(ev.Payload["from_state"]),
+			ToState:     coerceString(ev.Payload["to_state"]),
+			Reason:      coerceString(ev.Payload["reason"]),
+			Checks:      coerceStringSlice(ev.Payload["checks"]),
+			ManagedRun:  coerceBool(ev.Payload["managed_run"]),
+			RunBranch:   coerceString(ev.Payload["run_branch"]),
+			RunWorktree: coerceString(ev.Payload["run_worktree"]),
 		}
 		history = append(history, entry)
 	}

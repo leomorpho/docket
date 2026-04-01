@@ -20,9 +20,6 @@ var rootCmd = &cobra.Command{
 	Short: "git-native ticket system for AI-assisted development",
 	Long:  `A git-native ticket system built for human + LLM agentic workflows.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := ensureDocketHome(); err != nil {
-			return err
-		}
 		prepareVersionNotice(cmd)
 		repoRoot := ticketRepoRoot(repo)
 		if shouldAutoSyncSkills(cmd, repoRoot) {
@@ -50,6 +47,7 @@ var rootCmd = &cobra.Command{
 		flushVersionNotice(cmd)
 		// The CLI process handles one command per invocation; reset globals for in-process tests.
 		automationMode = false
+		runEnableReview = false
 		runDisableReview = false
 		runInactivityLimit = 0
 		runManagedAdapter = ""

@@ -19,12 +19,24 @@ func TestCheckCmd_R001AndR006AndFix(t *testing.T) {
 	format = "human"
 
 	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
 	old := now.Add(-8 * 24 * time.Hour)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "Blocker", State: ticket.State("done"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-002", Seq: 2, Title: "Blocker", State: ticket.State("validated"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		Description: updateRunnableDescription(), AC: updateCompletedAC(),
+		Handoff: updateStructuredHandoff("validated", "none"),
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Target", State: ticket.State("in-progress"), Priority: 1, BlockedBy: []string{"TKT-002"}, CreatedAt: old, UpdatedAt: old, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x", Done: true}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
+		ID: "TKT-001", Seq: 1, Title: "Target", State: ticket.State("running"), Priority: 1, BlockedBy: []string{"TKT-002"},
+		CreatedAt: old, UpdatedAt: old, CreatedBy: "me",
+		Description: updateRunnableDescription(), AC: updateRunnableAC(),
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -69,24 +81,25 @@ func TestCheckCmd_JSONAndAllClean(t *testing.T) {
 	format = "json"
 
 	s := local.New(tmpDir)
+	if err := ticket.SaveConfig(tmpDir, ticket.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
 	
-	longDesc := "This is a long description that has more than twenty words so that it passes the validation check without any warnings."
-	
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-010", Seq: 10, Title: "Clean", State: ticket.State("todo"), Priority: 2, 
+		ID: "TKT-010", Seq: 10, Title: "Clean", State: ticket.State("ready"), Priority: 2, 
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", 
-		Description: longDesc, 
-		AC: []ticket.AcceptanceCriterion{{Description: "Criteria 1"}, {Description: "Criteria 2"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-011", Seq: 11, Title: "Done", State: ticket.State("done"), Priority: 2, 
+		ID: "TKT-011", Seq: 11, Title: "Validated", State: ticket.State("validated"), Priority: 2, 
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", 
-		Description: longDesc, 
-		AC: []ticket.AcceptanceCriterion{{Description: "Criteria 1"}, {Description: "Criteria 2"}},
-		Handoff: "## Current state\nDone\n## Decisions made\nNone\n## Files touched\nNone\n## Remaining work\nNone\n## AC status\nDone",
+		Description: updateRunnableDescription(),
+		AC:          updateCompletedAC(),
+		Handoff:     updateStructuredHandoff("validated", "none"),
 	}); err != nil {
 		t.Fatal(err)
 	}

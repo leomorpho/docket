@@ -62,7 +62,7 @@ func TestNestedHeadingRoundtripAndValidate(t *testing.T) {
 	tkt := &ticket.Ticket{
 		ID:          "TKT-500",
 		Seq:         500,
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		Title:       "Nested heading ticket",
 		Description: desc,

@@ -153,11 +153,10 @@ func TestInstallCursorRulesIncludesReviewMergeWorkflow(t *testing.T) {
 	}
 
 	expectedStrings := []string{
-		"configured review state",
 		"configured active work state",
 		"merge them back to the main branch",
 		"prune the linked worktree",
-		"configured completed state",
+		"configured validated/completed state",
 		"stay on the managed Docket branch/worktree",
 	}
 

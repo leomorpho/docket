@@ -18,7 +18,7 @@ import (
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/agentrun/selector"
 	runvalidate "github.com/leomorpho/docket/internal/agentrun/validate"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -33,6 +33,7 @@ import (
 const DefaultRunInactivityTimeout = 2 * time.Minute
 
 var (
+	runEnableReview    bool
 	runDisableReview   bool
 	runInactivityLimit time.Duration
 	runManagedAdapter  string
@@ -55,13 +56,14 @@ var newRunOrchestratorWithMode = func(repoRoot string, enableReview bool, mode s
 		RepoRoot: repoRoot,
 		Store:    store,
 		Workflow: wf,
+		Runtime:  runtimeStore,
 	})
 	deps := orchestrate.Dependencies{
 		RepoRoot:  repoRoot,
 		Actor:     runActor(),
 		Store:     store,
 		Workflow:  wf,
-		Namespace: security.NewRepoNamespaceStore(docketHome),
+		Namespace: runstate.New(runtimeNamespaceRoot(repoRoot)),
 		Adapter:   adapter,
 		Monitor:   monitor.New(monitor.Dependencies{Runtime: runtimeStore}),
 		Validator: validator,
@@ -256,7 +258,10 @@ func runActor() string {
 }
 
 func runReviewEnabled() bool {
-	return !runDisableReview
+	if runDisableReview {
+		return false
+	}
+	return runEnableReview
 }
 
 func runInactivityLimitOrDefault() time.Duration {
@@ -303,23 +308,68 @@ var runStatusCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		store := runruntime.New(repo)
+		brief, briefOK, err := store.LoadBrief(args[0])
+		if err != nil {
+			return err
+		}
 		status, ok, err := store.LoadStatus(args[0])
 		if err != nil {
 			return err
 		}
 		if !ok {
 			if format == "json" {
-				printJSON(cmd, map[string]any{"ticket_id": args[0], "active": false})
+				payload := map[string]any{"ticket_id": args[0], "active": false}
+				if briefOK {
+					payload["brief"] = brief
+				}
+				printJSON(cmd, payload)
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: no active run\n", args[0])
+			if briefOK {
+				renderRunBriefHuman(cmd, brief)
+			}
 			return nil
 		}
 		if format == "json" {
-			printJSON(cmd, status)
+			payload := map[string]any{
+				"ticket_id":               status.TicketID,
+				"session_id":              status.SessionID,
+				"role":                    status.Role,
+				"started_at":              status.StartedAt,
+				"pid":                     status.PID,
+				"active":                  status.Active,
+				"hung":                    status.Hung,
+				"last_event_at":           status.LastEventAt,
+				"last_visible_at":         status.LastVisibleAt,
+				"inactivity_timeout":      status.InactivityTimeout,
+				"planned_steps":           status.PlannedSteps,
+				"current_step":            status.CurrentStep,
+				"current_step_title":      status.CurrentStepTitle,
+				"current_phase":           status.CurrentPhase,
+				"last_marker":             status.LastMarker,
+				"last_visible_text":       status.LastVisibleText,
+				"last_result_status":      status.LastResultStatus,
+				"session_message_count":   status.SessionMessageCount,
+				"health_check_count":      status.HealthCheckCount,
+				"last_health_check_at":    status.LastHealthCheckAt,
+				"last_health_check":       status.LastHealthCheck,
+				"last_intervention":       status.LastIntervention,
+				"last_intervention_at":    status.LastInterventionAt,
+				"consecutive_no_progress": status.ConsecutiveNoProgress,
+				"warning":                 status.Warning,
+				"recoverable":             isRecoverableManagedRunStatus(status),
+			}
+			if briefOK {
+				payload["brief"] = brief
+			}
+			printJSON(cmd, payload)
 			return nil
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "%s: active=%t hung=%t", status.TicketID, status.Active, status.Hung)
+		if isRecoverableManagedRunStatus(status) {
+			fmt.Fprintf(cmd.OutOrStdout(), " recoverable=true")
+		}
 		if status.CurrentStepTitle != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), " step=%d/%d %s", status.CurrentStep, status.PlannedSteps, status.CurrentStepTitle)
 		}
@@ -344,7 +394,13 @@ var runStatusCmd = &cobra.Command{
 		if status.Warning != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "\nWarning: %s", status.Warning)
 		}
+		if isRecoverableManagedRunStatus(status) {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nResume with: docket run-resume %s", status.TicketID)
+		}
 		fmt.Fprintln(cmd.OutOrStdout())
+		if briefOK {
+			renderRunBriefHuman(cmd, brief)
+		}
 		return nil
 	},
 }
@@ -511,6 +567,21 @@ func renderPingSummary(cmd *cobra.Command, summary agentrun.PingSummary) error {
 		fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
 	return nil
+}
+
+func isRecoverableManagedRunStatus(status runruntime.StatusSnapshot) bool {
+	if strings.TrimSpace(status.SessionID) == "" {
+		return false
+	}
+	if status.Hung {
+		return true
+	}
+	switch strings.TrimSpace(status.LastResultStatus) {
+	case string(agentrun.StatusStuck), string(agentrun.StatusFailed):
+		return true
+	default:
+		return false
+	}
 }
 
 func isOperatorStopReason(reason string) bool {
@@ -922,6 +993,28 @@ func isNoRunnableReason(reason string) bool {
 	return reason == "no runnable tickets remain" || strings.HasPrefix(reason, "no runnable tickets remain:")
 }
 
+func renderRunBriefHuman(cmd *cobra.Command, brief runruntime.RunBrief) {
+	if strings.TrimSpace(brief.Outcome) == "" {
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Last outcome: %s\n", brief.Outcome)
+	if strings.TrimSpace(brief.Summary) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Summary: %s\n", brief.Summary)
+	}
+	if strings.TrimSpace(brief.CommitSHA) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Commit: %s\n", brief.CommitSHA)
+	}
+	if strings.TrimSpace(brief.Tests) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Validation: %s\n", brief.Tests)
+	}
+	if len(brief.ValidationErrors) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "Validation errors: %s\n", strings.Join(brief.ValidationErrors, "; "))
+	}
+	if strings.TrimSpace(brief.ResumeNext) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Resume next: %s\n", brief.ResumeNext)
+	}
+}
+
 func healManagedRuntime(repoRoot string) {
 	store := runruntime.New(repoRoot)
 	_, _ = store.HealRuntimeState(time.Now())
@@ -952,8 +1045,10 @@ func currentManagedRunTicketID(repoRoot string) (string, error) {
 }
 
 func init() {
-	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
-	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
+	runTicketCmd.Flags().BoolVar(&runEnableReview, "review", false, "run the optional reviewer pass and capped fix loop after implementer validation")
+	runNextCmd.Flags().BoolVar(&runEnableReview, "review", false, "run the optional reviewer pass and capped fix loop after implementer validation")
+	runTicketCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "compatibility alias; reviewer pass is disabled by default")
+	runNextCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "compatibility alias; reviewer pass is disabled by default")
 	runTicketCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	runTicketCmd.Flags().BoolVar(&runWatchMouse, "watch-mouse", false, "enable mouse capture in the managed-run dashboard")
 	runTicketCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
@@ -962,7 +1057,8 @@ func init() {
 	runNextCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")
 	runTicketCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
 	runNextCmd.Flags().DurationVar(&runInactivityLimit, "inactivity-timeout", DefaultRunInactivityTimeout, "run a managed-run health check after this much time without new Codex output")
-	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "skip the default reviewer pass and capped fix-review loop")
+	runResumeCmd.Flags().BoolVar(&runEnableReview, "review", false, "run the optional reviewer pass and capped fix loop after implementer validation")
+	runResumeCmd.Flags().BoolVar(&runDisableReview, "no-review", false, "compatibility alias; reviewer pass is disabled by default")
 	runResumeCmd.Flags().BoolVar(&runWatch, "watch", false, "open the interactive managed-run dashboard while this run is active")
 	runResumeCmd.Flags().BoolVar(&runWatchMouse, "watch-mouse", false, "enable mouse capture in the managed-run dashboard")
 	runResumeCmd.Flags().StringVar(&runManagedAdapter, "managed-run-adapter", "session", "managed run adapter mode")

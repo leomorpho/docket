@@ -151,7 +151,7 @@ func TestHelpJSONWorkflowUsesConfiguredRoleStates(t *testing.T) {
 	if got := workflow["work"].(string); !strings.Contains(got, "--state building") {
 		t.Fatalf("expected configured active state in workflow guidance, got %q", got)
 	}
-	if got := workflow["finish"].(string); !strings.Contains(got, "--state qa") {
-		t.Fatalf("expected configured review state in workflow guidance, got %q", got)
+	if got := workflow["finish"].(string); !strings.Contains(got, "--state shipped") {
+		t.Fatalf("expected configured completed state in workflow guidance, got %q", got)
 	}
 }

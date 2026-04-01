@@ -11,29 +11,26 @@ func TestValidateTransition(t *testing.T) {
 		expected bool // true if nil error expected
 	}{
 		// Valid transitions (from DefaultConfig)
-		{"backlog", "todo", true},
-		{"backlog", "archived", true},
-		{"todo", "in-progress", true},
-		{"todo", "backlog", true},
-		{"todo", "archived", true},
-		{"in-progress", "in-review", true},
-		{"in-progress", "todo", true},
-		{"in-progress", "backlog", true},
-		{"in-progress", "archived", true},
-		{"in-review", "done", true},
-		{"in-review", "in-progress", true},
-		{"in-review", "archived", true},
-		{"done", "archived", true},
-		{"done", "in-progress", true},
-		{"archived", "backlog", true},
+		{"draft", "ready", true},
+		{"draft", "archived", true},
+		{"ready", "running", true},
+		{"ready", "draft", true},
+		{"ready", "archived", true},
+		{"running", "validated", true},
+		{"running", "ready", true},
+		{"running", "draft", true},
+		{"running", "archived", true},
+		{"validated", "archived", true},
+		{"validated", "running", true},
+		{"archived", "draft", true},
 		// Self transitions
-		{"backlog", "backlog", true},
-		{"todo", "todo", true},
+		{"draft", "draft", true},
+		{"ready", "ready", true},
 		// Invalid transitions
-		{"backlog", "done", false},
-		{"backlog", "in-progress", false},
-		{"done", "todo", false},
-		{"archived", "done", false},
+		{"draft", "validated", false},
+		{"draft", "running", false},
+		{"validated", "ready", false},
+		{"archived", "validated", false},
 	}
 
 	for _, tt := range tests {

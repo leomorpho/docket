@@ -76,7 +76,7 @@ func TestSkillListAndShowStayAlignedWithCanonicalMetadata(t *testing.T) {
 
 func TestSkillInvokeResolvesCommandsAndValidatesInputs(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-964", 964, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-964", 964, ticket.State("draft"), []ticket.AcceptanceCriterion{{Description: "ac"}})
 
 	invokeOut, err := h.run("skill", "invoke", "learning-replay", "--ticket", "TKT-964", "--format", "json")
 	if err != nil {
@@ -120,7 +120,7 @@ func TestSkillInvokeResolvesCommandsAndValidatesInputs(t *testing.T) {
 
 func TestSkillAuditReportsRecordedUsage(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-301", 301, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-301", 301, ticket.State("draft"), []ticket.AcceptanceCriterion{{Description: "ac"}})
 
 	originalNow := skillusage.Now
 	defer func() { skillusage.Now = originalNow }()

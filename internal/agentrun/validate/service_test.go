@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leomorpho/docket/internal/agentrun"
+	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/claim"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
@@ -152,7 +153,7 @@ func TestServiceValidateRejectsCommitOutsideManagedBranch(t *testing.T) {
 	}
 }
 
-func TestServiceFinalizeAdvancesDoneRunToReviewAndRecordsHandoff(t *testing.T) {
+func TestServiceFinalizeAdvancesDoneRunToValidatedAndRecordsHandoff(t *testing.T) {
 	t.Parallel()
 
 	env := buildValidationEnv(t)
@@ -160,6 +161,7 @@ func TestServiceFinalizeAdvancesDoneRunToReviewAndRecordsHandoff(t *testing.T) {
 
 	result, err := env.service.Finalize(context.Background(), agentrun.ValidationInput{
 		TicketID:     "TKT-377",
+		SessionID:    "session-377",
 		RepoRoot:     env.repoRoot,
 		WorktreePath: env.worktreePath,
 		Branch:       "docket/TKT-377",
@@ -182,8 +184,8 @@ func TestServiceFinalizeAdvancesDoneRunToReviewAndRecordsHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
-	if tkt.State != ticket.State("in-review") {
-		t.Fatalf("ticket state = %q, want in-review", tkt.State)
+	if tkt.State != ticket.State("validated") {
+		t.Fatalf("ticket state = %q, want validated", tkt.State)
 	}
 	if !strings.Contains(strings.Join(tkt.LinkedCommits, ","), sha) {
 		t.Fatalf("expected linked commit %s in %#v", sha, tkt.LinkedCommits)
@@ -195,6 +197,36 @@ func TestServiceFinalizeAdvancesDoneRunToReviewAndRecordsHandoff(t *testing.T) {
 	}
 	if len(tkt.Comments) == 0 {
 		t.Fatalf("expected outcome comment recorded")
+	}
+	brief, ok, err := env.runtime.LoadBrief("TKT-377")
+	if err != nil || !ok {
+		t.Fatalf("expected persisted run brief, ok=%v err=%v", ok, err)
+	}
+	if brief.Outcome != string(agentrun.StatusDone) || brief.CommitSHA != sha {
+		t.Fatalf("unexpected run brief: %#v", brief)
+	}
+	if brief.SessionID != "session-377" {
+		t.Fatalf("brief session id = %q, want session-377", brief.SessionID)
+	}
+	if strings.TrimSpace(brief.CloseoutCommitSHA) == "" {
+		t.Fatalf("expected closeout commit sha in brief, got %#v", brief)
+	}
+	if len(brief.FilesTouched) == 0 || brief.FilesTouched[0] != "feature.txt" {
+		t.Fatalf("expected touched files in brief, got %#v", brief.FilesTouched)
+	}
+	commitBody := runGitOutput(t, env.repoRoot, "log", "-1", "--format=%B")
+	for _, want := range []string{
+		"docket: close out TKT-377",
+		"Ticket: TKT-377",
+		"Docket-Outcome: done",
+		"Docket-Run-ID: session-377",
+		"Docket-Implementer-Commit: " + sha,
+		"Docket-Validation: passed",
+		"Docket-Resume-Next:",
+	} {
+		if !strings.Contains(commitBody, want) {
+			t.Fatalf("closeout commit missing %q in %q", want, commitBody)
+		}
 	}
 }
 
@@ -226,11 +258,57 @@ func TestServiceFinalizeRecordsStuckRunWithoutAdvancingTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
-	if tkt.State != ticket.State("in-progress") {
-		t.Fatalf("ticket state = %q, want in-progress", tkt.State)
+	if tkt.State != ticket.State("running") {
+		t.Fatalf("ticket state = %q, want running", tkt.State)
 	}
 	if len(tkt.Comments) == 0 || !strings.Contains(tkt.Comments[len(tkt.Comments)-1].Body, "baseline tests failing") {
 		t.Fatalf("expected stuck comment recorded, got %#v", tkt.Comments)
+	}
+	brief, ok, err := env.runtime.LoadBrief("TKT-377")
+	if err != nil || !ok {
+		t.Fatalf("expected persisted run brief, ok=%v err=%v", ok, err)
+	}
+	if brief.Outcome != string(agentrun.StatusStuck) {
+		t.Fatalf("unexpected brief outcome: %#v", brief)
+	}
+	if !strings.Contains(strings.Join(brief.Decisions, "\n"), "baseline tests failing") {
+		t.Fatalf("expected blocker reason in run brief, got %#v", brief)
+	}
+}
+
+func TestServiceFinalizeWritesFailedValidationBriefWithoutAdvancingTicket(t *testing.T) {
+	t.Parallel()
+
+	env := buildValidationEnv(t)
+
+	result, err := env.service.Finalize(context.Background(), agentrun.ValidationInput{
+		TicketID:     "TKT-377",
+		RepoRoot:     env.repoRoot,
+		WorktreePath: env.worktreePath,
+		Branch:       "docket/TKT-377",
+		Result: agentrun.Result{
+			Status:    agentrun.StatusDone,
+			TicketID:  "TKT-377",
+			Role:      agentrun.RoleImplementer,
+			CommitSHA: "deadbeef",
+			Tests:     "passed",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Finalize() error = %v", err)
+	}
+	if result.Accepted {
+		t.Fatalf("expected validation failure, got %#v", result)
+	}
+	brief, ok, err := env.runtime.LoadBrief("TKT-377")
+	if err != nil || !ok {
+		t.Fatalf("expected persisted validation-failure brief, ok=%v err=%v", ok, err)
+	}
+	if brief.Outcome != string(agentrun.StatusFailed) {
+		t.Fatalf("unexpected brief outcome: %#v", brief)
+	}
+	if len(brief.ValidationErrors) == 0 {
+		t.Fatalf("expected validation errors in brief, got %#v", brief)
 	}
 }
 
@@ -238,6 +316,7 @@ type validationEnv struct {
 	repoRoot     string
 	worktreePath string
 	store        *local.Store
+	runtime      *runruntime.Store
 	service      *Service
 }
 
@@ -263,14 +342,15 @@ func buildValidationEnv(t *testing.T) validationEnv {
 		ID:          "TKT-377",
 		Seq:         377,
 		Title:       "Validator",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   time.Now().UTC().Truncate(time.Second),
 		UpdatedAt:   time.Now().UTC().Truncate(time.Second),
 		CreatedBy:   "human:test",
-		Description: "Validator ticket",
+		Description: "Implement the validator ticket with a bounded execution plan, explicit file targets, and concrete verification commands so the ready contract remains satisfied throughout the managed run.\n\nLikely paths:\n- feature.txt\n- README.md\n\nOut of scope:\n- changing workflow semantics\n- editing unrelated tickets\n\nVerify commands:\n- test -f feature.txt\n- test -f README.md",
 		AC: []ticket.AcceptanceCriterion{
-			{Description: "feature file exists", Run: "test -f feature.txt"},
+			{Description: "feature file exists", Run: "test -f feature.txt", VerificationSteps: []string{"Confirm feature.txt exists in the managed worktree."}},
+			{Description: "validator flow remains documented", Run: "test -f README.md", VerificationSteps: []string{"Confirm README.md still exists after the run."}},
 		},
 	}); err != nil {
 		t.Fatalf("create ticket: %v", err)
@@ -281,15 +361,18 @@ func buildValidationEnv(t *testing.T) validationEnv {
 		t.Fatalf("StartTask() error = %v", err)
 	} else {
 		store = local.New(repoRoot)
+		runtime := runruntime.New(repoRoot)
 		service := New(Dependencies{
 			RepoRoot: repoRoot,
 			Store:    store,
 			Workflow: flow,
+			Runtime:  runtime,
 		})
 		return validationEnv{
 			repoRoot:     repoRoot,
 			worktreePath: worktreePath,
 			store:        store,
+			runtime:      runtime,
 			service:      service,
 		}
 	}

@@ -1,0 +1,9 @@
+{"at":"2026-03-31T23:25:19Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestStartRunPinnedToActivatedWorkflowHash1393820771/001","ticket":"TKT-184","action":"generate workflow.lock"}
+{"at":"2026-03-31T23:25:39Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestStartRunPinnedToActivatedWorkflowHash1060755147/001","ticket":"TKT-184","action":"generate workflow.lock"}
+{"at":"2026-03-31T23:26:06Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestLockReleaseRequiresSecureSurface1572825597/001","ticket":"TKT-185","action":"release lock TKT-500"}
+{"at":"2026-03-31T23:26:06Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestLockReleaseAutoUnlocksWithEnvPassword1517799145/001","ticket":"TKT-185","action":"release lock TKT-501"}
+{"at":"2026-03-31T23:26:15Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestSecureModeUnlockExpiryAndPrivilegedRejection1253761662/001","ticket":"TKT-001","action":"set trust anchor signer=signer-1"}
+{"at":"2026-03-31T23:26:42Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestWorkflowLockGenerateAndValidate1337813352/001","ticket":"TKT-183","action":"generate workflow.lock"}
+{"at":"2026-03-31T23:26:42Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestWorkflowLockValidateRejectsStale3563950692/001","ticket":"TKT-183","action":"generate workflow.lock"}
+{"at":"2026-03-31T23:26:42Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestWorkflowLockActivateRequiresSecureMode3895448598/001","ticket":"TKT-184","action":"generate workflow.lock"}
+{"at":"2026-03-31T23:26:42Z","repo":"/var/folders/dp/twzq9jvj0377722qdcfpvr6m0000gn/T/TestStartRunPinnedToActivatedWorkflowHash1708360351/001","ticket":"TKT-184","action":"generate workflow.lock"}

@@ -34,8 +34,8 @@ func TestDefaultConfigSemanticDefaults(t *testing.T) {
 func TestDefaultConfigStateDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.DefaultState != "backlog" {
-		t.Fatalf("default_state = %q, want backlog", cfg.DefaultState)
+	if cfg.DefaultState != "draft" {
+		t.Fatalf("default_state = %q, want draft", cfg.DefaultState)
 	}
 	if cfg.DefaultPriority != 10 {
 		t.Fatalf("default_priority = %d, want 10", cfg.DefaultPriority)
@@ -43,27 +43,27 @@ func TestDefaultConfigStateDefaults(t *testing.T) {
 	if len(cfg.HandoffSections) == 0 {
 		t.Fatal("expected handoff_sections to be populated")
 	}
-	if len(cfg.States) != 6 {
-		t.Fatalf("expected 6 default states, got %d", len(cfg.States))
+	if len(cfg.States) != 5 {
+		t.Fatalf("expected 5 default states, got %d", len(cfg.States))
 	}
 
-	backlog, ok := cfg.States["backlog"]
+	draft, ok := cfg.States["draft"]
 	if !ok {
-		t.Fatal("missing backlog state")
+		t.Fatal("missing draft state")
 	}
-	if !backlog.Open {
-		t.Error("backlog should be open")
+	if !draft.Open {
+		t.Error("draft should be open")
 	}
-	if backlog.Column != 0 {
-		t.Errorf("backlog column = %d, want 0", backlog.Column)
+	if draft.Column != 0 {
+		t.Errorf("draft column = %d, want 0", draft.Column)
 	}
 
-	done, ok := cfg.States["done"]
+	validated, ok := cfg.States["validated"]
 	if !ok {
-		t.Fatal("missing done state")
+		t.Fatal("missing validated state")
 	}
-	if done.Open {
-		t.Error("done should not be open")
+	if validated.Open {
+		t.Error("validated should not be open")
 	}
 	if cfg.Workflow.Version != 1 {
 		t.Fatalf("workflow.version = %d, want 1", cfg.Workflow.Version)
@@ -86,9 +86,9 @@ func TestDefaultConfigUsesShippedWorkflowDefinition(t *testing.T) {
 }
 
 func TestMigrateStateNamesUsesShippedWorkflowDefaultsForKnownStates(t *testing.T) {
-	migrated := migrateStateNames([]string{"backlog", "todo", "in-progress", "in-review", "done", "archived"})
+	migrated := migrateStateNames([]string{"draft", "ready", "running", "validated", "archived"})
 	expected := statesFromWorkflow(defaultWorkflowConfig())
-	for _, name := range []string{"backlog", "todo", "in-progress", "in-review", "done", "archived"} {
+	for _, name := range []string{"draft", "ready", "running", "validated", "archived"} {
 		if !reflect.DeepEqual(migrated[name], expected[name]) {
 			t.Fatalf("migrateStateNames(%s) should use shipped defaults", name)
 		}
@@ -230,10 +230,10 @@ func TestConfigPathUsesSharedRootFromWorktree(t *testing.T) {
 func TestSaveConfigPreservesFalseWorkflowBooleans(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := DefaultConfig()
-	review := cfg.States["in-review"]
-	review.BlocksDependents = false
-	review.Reviewable = false
-	cfg.States["in-review"] = review
+	validated := cfg.States["validated"]
+	validated.BlocksDependents = false
+	validated.Reviewable = false
+	cfg.States["validated"] = validated
 
 	if err := SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -244,7 +244,7 @@ func TestSaveConfigPreservesFalseWorkflowBooleans(t *testing.T) {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
-	reloaded := loaded.States["in-review"]
+	reloaded := loaded.States["validated"]
 	if reloaded.BlocksDependents {
 		t.Fatal("BlocksDependents should remain false after save/load")
 	}
@@ -253,18 +253,18 @@ func TestSaveConfigPreservesFalseWorkflowBooleans(t *testing.T) {
 	}
 }
 
-func TestDefaultConfigDoesNotBlockDependentsInReview(t *testing.T) {
+func TestDefaultConfigDoesNotBlockDependentsInValidated(t *testing.T) {
 	cfg := DefaultConfig()
 
-	review := cfg.States["in-review"]
-	if review.BlocksDependents {
-		t.Fatal("default in-review state should not block dependents")
+	validated := cfg.States["validated"]
+	if validated.BlocksDependents {
+		t.Fatal("default validated state should not block dependents")
 	}
-	if !review.Reviewable {
-		t.Fatal("default in-review state should remain reviewable")
+	if validated.Reviewable {
+		t.Fatal("default validated state should not be reviewable")
 	}
-	if cfg.BlocksDependents("in-review") {
-		t.Fatal("helper should report default in-review as non-blocking")
+	if cfg.BlocksDependents("validated") {
+		t.Fatal("helper should report default validated as non-blocking")
 	}
 }
 
@@ -559,8 +559,8 @@ func TestLoadConfigNewMapFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
-	if len(cfg.States) != 6 {
-		t.Fatalf("expected 6 states, got %d", len(cfg.States))
+	if len(cfg.States) != 5 {
+		t.Fatalf("expected 5 states, got %d", len(cfg.States))
 	}
 }
 
@@ -849,25 +849,25 @@ func TestConfigHelpers(t *testing.T) {
 	cfg := DefaultConfig()
 
 	// IsValidState
-	if !cfg.IsValidState("backlog") {
-		t.Error("backlog should be valid")
+	if !cfg.IsValidState("draft") {
+		t.Error("draft should be valid")
 	}
 	if cfg.IsValidState("nonexistent") {
 		t.Error("nonexistent should not be valid")
 	}
 
-	// OpenStates: should include backlog, todo, in-progress, in-review; exclude done, archived
+	// OpenStates: should include draft, ready, running; exclude validated, archived
 	open := cfg.OpenStates()
 	openSet := make(map[string]bool, len(open))
 	for _, s := range open {
 		openSet[s] = true
 	}
-	for _, s := range []string{"backlog", "todo", "in-progress", "in-review"} {
+	for _, s := range []string{"draft", "ready", "running"} {
 		if !openSet[s] {
 			t.Errorf("expected %q in open states", s)
 		}
 	}
-	for _, s := range []string{"done", "archived"} {
+	for _, s := range []string{"validated", "archived"} {
 		if openSet[s] {
 			t.Errorf("did not expect %q in open states", s)
 		}
@@ -881,7 +881,7 @@ func TestConfigHelpers(t *testing.T) {
 	}
 
 	startable := cfg.StartableStates()
-	wantStartable := []string{"backlog", "todo"}
+	wantStartable := []string{"ready"}
 	if len(startable) != len(wantStartable) {
 		t.Fatalf("StartableStates length = %d, want %d (%v)", len(startable), len(wantStartable), startable)
 	}
@@ -892,18 +892,18 @@ func TestConfigHelpers(t *testing.T) {
 	}
 
 	// ValidTransitions
-	next := cfg.ValidTransitions("backlog")
+	next := cfg.ValidTransitions("draft")
 	if len(next) == 0 {
-		t.Error("expected transitions from backlog")
+		t.Error("expected transitions from draft")
 	}
 	found := false
 	for _, s := range next {
-		if s == "todo" {
+		if s == "ready" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("expected backlog -> todo transition")
+		t.Error("expected draft -> ready transition")
 	}
 	if cfg.ValidTransitions("nonexistent") != nil {
 		t.Error("expected nil for unknown state")
@@ -911,8 +911,8 @@ func TestConfigHelpers(t *testing.T) {
 
 	// ColumnOrder: should return all states sorted by Column.
 	cols := cfg.ColumnOrder()
-	if len(cols) != 6 {
-		t.Fatalf("expected 6 columns, got %d", len(cols))
+	if len(cols) != 5 {
+		t.Fatalf("expected 5 columns, got %d", len(cols))
 	}
 	for i := 1; i < len(cols); i++ {
 		if cols[i].Column < cols[i-1].Column {
@@ -922,11 +922,11 @@ func TestConfigHelpers(t *testing.T) {
 
 	// StateNames: should return keys sorted by Column.
 	names := cfg.StateNames()
-	if len(names) != 6 {
-		t.Fatalf("expected 6 state names, got %d", len(names))
+	if len(names) != 5 {
+		t.Fatalf("expected 5 state names, got %d", len(names))
 	}
-	if names[0] != "backlog" {
-		t.Errorf("first state should be backlog (column 0), got %q", names[0])
+	if names[0] != "draft" {
+		t.Errorf("first state should be draft (column 0), got %q", names[0])
 	}
 }
 
@@ -946,8 +946,8 @@ func TestDefaultStateAndPriorityApplyDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if cfg.DefaultState != "backlog" {
-		t.Errorf("default_state = %q, want backlog", cfg.DefaultState)
+	if cfg.DefaultState != "draft" {
+		t.Errorf("default_state = %q, want draft", cfg.DefaultState)
 	}
 	if cfg.DefaultPriority != 10 {
 		t.Errorf("default_priority = %d, want 10", cfg.DefaultPriority)

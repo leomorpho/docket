@@ -31,8 +31,6 @@ func TestRegistryCoversCoreManagedArtifacts(t *testing.T) {
 		{RepoLearnRules, RootRepo, PolicyLocalOnly, MigrationMigrateToLocal, ".docket/runtime/learn-rules.json"},
 		{RepoSkillUsageEvents, RootRepo, PolicyLocalOnly, MigrationMigrateToLocal, ".docket/runtime/skill-usage.jsonl"},
 		{RepoSemanticDir, RootRepo, PolicyLocalOnly, MigrationMigrateToLocal, ".docket/semantic"},
-		{RepoWorkflowPolicy, RootRepo, PolicyTracked, MigrationStable, ".docket/workflow.proposal.json"},
-		{RepoWorkflowLock, RootRepo, PolicyTracked, MigrationStable, ".docket/workflow.lock.json"},
 		{RepoProofsDir, RootRepo, PolicyTracked, MigrationStable, ".docket/proofs"},
 		{RepoRelations, RootRepo, PolicyTracked, MigrationStable, ".docket/relations.json"},
 		{RepoLocks, RootRepo, PolicyLocalOnly, MigrationMigrateToLocal, ".docket/locks.json"},
@@ -222,12 +220,9 @@ func TestCoreLifecycleSourcesUseArtifactRegistry(t *testing.T) {
 		"internal/skillusage/events.go",
 		"internal/learning/learning.go",
 		"internal/proof/repository.go",
-		"internal/security/file_keystore.go",
-		"internal/security/repo_namespace.go",
-		"internal/security/session.go",
+		"internal/runstate/store.go",
 		"internal/semantic/metadata.go",
 		"internal/ticket/config.go",
-		"internal/workflow/policy_lock.go",
 	}
 
 	_, thisFile, _, _ := runtime.Caller(0)

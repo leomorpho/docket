@@ -54,6 +54,9 @@ func Tickets(ctx context.Context, s *local.Store, cfg *ticket.Config, f store.Fi
 		if full == nil || !IsLeafWorkItem(cfg, idx, full) {
 			continue
 		}
+		if len(local.RunnableContractErrors(cfg, idx, full)) > 0 {
+			continue
+		}
 		blocked, err := blockedByClaim(s.RepoRoot, cfg, full)
 		if err != nil {
 			return nil, err

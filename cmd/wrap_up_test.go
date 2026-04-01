@@ -13,7 +13,7 @@ import (
 
 func TestWrapUpReportsActionableNextStepsWhenNotReady(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-969", 969, ticket.State("todo"), []ticket.AcceptanceCriterion{
+	h.seedTicket("TKT-969", 969, ticket.State("draft"), []ticket.AcceptanceCriterion{
 		{Description: "finish implementation", Done: false},
 	})
 
@@ -58,16 +58,14 @@ func TestWrapUpReportsReadyTicketAndReviewTransitionHint(t *testing.T) {
 		ID:          "TKT-970",
 		Seq:         970,
 		Title:       "Ready ticket",
-		Description: "ready wrap-up ticket",
-		State:       ticket.State("in-progress"),
+		Description: updateRunnableDescription(),
+		State:       ticket.State("running"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
 		Handoff:     handoff,
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "done", Done: true, Evidence: "verified"},
-		},
+		AC:          updateCompletedAC(),
 	}); err != nil {
 		t.Fatalf("seed ready ticket failed: %v", err)
 	}
@@ -79,8 +77,8 @@ func TestWrapUpReportsReadyTicketAndReviewTransitionHint(t *testing.T) {
 	if !strings.Contains(out, "Wrap-up for TKT-970: READY") {
 		t.Fatalf("expected READY status, got:\n%s", out)
 	}
-	if !strings.Contains(out, "docket update TKT-970 --state in-review") {
-		t.Fatalf("expected in-review transition hint, got:\n%s", out)
+	if !strings.Contains(out, "docket update TKT-970 --state validated") {
+		t.Fatalf("expected validated transition hint, got:\n%s", out)
 	}
 
 	jsonOut, err := h.run("wrap-up", "TKT-970", "--format", "json")
@@ -157,16 +155,14 @@ func TestWrapUpUsesConfiguredWorkflowRoleStates(t *testing.T) {
 		ID:          "TKT-971",
 		Seq:         971,
 		Title:       "Custom wrap-up",
-		Description: "custom wrap-up ticket",
+		Description: updateRunnableDescription(),
 		State:       "testing",
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
 		Handoff:     "Current state\n\nDecisions made",
-		AC: []ticket.AcceptanceCriterion{
-			{Description: "done", Done: true, Evidence: "verified"},
-		},
+		AC:          updateCompletedAC(),
 	}); err != nil {
 		t.Fatalf("seed custom wrap-up ticket failed: %v", err)
 	}
@@ -246,7 +242,7 @@ func TestWrapUpSuggestsIntermediaryActiveStateBeforeReviewWhenRequired(t *testin
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
 		AC: []ticket.AcceptanceCriterion{
-			{Description: "all good", Done: true},
+			{Description: "all good", Done: true, Evidence: "verified"},
 		},
 		Handoff: "**Current state:** coding\n\n**Decisions made:** done\n\n**Files touched:** cmd/wrap_up.go\n\n**Remaining work:** move to testing before review\n\n**AC status:** complete",
 	}); err != nil {

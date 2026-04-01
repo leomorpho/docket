@@ -6,10 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/leomorpho/docket/internal/store/local"
-	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +14,7 @@ var mergeSubjectTicketRE = regexp.MustCompile(`^Merge ticket branch docket/(TKT-
 
 var hookPostMergeReviewSyncCmd = &cobra.Command{
 	Use:    "__hook-post-merge-review-sync",
-	Short:  "internal post-merge review state synchronizer",
+	Short:  "legacy post-merge hook placeholder",
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runHookPostMergeReviewSync(context.Background(), repo, cmd.ErrOrStderr())
@@ -25,6 +22,7 @@ var hookPostMergeReviewSyncCmd = &cobra.Command{
 }
 
 func runHookPostMergeReviewSync(ctx context.Context, repoRoot string, sink interface{ Write([]byte) (int, error) }) error {
+	_ = ctx
 	ticketID, err := mergedTicketFromHead(repoRoot)
 	if err != nil {
 		return err
@@ -32,35 +30,8 @@ func runHookPostMergeReviewSync(ctx context.Context, repoRoot string, sink inter
 	if ticketID == "" {
 		return nil
 	}
-
-	cfg, err := ticket.LoadConfig(repoRoot)
-	if err != nil {
-		return err
-	}
-	s := local.New(repoRoot)
-	t, err := s.GetTicket(ctx, ticketID)
-	if err != nil || t == nil {
-		return err
-	}
-	if !cfg.StateHasRole(string(t.State), "active") {
-		return nil
-	}
-
-	reviewState := ticket.State(nextStateForRole(cfg, t.State, "review", "in-review"))
-	if err := ticket.ValidateTransition(cfg, t.State, reviewState); err != nil {
-		return nil
-	}
-
-	fromState := t.State
-	t.State = reviewState
-	t.UpdatedAt = time.Now().UTC().Truncate(time.Second)
-	if err := s.UpdateTicket(ctx, t); err != nil {
-		return err
-	}
-	_ = releaseLockForTicket(repoRoot, t.ID)
-
 	if sink != nil {
-		_, _ = sink.Write([]byte(fmt.Sprintf("docket: auto-transitioned %s from %s to %s after merge\n", t.ID, fromState, t.State)))
+		_, _ = sink.Write([]byte(fmt.Sprintf("docket: post-merge review sync is disabled for %s; managed runs now finalize directly to validated/completed\n", ticketID)))
 	}
 	return nil
 }

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/leomorpho/docket/internal/artifacts"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/spf13/cobra"
 )
@@ -15,10 +15,7 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize docket in a repository",
-	Long: `Initialize docket in a repository.
-
-Secure features require DOCKET_HOME to be set to a writable directory outside the repo,
-for example: DOCKET_HOME=$HOME/.docket-home`,
+Long: `Initialize docket in a repository.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfgPath := ticket.ConfigPath(repo)
 		if _, err := os.Stat(cfgPath); err == nil {
@@ -43,8 +40,8 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 			return fmt.Errorf("saving config: %w", err)
 		}
 
-		// 2b. Initialize stable repo namespace under DOCKET_HOME.
-		ns := security.NewRepoNamespaceStore(docketHome)
+		// 2b. Initialize stable repo namespace for runtime metadata.
+		ns := runstate.New(runtimeNamespaceRoot(repo))
 		repoID, nsPath, err := ns.EnsureRepoNamespace(repo)
 		if err != nil {
 			return fmt.Errorf("initializing repo security namespace: %w", err)
@@ -60,9 +57,8 @@ for example: DOCKET_HOME=$HOME/.docket-home`,
 			printJSON(cmd, map[string]string{"status": "ok", "path": docketDir})
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized docket in %s/\n\n", docketDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "Security namespace: %s (%s)\n\n", repoID, nsPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "Runtime namespace: %s (%s)\n\n", repoID, nsPath)
 			fmt.Fprintln(cmd.OutOrStdout(), "Next steps:")
-			fmt.Fprintln(cmd.OutOrStdout(), "  export DOCKET_HOME=$HOME/.docket-home")
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket create --title \"My first ticket\"")
 			fmt.Fprintln(cmd.OutOrStdout(), "  docket board")
 		}

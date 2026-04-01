@@ -18,8 +18,6 @@ In short: Docket is moving toward a ticketing + orchestration runtime for agenti
 
 The execution order for that shift is documented in [docs/recommended-order.md](./docs/recommended-order.md).
 
-Some current implementation surfaces still reflect older security/governance experiments. Those documents remain useful as references for current behavior, but they are not the primary product direction.
-
 ## What it does
 
 - Tracks tickets as markdown files with YAML frontmatter at `.docket/tickets/TKT-XXX.md`
@@ -45,16 +43,12 @@ Markdown ticket files are the source of truth. SQLite is a cache only and is nev
 ## Ticket states
 
 ```
-default example: backlog → todo → in-progress → [blocked*] → in-review → done → archived
+draft → ready → running → validated → archived
 ```
 
 Your repository defines workflow states and transitions in `.docket/config.json`.
-Treat the graph above as a default example, not a universal rule.
+Treat the graph above as the intended default direction, not a universal rule.
 `blocked` is computed automatically from unresolved `blocked-by` dependencies.
-
-## DOCKET_HOME
-
-Docket keeps its secure metadata in a repository-isolated root defined by `DOCKET_HOME`. Set `DOCKET_HOME` to an absolute, writable directory (for example, `DOCKET_HOME=$HOME/.docket-home`) before running commands. The CLI fails immediately if the variable is unset or if the path cannot be used, forcing secure storage to be configured up front.
 
 ## Quick start
 

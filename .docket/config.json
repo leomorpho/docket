@@ -5,9 +5,9 @@
     "archived": {
       "label": "Archived",
       "open": false,
-      "column": 5,
+      "column": 4,
       "next": [
-        "backlog"
+        "draft"
       ],
       "roles": [
         "archived"
@@ -17,13 +17,29 @@
       "reviewable": false,
       "blocks_dependents": false
     },
-    "backlog": {
-      "label": "Backlog",
+    "draft": {
+      "label": "Draft",
       "open": true,
       "column": 0,
       "next": [
-        "todo",
-        "in-progress",
+        "ready",
+        "archived"
+      ],
+      "roles": [
+        "intake"
+      ],
+      "terminal": false,
+      "startable": false,
+      "reviewable": false,
+      "blocks_dependents": true
+    },
+    "ready": {
+      "label": "Ready",
+      "open": true,
+      "column": 1,
+      "next": [
+        "running",
+        "draft",
         "archived"
       ],
       "roles": [
@@ -34,29 +50,14 @@
       "reviewable": false,
       "blocks_dependents": true
     },
-    "done": {
-      "label": "Done",
-      "open": false,
-      "column": 4,
-      "next": [
-        "archived",
-        "in-progress"
-      ],
-      "roles": [
-        "completed"
-      ],
-      "terminal": true,
-      "startable": false,
-      "reviewable": false,
-      "blocks_dependents": false
-    },
-    "in-progress": {
-      "label": "In Progress",
+    "running": {
+      "label": "Running",
       "open": true,
       "column": 2,
       "next": [
-        "in-review",
-        "todo",
+        "validated",
+        "ready",
+        "draft",
         "archived"
       ],
       "roles": [
@@ -67,29 +68,12 @@
       "reviewable": false,
       "blocks_dependents": true
     },
-    "in-review": {
-      "label": "In Review",
-      "open": true,
-      "column": 3,
-      "next": [
-        "done",
-        "in-progress",
-        "archived"
-      ],
-      "roles": [
-        "review"
-      ],
-      "terminal": false,
-      "startable": false,
-      "reviewable": true,
-      "blocks_dependents": true
-    },
     "stale": {
       "label": "Stale",
       "open": false,
-      "column": 6,
+      "column": 5,
       "next": [
-        "backlog",
+        "draft",
         "archived"
       ],
       "terminal": false,
@@ -97,22 +81,21 @@
       "reviewable": false,
       "blocks_dependents": false
     },
-    "todo": {
-      "label": "To Do",
-      "open": true,
-      "column": 1,
+    "validated": {
+      "label": "Validated",
+      "open": false,
+      "column": 3,
       "next": [
-        "in-progress",
-        "backlog",
+        "running",
         "archived"
       ],
       "roles": [
-        "intake"
+        "completed"
       ],
-      "terminal": false,
-      "startable": true,
+      "terminal": true,
+      "startable": false,
       "reviewable": false,
-      "blocks_dependents": true
+      "blocks_dependents": false
     }
   },
   "labels": [
@@ -124,7 +107,7 @@
     "human-only"
   ],
   "commit_sessions": false,
-  "default_state": "backlog",
+  "default_state": "draft",
   "default_priority": 10,
   "handoff_sections": [
     "Current state",

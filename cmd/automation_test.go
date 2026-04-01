@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/leomorpho/docket/internal/ticket"
-	"github.com/spf13/cobra"
 )
 
 func TestIsAutomationModeFromFlagOrEnv(t *testing.T) {
@@ -33,54 +32,12 @@ func TestIsAutomationModeFromFlagOrEnv(t *testing.T) {
 	}
 }
 
-func TestResolveDocketHomeAutomationSkipsPrompt(t *testing.T) {
-	prevAutomation := automationMode
-	prevInteractive := docketHomeInteractiveFn
-	prevPrompt := docketHomePromptFn
-	defer func() {
-		automationMode = prevAutomation
-		docketHomeInteractiveFn = prevInteractive
-		docketHomePromptFn = prevPrompt
-	}()
-
-	automationMode = true
-	t.Setenv("DOCKET_HOME", "")
-	t.Setenv("HOME", t.TempDir())
-
-	promptCalls := 0
-	docketHomeInteractiveFn = func() bool { return true }
-	docketHomePromptFn = func(defaultPath string) (bool, error) {
-		promptCalls++
-		return true, nil
-	}
-
-	_, err := resolveDocketHome()
-	if err == nil {
-		t.Fatal("expected missing DOCKET_HOME error")
-	}
-	if promptCalls != 0 {
-		t.Fatalf("expected no prompt calls in automation mode, got %d", promptCalls)
-	}
-}
-
 func TestShouldSkipVersionCheckAutomation(t *testing.T) {
 	prev := automationMode
 	defer func() { automationMode = prev }()
 	automationMode = true
 	if !shouldSkipVersionCheck(nil) {
 		t.Fatal("expected version check to be skipped in automation mode")
-	}
-}
-
-func TestConfirmPrivilegedPromptAutomationRequiresYes(t *testing.T) {
-	prev := automationMode
-	defer func() { automationMode = prev }()
-	automationMode = true
-
-	cmd := &cobra.Command{}
-	cmd.SetIn(strings.NewReader("yes\n"))
-	if err := confirmPrivilegedPrompt(cmd, false, "TKT-001", "set trust anchor"); err == nil {
-		t.Fatal("expected automation mode confirmation error without --yes")
 	}
 }
 

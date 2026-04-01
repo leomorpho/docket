@@ -28,7 +28,7 @@ func TestValidateCmd_PrescriptiveForDirectEdit(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "T",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -85,7 +85,7 @@ func TestValidateCmd_RevertsInvalidDirectEdit(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "T",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -101,7 +101,7 @@ func TestValidateCmd_RevertsInvalidDirectEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
-	edited := strings.Replace(string(raw), "state: todo", "state: definitely-invalid", 1)
+	edited := strings.Replace(string(raw), "state: draft", "state: definitely-invalid", 1)
 	if err := os.WriteFile(p, []byte(edited), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
@@ -120,8 +120,8 @@ func TestValidateCmd_RevertsInvalidDirectEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket failed: %v", err)
 	}
-	if ticketAfter.State != ticket.State("todo") {
-		t.Fatalf("expected state to be reverted to todo, got %s", ticketAfter.State)
+	if ticketAfter.State != ticket.State("draft") {
+		t.Fatalf("expected state to be reverted to draft, got %s", ticketAfter.State)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestValidateCmd_AcceptsHookStyleFilePathArgument(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "T",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -177,7 +177,7 @@ func TestValidateCmd_StrictFailsOnWarnings(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "T",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -209,8 +209,8 @@ func TestValidateAll(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	desc := "Has twenty words or more in the description to pass the quality check easily and without any issues whatsoever."
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", CreatedBy: "me", CreatedAt: now, UpdatedAt: now, Description: desc, AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "todo", CreatedBy: "me", CreatedAt: now, UpdatedAt: now, Description: desc, AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", CreatedBy: "me", CreatedAt: now, UpdatedAt: now, Description: desc, AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "draft", CreatedBy: "me", CreatedAt: now, UpdatedAt: now, Description: desc, AC: []ticket.AcceptanceCriterion{{Description: "A"}}})
 
 	b := new(bytes.Buffer)
 	rootCmd.SetOut(b)
@@ -243,7 +243,7 @@ func TestValidateCmd_MultiplePathArgs(t *testing.T) {
 			ID:          fmt.Sprintf("TKT-%03d", i),
 			Seq:         i,
 			Title:       fmt.Sprintf("T%d", i),
-			State:       "todo",
+			State:       "draft",
 			CreatedBy:   "me",
 			CreatedAt:   now,
 			UpdatedAt:   now,

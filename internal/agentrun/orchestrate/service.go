@@ -12,7 +12,7 @@ import (
 
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 	"github.com/leomorpho/docket/internal/workflow"
@@ -23,7 +23,7 @@ type Dependencies struct {
 	Actor          string
 	Store          *local.Store
 	Workflow       *workflow.WorkflowManager
-	Namespace      *security.RepoNamespaceStore
+	Namespace      *runstate.Store
 	Adapter        agentrun.Adapter
 	Reviewer       agentrun.Adapter
 	Monitor        agentrun.Monitor
@@ -40,7 +40,7 @@ type Service struct {
 	actor          string
 	store          *local.Store
 	workflow       *workflow.WorkflowManager
-	namespace      *security.RepoNamespaceStore
+	namespace      *runstate.Store
 	adapter        agentrun.Adapter
 	reviewer       agentrun.Adapter
 	monitor        agentrun.Monitor
@@ -176,15 +176,13 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 		RepoRoot:     s.repoRoot,
 		WorktreePath: started.WorktreePath,
 		Branch:       started.Branch,
+		SessionID:    started.Record.SessionID,
 		Result:       obs.Result,
 	}
 	if obs.Result.Status != agentrun.StatusDone {
 		validation, err := s.validator.Finalize(ctx, validationInput)
 		if err != nil {
 			return agentrun.TicketRunSummary{}, err
-		}
-		if !obs.TimedOut {
-			_ = s.cleanupRuntime(ticketID)
 		}
 		if obs.TimedOut {
 			reason := strings.TrimSpace(obs.Result.Reason)
@@ -193,6 +191,12 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 			}
 			return failedOrRawSummary(ticketID, obs.Result.Status, reason, validation), nil
 		}
+		if isRecoverableManagedRunResult(obs.Result.Status) {
+			_ = s.markRuntimeRecoverable(ticketID, started.Record.SessionID, obs.Result.Status, obs.Result.Reason)
+		}
+		if !isRecoverableManagedRunResult(obs.Result.Status) {
+			_ = s.cleanupRuntime(ticketID)
+		}
 		return failedOrRawSummary(ticketID, obs.Result.Status, obs.Result.Reason, validation), nil
 	}
 	validation, err := s.validator.Validate(ctx, validationInput)
@@ -200,7 +204,7 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 		return agentrun.TicketRunSummary{}, err
 	}
 	if !validation.Accepted {
-		_ = s.cleanupRuntime(ticketID)
+		_ = s.markRuntimeRecoverable(ticketID, started.Record.SessionID, agentrun.StatusFailed, strings.Join(validation.Reasons, "; "))
 		return failedOrRawSummary(ticketID, agentrun.StatusFailed, strings.Join(validation.Reasons, "; "), validation), nil
 	}
 	if s.reviewer != nil {
@@ -333,8 +337,8 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
-	if !ok || !status.Hung {
-		return agentrun.TicketRunSummary{}, fmt.Errorf("ticket %s does not have a hung active run", ticketID)
+	if !ok || !isRecoverableManagedRunStatus(status) {
+		return agentrun.TicketRunSummary{}, fmt.Errorf("ticket %s does not have a recoverable managed run", ticketID)
 	}
 	prompt, err := s.runtime.LoadPrompt(ticketID)
 	if err != nil {
@@ -377,18 +381,70 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 		RepoRoot:     s.repoRoot,
 		WorktreePath: worktreePath,
 		Branch:       branch,
+		SessionID:    status.SessionID,
 		Result:       obs.Result,
 	})
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
 	if !obs.TimedOut {
-		_ = s.cleanupRuntime(ticketID)
+		if isRecoverableManagedRunResult(obs.Result.Status) {
+			_ = s.markRuntimeRecoverable(ticketID, status.SessionID, obs.Result.Status, obs.Result.Reason)
+		}
+		if !isRecoverableManagedRunResult(obs.Result.Status) {
+			_ = s.cleanupRuntime(ticketID)
+		}
 	}
 	if obs.TimedOut {
 		return failedOrRawSummary(ticketID, obs.Result.Status, "run hung again; inspect with `docket run-status`", validation), nil
 	}
 	return failedOrRawSummary(ticketID, obs.Result.Status, obs.Result.Reason, validation), nil
+}
+
+func isRecoverableManagedRunResult(status agentrun.Status) bool {
+	return status == agentrun.StatusStuck || status == agentrun.StatusFailed
+}
+
+func isRecoverableManagedRunStatus(status runruntime.StatusSnapshot) bool {
+	if strings.TrimSpace(status.SessionID) == "" {
+		return false
+	}
+	if status.Hung {
+		return true
+	}
+	switch strings.TrimSpace(status.LastResultStatus) {
+	case string(agentrun.StatusStuck), string(agentrun.StatusFailed):
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) markRuntimeRecoverable(ticketID, sessionID string, result agentrun.Status, detail string) error {
+	if s.runtime == nil {
+		return nil
+	}
+	status, ok, err := s.runtime.LoadStatus(ticketID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		status = runruntime.StatusSnapshot{TicketID: ticketID}
+	}
+	if strings.TrimSpace(status.SessionID) == "" {
+		status.SessionID = strings.TrimSpace(sessionID)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	status.Active = false
+	status.Hung = false
+	status.PID = 0
+	status.LastEventAt = now
+	status.LastVisibleAt = now
+	status.LastResultStatus = string(result)
+	if strings.TrimSpace(detail) != "" {
+		status.LastVisibleText = strings.TrimSpace(detail)
+	}
+	return s.runtime.WriteStatus(status)
 }
 
 func (s *Service) PingTicket(ctx context.Context, ticketID string) (agentrun.PingSummary, error) {

@@ -21,7 +21,7 @@ func TestBuildStartAgentQuickstartContentAndConciseness(t *testing.T) {
 	if !strings.Contains(strings.Join(quickstart.CoreWorkflow, "\n"), "docket show TKT-NNN --format context") {
 		t.Fatalf("core workflow missing show context command: %#v", quickstart.CoreWorkflow)
 	}
-	if !strings.Contains(strings.Join(quickstart.CoreWorkflow, "\n"), "docket update TKT-NNN --state in-progress") {
+	if !strings.Contains(strings.Join(quickstart.CoreWorkflow, "\n"), "docket update TKT-NNN --state running") {
 		t.Fatalf("core workflow missing update command: %#v", quickstart.CoreWorkflow)
 	}
 	if !strings.Contains(strings.Join(quickstart.CapabilityDiscovery, "\n"), "docket capabilities") {
@@ -113,15 +113,15 @@ func TestBuildStartAgentQuickstartUsesConfiguredActiveStateName(t *testing.T) {
 	if !strings.Contains(strings.Join(quickstart.CoreWorkflow, "\n"), "docket update TKT-NNN --state building") {
 		t.Fatalf("expected quickstart to use configured active state, got %#v", quickstart.CoreWorkflow)
 	}
-	if !strings.Contains(quickstart.ManagedRunBinding, "moving to `qa`") {
-		t.Fatalf("expected managed binding to mention configured review state, got %#v", quickstart.ManagedRunBinding)
+	if !strings.Contains(quickstart.ManagedRunBinding, "moving to `shipped`") {
+		t.Fatalf("expected managed binding to mention configured validated/completed state, got %#v", quickstart.ManagedRunBinding)
 	}
 }
 
 func TestStartOutputIncludesAgentQuickstartForHumanAndJSON(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-970", 970, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
-	h.seedTicket("TKT-971", 971, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-970", 970, ticket.State("ready"), updateRunnableAC())
+	h.seedTicket("TKT-971", 971, ticket.State("ready"), updateRunnableAC())
 
 	humanOut, err := h.run("start")
 	if err != nil {

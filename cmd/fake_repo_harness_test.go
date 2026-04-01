@@ -14,7 +14,7 @@ import (
 	"time"
 
 	docketgit "github.com/leomorpho/docket/internal/git"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -91,6 +91,20 @@ func (h *fakeRepoHarness) seedTicket(id string, seq int, state ticket.State, ac 
 
 	s := local.New(h.repo)
 	now := time.Now().UTC().Truncate(time.Second)
+	description := "harness ticket"
+	handoff := ""
+	if cfg, err := ticket.LoadConfig(h.repo); err == nil {
+		if stateCfg, ok := cfg.States[string(state)]; ok && (stateCfg.Startable || cfg.StateHasRole(string(state), "active")) {
+			description = updateRunnableDescription()
+		}
+		if cfg.StateHasRole(string(state), "completed") {
+			description = updateRunnableDescription()
+		}
+	}
+	if state == ticket.State("validated") {
+		description = updateRunnableDescription()
+		handoff = updateStructuredHandoff(string(state), "none")
+	}
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
 		ID:          id,
 		Seq:         seq,
@@ -100,8 +114,9 @@ func (h *fakeRepoHarness) seedTicket(id string, seq int, state ticket.State, ac 
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:harness-agent",
-		Description: "harness ticket",
+		Description: description,
 		AC:          ac,
+		Handoff:     handoff,
 	}); err != nil {
 		h.t.Fatalf("seed ticket %s failed: %v", id, err)
 	}
@@ -141,7 +156,7 @@ func (h *fakeRepoHarness) writeJSONSpec(name string, payload any) string {
 
 func TestFakeRepoHarnessSetupAndSeedHelpers(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-901", 901, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-901", 901, ticket.State("draft"), []ticket.AcceptanceCriterion{{Description: "ac"}})
 
 	out, err := h.run("show", "TKT-901", "--format", "json")
 	if err != nil {
@@ -169,7 +184,7 @@ func TestFakeRepoHarnessCommandWrapper(t *testing.T) {
 
 func TestFakeRepoHarnessHappyPathIntegration(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-902", 902, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-902", 902, ticket.State("ready"), updateRunnableAC())
 
 	if out, err := h.run("bootstrap", "--adapter", "codex"); err != nil {
 		t.Fatalf("bootstrap failed: %v\n%s", err, out)
@@ -197,7 +212,7 @@ func TestFakeRepoHarnessHappyPathIntegration(t *testing.T) {
 		t.Fatalf("unmarshal doctor json failed: %v\n%s", err, doctorOut)
 	}
 
-	ns := security.NewRepoNamespaceStore(h.home)
+	ns := runstate.New(h.home)
 	run, ok, err := ns.GetRunManifest(h.repo, "TKT-902")
 	if err != nil || !ok {
 		t.Fatalf("expected run manifest for TKT-902, ok=%v err=%v", ok, err)
@@ -211,8 +226,9 @@ func TestFakeRepoHarnessHappyPathIntegration(t *testing.T) {
 
 func TestFakeRepoHarnessFailureRetryIntegration(t *testing.T) {
 	h := newFakeRepoHarness(t)
-	h.seedTicket("TKT-903", 903, ticket.State("todo"), []ticket.AcceptanceCriterion{
+	h.seedTicket("TKT-903", 903, ticket.State("ready"), []ticket.AcceptanceCriterion{
 		{Description: "ready file exists", Run: "test -f .ready"},
+		{Description: "retry trace is emitted", Run: "test -n \"$DOCKET_AGENT_ID\""},
 	})
 	cfg, err := ticket.LoadConfig(h.repo)
 	if err != nil {
@@ -256,45 +272,45 @@ func TestFakeRepoHarnessBlockedBacklogDiagnosisIntegration(t *testing.T) {
 			ID:          "TKT-910",
 			Seq:         910,
 			Title:       "Current blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "agent:harness-agent",
-			Description: "blocking ticket",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-911",
 			Seq:         911,
 			Title:       "Blocked leaf one",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-910"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "agent:harness-agent",
-			Description: "blocked leaf",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-912",
 			Seq:         912,
 			Title:       "Blocked leaf two",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    3,
 			BlockedBy:   []string{"TKT-910"},
 			CreatedAt:   now.Add(2 * time.Minute),
 			UpdatedAt:   now.Add(2 * time.Minute),
 			CreatedBy:   "agent:harness-agent",
-			Description: "blocked leaf",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-913",
 			Seq:         913,
 			Title:       "Program: Coordination only",
-			State:       ticket.State("todo"),
+			State:       ticket.State("draft"),
 			Priority:    4,
 			Labels:      []string{"program", "topo:coordination"},
 			CreatedAt:   now.Add(3 * time.Minute),
@@ -316,7 +332,7 @@ func TestFakeRepoHarnessBlockedBacklogDiagnosisIntegration(t *testing.T) {
 	if !strings.Contains(listOut, "Queue warning: none are runnable right now") {
 		t.Fatalf("expected blocked backlog diagnosis in list output, got:\n%s", listOut)
 	}
-	if !strings.Contains(listOut, "2 actionable tickets are in startable states, 2 blocked, 1 coordination-only hidden") {
+	if !strings.Contains(listOut, "2 actionable tickets are in startable states, 2 blocked") {
 		t.Fatalf("expected deterministic blocked/coordination counts, got:\n%s", listOut)
 	}
 	if !strings.Contains(listOut, "Top unresolved blockers: TKT-910 x2") {
@@ -389,7 +405,7 @@ func TestAdapterMatrixIntegration(t *testing.T) {
 	for i, fixture := range fixtures {
 		h := newFakeRepoHarnessForAdapter(t, fixture.AdapterID)
 		ticketID := fmt.Sprintf("TKT-%03d", 920+i)
-		h.seedTicket(ticketID, 920+i, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+		h.seedTicket(ticketID, 920+i, ticket.State("ready"), updateRunnableAC())
 
 		doctorBeforeOut, err := h.run("doctor", "--format", "json")
 		if err != nil {
@@ -450,7 +466,7 @@ func TestAdapterMatrixIntegration(t *testing.T) {
 			t.Fatalf("%s: expected hooks PASS after bootstrap", fixture.AdapterID)
 		}
 
-		ns := security.NewRepoNamespaceStore(h.home)
+		ns := runstate.New(h.home)
 		run, ok, err := ns.GetRunManifest(h.repo, ticketID)
 		if err != nil || !ok {
 			t.Fatalf("%s: expected run manifest for %s, ok=%v err=%v", fixture.AdapterID, ticketID, ok, err)

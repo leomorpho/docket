@@ -77,16 +77,4 @@ func RegisterCoreHooks(m *Manager) {
 			return nil
 		},
 	})
-
-	m.Register(Registration{
-		Name:  "enforce-privileged-authorization",
-		Event: EventPrivileged,
-		Mode:  ModeEnforcement,
-		Run: func(ctx Context) error {
-			if !ctx.PrivilegedAuthorized {
-				return fmt.Errorf("privileged transition requires secure-mode authorization")
-			}
-			return nil
-		},
-	})
 }

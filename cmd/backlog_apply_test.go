@@ -187,11 +187,11 @@ func TestBacklogApplyUsesConfiguredWorkflowStatesWithIntermediaryState(t *testin
 		t.Fatalf("save config: %v", err)
 	}
 
-	spec := `{
+spec := `{
   "version": "docket.apply/v1",
   "tickets": [
-    {"ref": "epic", "title": "Epic", "description": "Root epic", "state": "coding"},
-    {"ref": "child", "title": "Child", "description": "Child item", "parent_ref": "epic", "state": "testing"}
+    {"ref": "epic", "title": "Epic", "description": "Likely paths: cmd/backlog_apply.go and internal/store/local/ready_contract.go. Verify commands: go test ./cmd -run TestBacklogApplyUsesConfiguredWorkflowStatesWithIntermediaryState -count=1. Out of scope: unrelated workflow migration cleanup. This epic fixture is detailed enough to satisfy runnable-state requirements during backlog apply.", "state": "coding", "ac": ["custom active state ticket is created", "ready gate requirements remain enforced"]},
+    {"ref": "child", "title": "Child", "description": "Likely paths: cmd/backlog_apply.go and internal/store/local/ready_contract.go. Verify commands: go test ./cmd -run TestBacklogApplyUsesConfiguredWorkflowStatesWithIntermediaryState -count=1. Out of scope: scheduler behavior. This child ticket is also detailed enough to enter a runnable state from backlog apply.", "parent_ref": "epic", "state": "testing", "ac": ["child ticket keeps configured state", "parent-child relation remains intact"]}
   ]
 }`
 	specPath := writeSpecFile(t, tmpDir, "custom-backlog.json", spec)
@@ -242,7 +242,7 @@ func TestBacklogApplyWorklistCreatesDraftTicketsWithStableTitlesAndParent(t *tes
 		Seq:         1,
 		Title:       "Roadmap Parent",
 		Description: "Parent for imported worklist items",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -343,7 +343,7 @@ func TestBacklogApplyRejectsDisconnectedGraph(t *testing.T) {
 		Seq:         1,
 		Title:       "Existing",
 		Description: "Existing anchor ticket",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,

@@ -1,4 +1,4 @@
-package security
+package runstate
 
 import (
 	"crypto/sha256"
@@ -19,18 +19,6 @@ import (
 const repoIDFile = "repo_id"
 
 var repoIDPattern = regexp.MustCompile(`^drid_[0-9a-fA-F-]{36}$`)
-
-type trustAnchorFile struct {
-	RepoID    string `json:"repo_id"`
-	SignerID  string `json:"signer_id"`
-	UpdatedAt string `json:"updated_at"`
-}
-
-type trustedLedgerHeadFile struct {
-	RepoID     string `json:"repo_id"`
-	LedgerHead string `json:"ledger_head"`
-	UpdatedAt  string `json:"updated_at"`
-}
 
 type workflowActivationFile struct {
 	RepoID       string `json:"repo_id"`
@@ -60,13 +48,11 @@ var (
 	ErrRunManifestStale   = errors.New("run manifest stale")
 	ErrRunContextMismatch = errors.New("run context mismatch")
 	ErrRunManifestInvalid = errors.New("run manifest invalid")
-	ErrLedgerHeadRollback = errors.New("ledger head rollback detected")
-	ErrLedgerHeadAnchor   = errors.New("ledger head trust anchor is malformed")
 	DefaultRunManifestTTL = 24 * time.Hour
 )
 
-type RepoNamespaceStore struct {
-	docketHome string
+type Store struct {
+	root string
 }
 
 type ContextBinding struct {
@@ -78,11 +64,11 @@ type ContextBinding struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
-func NewRepoNamespaceStore(docketHome string) *RepoNamespaceStore {
-	return &RepoNamespaceStore{docketHome: docketHome}
+func New(root string) *Store {
+	return &Store{root: root}
 }
 
-func (s *RepoNamespaceStore) EnsureRepoNamespace(repoRoot string) (repoID string, namespaceDir string, err error) {
+func (s *Store) EnsureRepoNamespace(repoRoot string) (repoID string, namespaceDir string, err error) {
 	repoID, err = GetOrCreateRepoID(repoRoot)
 	if err != nil {
 		return "", "", err
@@ -94,198 +80,7 @@ func (s *RepoNamespaceStore) EnsureRepoNamespace(repoRoot string) (repoID string
 	return repoID, namespaceDir, nil
 }
 
-func (s *RepoNamespaceStore) SetTrustAnchor(repoRoot, signerID string) (string, error) {
-	if signerID == "" {
-		return "", fmt.Errorf("signer_id is required")
-	}
-	repoID, dir, err := s.EnsureRepoNamespace(repoRoot)
-	if err != nil {
-		return "", err
-	}
-	rec := trustAnchorFile{
-		RepoID:    repoID,
-		SignerID:  signerID,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	data, err := json.MarshalIndent(rec, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "trust_anchor.json"), append(data, '\n'), 0o600); err != nil {
-		return "", err
-	}
-	return repoID, nil
-}
-
-func (s *RepoNamespaceStore) GetTrustAnchor(repoRoot string) (repoID string, signerID string, ok bool, err error) {
-	repoID, err = GetOrCreateRepoID(repoRoot)
-	if err != nil {
-		return "", "", false, err
-	}
-	return s.GetTrustAnchorByRepoID(repoID)
-}
-
-func (s *RepoNamespaceStore) GetTrustAnchorByRepoID(repoID string) (string, string, bool, error) {
-	path := filepath.Join(s.repoNamespaceDir(repoID), "trust_anchor.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return repoID, "", false, nil
-		}
-		return "", "", false, err
-	}
-	var rec trustAnchorFile
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return "", "", false, fmt.Errorf("%w: invalid trust anchor JSON", ErrKeystoreMalformed)
-	}
-	if rec.RepoID == "" || rec.SignerID == "" {
-		return "", "", false, fmt.Errorf("%w: trust anchor missing repo_id or signer_id", ErrKeystoreMalformed)
-	}
-	return rec.RepoID, rec.SignerID, true, nil
-}
-
-func (s *RepoNamespaceStore) SetTrustedLedgerHead(repoRoot, headHash string) (string, error) {
-	repoID, dir, err := s.EnsureRepoNamespace(repoRoot)
-	if err != nil {
-		return "", err
-	}
-	rec := trustedLedgerHeadFile{
-		RepoID:     repoID,
-		LedgerHead: strings.TrimSpace(headHash),
-		UpdatedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	data, err := json.MarshalIndent(rec, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "trusted_ledger_head.json"), append(data, '\n'), 0o600); err != nil {
-		return "", err
-	}
-	return repoID, nil
-}
-
-func (s *RepoNamespaceStore) GetTrustedLedgerHead(repoRoot string) (repoID string, headHash string, ok bool, err error) {
-	repoID, err = GetOrCreateRepoID(repoRoot)
-	if err != nil {
-		return "", "", false, err
-	}
-	path := filepath.Join(s.repoNamespaceDir(repoID), "trusted_ledger_head.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return repoID, "", false, nil
-		}
-		return "", "", false, err
-	}
-	var rec trustedLedgerHeadFile
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return "", "", false, fmt.Errorf("%w: invalid trusted ledger head JSON", ErrLedgerHeadAnchor)
-	}
-	if rec.RepoID == "" {
-		return "", "", false, fmt.Errorf("%w: trusted ledger head missing repo_id", ErrLedgerHeadAnchor)
-	}
-	if rec.RepoID != repoID {
-		return "", "", false, fmt.Errorf("%w: trusted ledger head repo_id mismatch", ErrLedgerHeadAnchor)
-	}
-	return rec.RepoID, strings.TrimSpace(rec.LedgerHead), true, nil
-}
-
-func (s *RepoNamespaceStore) VerifyAndAdvanceTrustedLedgerHead(repoRoot string) error {
-	events, err := NewEventLedger(repoRoot, nil, "").Load()
-	if err != nil {
-		return fmt.Errorf("loading ledger: %w", err)
-	}
-	if err := validatePrivilegedApprovalConsistency(events); err != nil {
-		return err
-	}
-	currentHead := ""
-	if len(events) > 0 {
-		currentHead = strings.TrimSpace(events[len(events)-1].Hash)
-	}
-
-	repoID, trustedHead, ok, err := s.GetTrustedLedgerHead(repoRoot)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		_, err := s.SetTrustedLedgerHead(repoRoot, currentHead)
-		return err
-	}
-	if trustedHead == currentHead {
-		return nil
-	}
-	if trustedHead == "" {
-		_, err := s.SetTrustedLedgerHead(repoRoot, currentHead)
-		return err
-	}
-
-	for _, ev := range events {
-		if strings.TrimSpace(ev.Hash) == trustedHead {
-			_, err := s.SetTrustedLedgerHead(repoRoot, currentHead)
-			return err
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: repo %s head %s does not descend from trusted head %s. Repair by restoring the newer ledger or explicitly resetting %s only if you intend to trust this state",
-		ErrLedgerHeadRollback,
-		repoID,
-		shortHash(currentHead),
-		shortHash(trustedHead),
-		filepath.Join(s.repoNamespaceDir(repoID), "trusted_ledger_head.json"),
-	)
-}
-
-func validatePrivilegedApprovalConsistency(events []LedgerEvent) error {
-	type approval struct {
-		action string
-		hash   string
-	}
-	seen := map[string]approval{}
-	for _, ev := range events {
-		if ev.Type != EventPrivilegedTransitionApprove {
-			continue
-		}
-		ticketID := strings.TrimSpace(ev.TicketID)
-		if ticketID == "" {
-			return fmt.Errorf("%w: privileged approval event is missing ticket_id", ErrLedgerInvalidChain)
-		}
-		action := ""
-		if ev.Metadata != nil {
-			if raw, ok := ev.Metadata["action"].(string); ok {
-				action = strings.TrimSpace(raw)
-			}
-		}
-		if action == "" {
-			return fmt.Errorf("%w: privileged approval event for %s is missing metadata.action", ErrLedgerInvalidChain, ticketID)
-		}
-		prev, ok := seen[ticketID]
-		if !ok {
-			seen[ticketID] = approval{action: action, hash: ev.Hash}
-			continue
-		}
-		if prev.action == action {
-			return fmt.Errorf(
-				"%w: duplicate privileged approval for %s action %q (%s and %s)",
-				ErrLedgerInvalidChain,
-				ticketID,
-				action,
-				shortHash(prev.hash),
-				shortHash(ev.Hash),
-			)
-		}
-		return fmt.Errorf(
-			"%w: conflicting privileged approvals for %s (%q vs %q)",
-			ErrLedgerInvalidChain,
-			ticketID,
-			prev.action,
-			action,
-		)
-	}
-	return nil
-}
-
-func (s *RepoNamespaceStore) SetActiveWorkflowHash(repoRoot, workflowHash, actor string) (string, error) {
+func (s *Store) SetActiveWorkflowHash(repoRoot, workflowHash, actor string) (string, error) {
 	if workflowHash == "" {
 		return "", fmt.Errorf("workflow hash is required")
 	}
@@ -309,7 +104,7 @@ func (s *RepoNamespaceStore) SetActiveWorkflowHash(repoRoot, workflowHash, actor
 	return repoID, nil
 }
 
-func (s *RepoNamespaceStore) GetActiveWorkflowHash(repoRoot string) (string, bool, error) {
+func (s *Store) GetActiveWorkflowHash(repoRoot string) (string, bool, error) {
 	repoID, err := GetOrCreateRepoID(repoRoot)
 	if err != nil {
 		return "", false, err
@@ -324,10 +119,10 @@ func (s *RepoNamespaceStore) GetActiveWorkflowHash(repoRoot string) (string, boo
 	}
 	var rec workflowActivationFile
 	if err := json.Unmarshal(data, &rec); err != nil {
-		return "", false, fmt.Errorf("%w: invalid workflow activation JSON", ErrKeystoreMalformed)
+		return "", false, fmt.Errorf("invalid workflow activation JSON: %w", err)
 	}
 	if rec.WorkflowHash == "" {
-		return "", false, fmt.Errorf("%w: workflow activation missing hash", ErrKeystoreMalformed)
+		return "", false, fmt.Errorf("workflow activation missing hash")
 	}
 	return rec.WorkflowHash, true, nil
 }
@@ -343,7 +138,7 @@ func actorType(actor string) string {
 	}
 }
 
-func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {
+func (s *Store) RecordRunStart(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {
 	if ticketID == "" {
 		return fmt.Errorf("ticket ID is required")
 	}
@@ -381,7 +176,7 @@ func (s *RepoNamespaceStore) RecordRunStart(repoRoot, ticketID, actor, worktreeP
 	return os.WriteFile(filepath.Join(runsDir, ticketID+".json"), append(data, '\n'), 0o600)
 }
 
-func (s *RepoNamespaceStore) RecordRunRoutingDecision(repoRoot, ticketID, tier, provider, modelID, rationale string) error {
+func (s *Store) RecordRunRoutingDecision(repoRoot, ticketID, tier, provider, modelID, rationale string) error {
 	rec, ok, err := s.GetRunManifest(repoRoot, ticketID)
 	if err != nil {
 		return err
@@ -411,7 +206,7 @@ func (s *RepoNamespaceStore) RecordRunRoutingDecision(repoRoot, ticketID, tier, 
 	return os.WriteFile(filepath.Join(runsDir, ticketID+".json"), append(data, '\n'), 0o600)
 }
 
-func (s *RepoNamespaceStore) GetRunManifest(repoRoot, ticketID string) (RunManifest, bool, error) {
+func (s *Store) GetRunManifest(repoRoot, ticketID string) (RunManifest, bool, error) {
 	repoID, err := GetOrCreateRepoID(repoRoot)
 	if err != nil {
 		return RunManifest{}, false, err
@@ -465,7 +260,7 @@ func validateRunManifest(expectedRepoID, expectedTicketID string, rec RunManifes
 	return nil
 }
 
-func (s *RepoNamespaceStore) VerifyRunContext(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {
+func (s *Store) VerifyRunContext(repoRoot, ticketID, actor, worktreePath, branch, workflowHash string) error {
 	rec, ok, err := s.GetRunManifest(repoRoot, ticketID)
 	if err != nil {
 		return err
@@ -481,7 +276,6 @@ func (s *RepoNamespaceStore) VerifyRunContext(repoRoot, ticketID, actor, worktre
 	if time.Since(startedAt) > DefaultRunManifestTTL {
 		return fmt.Errorf("%w: %s started at %s", ErrRunManifestStale, ticketID, rec.StartedAt)
 	}
-
 	if actor != "" && rec.Actor != actor {
 		return fmt.Errorf("%w: actor mismatch (expected %s, got %s)", ErrRunContextMismatch, rec.Actor, actor)
 	}
@@ -501,15 +295,6 @@ func (s *RepoNamespaceStore) VerifyRunContext(repoRoot, ticketID, actor, worktre
 	return nil
 }
 
-func HashFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(data)
-	return fmt.Sprintf("%x", sum[:]), nil
-}
-
 func GetOrCreateRepoID(repoRoot string) (string, error) {
 	if repoRoot == "" {
 		return "", fmt.Errorf("repo root is required")
@@ -527,7 +312,6 @@ func GetOrCreateRepoID(repoRoot string) (string, error) {
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
-
 	id := "drid_" + uuid.NewString()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
@@ -538,11 +322,11 @@ func GetOrCreateRepoID(repoRoot string) (string, error) {
 	return id, nil
 }
 
-func (s *RepoNamespaceStore) repoNamespaceDir(repoID string) string {
-	return artifacts.HomePath(s.docketHome, artifacts.HomeReposDir, repoID)
+func (s *Store) repoNamespaceDir(repoID string) string {
+	return artifacts.HomePath(s.root, artifacts.HomeReposDir, repoID)
 }
 
-func (s *RepoNamespaceStore) UpdateContextBinding(repoRoot, actor, ticketID, worktreePath, runStartedAt string) (bool, string, error) {
+func (s *Store) UpdateContextBinding(repoRoot, actor, ticketID, worktreePath, runStartedAt string) (bool, string, error) {
 	if actor == "" || ticketID == "" || worktreePath == "" {
 		return false, "", fmt.Errorf("actor, ticketID, and worktreePath are required")
 	}
@@ -604,15 +388,4 @@ func trimSpace(b []byte) []byte {
 		end--
 	}
 	return b[start:end]
-}
-
-func shortHash(hash string) string {
-	hash = strings.TrimSpace(hash)
-	if hash == "" {
-		return "<empty>"
-	}
-	if len(hash) <= 12 {
-		return hash
-	}
-	return hash[:12]
 }

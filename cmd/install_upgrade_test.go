@@ -277,14 +277,14 @@ func TestUpgradeCheckAndApply(t *testing.T) {
 	}
 }
 
-func TestInstallHelpMentionsDocketHome(t *testing.T) {
+func TestInstallHelpDoesNotMentionDocketHome(t *testing.T) {
 	out := new(bytes.Buffer)
 	rootCmd.SetOut(out)
 	rootCmd.SetArgs([]string{"install", "--help"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("install --help failed: %v", err)
 	}
-	if !strings.Contains(out.String(), "DOCKET_HOME") {
-		t.Fatalf("expected install help to mention DOCKET_HOME, got: %s", out.String())
+	if strings.Contains(out.String(), "DOCKET_HOME") {
+		t.Fatalf("did not expect install help to mention DOCKET_HOME, got: %s", out.String())
 	}
 }

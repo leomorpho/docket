@@ -27,7 +27,7 @@ type wrapUpReport struct {
 
 var wrapUpCmd = &cobra.Command{
 	Use:   "wrap-up <TKT-NNN>",
-	Short: "Run end-of-session readiness checks for a ticket",
+	Short: "Run closeout readiness checks for a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := strings.TrimSpace(args[0])
@@ -77,7 +77,7 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 	}
 
 	handoffMissing := []string{}
-	for _, failure := range reviewReadinessFailures(t, cfg) {
+	for _, failure := range closeoutReadinessFailures(t, cfg) {
 		if strings.HasPrefix(failure, "handoff") {
 			handoffMissing = append(handoffMissing, failure)
 		}
@@ -86,7 +86,7 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 	checks = append(checks, wrapUpCheck{
 		ID:      "handoff_ready",
 		OK:      handoffOK,
-		Message: "Handoff is present with required sections.",
+		Message: "Handoff is present with required closeout sections.",
 		Details: handoffMissing,
 	})
 	if !handoffOK {
@@ -114,16 +114,16 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 		next = append(next, fmt.Sprintf("Resolve or remove blockers: docket update %s --unblock <TKT-NNN>", t.ID))
 	}
 
-	activeState := preferredStateForRole(cfg, "active", "in-progress")
-	reviewState := nextStateForRole(cfg, t.State, "review", "in-review")
-	reviewStateOK := cfg.StateHasRole(string(t.State), "active") || cfg.StateHasRole(string(t.State), "review")
+	activeState := activeWorkflowState(cfg)
+	closeoutState, closeoutStateOK := nextCloseoutState(cfg, t.State)
+	stateReady := cfg.StateHasRole(string(t.State), "active") || cfg.StateHasRole(string(t.State), "completed")
 	checks = append(checks, wrapUpCheck{
 		ID:      "state_ready",
-		OK:      reviewStateOK,
-		Message: "Ticket is in an active or review workflow state.",
+		OK:      stateReady,
+		Message: "Ticket is in an active or completed workflow state.",
 		Details: []string{string(t.State)},
 	})
-	if !reviewStateOK {
+	if !stateReady {
 		next = append(next, fmt.Sprintf("Move ticket into active work before wrap-up: docket update %s --state %s", t.ID, activeState))
 	}
 
@@ -134,8 +134,8 @@ func buildWrapUpReport(ctx context.Context, s *local.Store, cfg *ticket.Config, 
 			break
 		}
 	}
-	if ready && !cfg.StateHasRole(string(t.State), "review") {
-		next = append(next, fmt.Sprintf("Transition to review when ready: docket update %s --state %s", t.ID, reviewState))
+	if ready && !cfg.StateHasRole(string(t.State), "completed") && closeoutStateOK {
+		next = append(next, fmt.Sprintf("Advance toward validated/completed state: docket update %s --state %s", t.ID, closeoutState))
 	}
 
 	return wrapUpReport{
@@ -178,4 +178,47 @@ func renderWrapUpHuman(cmd *cobra.Command, report wrapUpReport) {
 
 func init() {
 	rootCmd.AddCommand(wrapUpCmd)
+}
+
+func nextCloseoutState(cfg *ticket.Config, current ticket.State) (string, bool) {
+	if cfg == nil {
+		return completedWorkflowState(cfg), true
+	}
+	currentState := strings.TrimSpace(string(current))
+	if currentState == "" {
+		return completedWorkflowState(cfg), true
+	}
+	if cfg.StateHasRole(currentState, "completed") {
+		return currentState, true
+	}
+
+	type queueItem struct {
+		State string
+		First string
+	}
+	visited := map[string]bool{currentState: true}
+	queue := []queueItem{{State: currentState}}
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+		stateCfg, ok := cfg.States[item.State]
+		if !ok {
+			continue
+		}
+		for _, nextState := range stateCfg.Next {
+			if visited[nextState] {
+				continue
+			}
+			visited[nextState] = true
+			firstHop := item.First
+			if firstHop == "" {
+				firstHop = nextState
+			}
+			if cfg.StateHasRole(nextState, "completed") {
+				return firstHop, true
+			}
+			queue = append(queue, queueItem{State: nextState, First: firstHop})
+		}
+	}
+	return completedWorkflowState(cfg), false
 }

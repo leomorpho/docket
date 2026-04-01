@@ -16,14 +16,14 @@ import (
 func TestProofPipelineEndToEndIntegration(t *testing.T) {
 	h := newFakeRepoHarness(t)
 	ticketID := "TKT-944"
-	h.seedTicket(ticketID, 944, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "proof e2e"}})
+	h.seedTicket(ticketID, 944, ticket.State("ready"), []ticket.AcceptanceCriterion{{Description: "proof e2e"}, {Description: "proof cleanup"}})
 	runGitSession(t, h.repo, "add", ".")
 	runGitSession(t, h.repo, "commit", "-m", "seed proof ticket")
 
 	if out, err := h.run("bootstrap", "--adapter", "codex"); err != nil {
 		t.Fatalf("bootstrap failed: %v\n%s", err, out)
 	}
-	if out, err := h.run("update", ticketID, "--state", "in-progress"); err != nil {
+	if out, err := h.run("update", ticketID, "--state", "running"); err != nil {
 		t.Fatalf("start ticket failed: %v\n%s", err, out)
 	}
 
@@ -97,7 +97,7 @@ func TestProofPipelineEndToEndIntegration(t *testing.T) {
 	runGitSession(t, worktreeRepo, "commit", "-m", "feat: proof context linkage", "-m", fmt.Sprintf("Ticket: %s", ticketID))
 
 	h.repo = mainRepo
-	if out, err := h.run("update", ticketID, "--state", "in-review"); err != nil {
+	if out, err := h.run("update", ticketID, "--state", "validated"); err != nil {
 		t.Fatalf("finish ticket failed: %v\n%s", err, out)
 	}
 	h.repo = mainRepo

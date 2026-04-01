@@ -134,21 +134,20 @@ func newBoardModelWithDefaultCfg(backend store.Backend, actor string) BoardModel
 func TestTargetState(t *testing.T) {
 	m := newBoardModelWithDefaultCfg(newFakeBackend(), "human:test")
 
-	next, err := m.targetState(ticket.State("backlog"), 1)
+	next, err := m.targetState(ticket.State("draft"), 1)
 	if err != nil {
-		t.Fatalf("targetState(backlog,+1) err = %v", err)
+		t.Fatalf("targetState(draft,+1) err = %v", err)
 	}
-	if next != ticket.State("todo") {
-		t.Fatalf("targetState(backlog,+1) = %s, want todo", next)
+	if next != ticket.State("ready") {
+		t.Fatalf("targetState(draft,+1) = %s, want ready", next)
 	}
 
-	// In the default config, done can move right to archived on the board.
-	next, err = m.targetState(ticket.State("done"), 1)
+	next, err = m.targetState(ticket.State("validated"), 1)
 	if err != nil {
-		t.Fatalf("targetState(done,+1) err = %v", err)
+		t.Fatalf("targetState(validated,+1) err = %v", err)
 	}
 	if next != ticket.State("archived") {
-		t.Fatalf("targetState(done,+1) = %s, want archived", next)
+		t.Fatalf("targetState(validated,+1) = %s, want archived", next)
 	}
 	// Archived is the last column in default config; it has no right neighbor.
 	_, err = m.targetState(ticket.State("archived"), 1)
@@ -156,9 +155,9 @@ func TestTargetState(t *testing.T) {
 		t.Fatalf("expected archived->right error, got %v", err)
 	}
 
-	_, err = m.targetState(ticket.State("backlog"), -1)
-	if err == nil || !strings.Contains(err.Error(), "cannot transition left from backlog") {
-		t.Fatalf("expected backlog->left error, got %v", err)
+	_, err = m.targetState(ticket.State("draft"), -1)
+	if err == nil || !strings.Contains(err.Error(), "cannot transition left from draft") {
+		t.Fatalf("expected draft->left error, got %v", err)
 	}
 }
 
@@ -166,21 +165,21 @@ func TestRebuildColumnsBlockedAndSorted(t *testing.T) {
 	now := time.Now().UTC()
 	m := newBoardModelWithDefaultCfg(nil, "human:test")
 	m.allTickets = []*ticket.Ticket{
-		{ID: "TKT-003", State: ticket.State("todo"), Priority: 2, Title: "C", CreatedAt: now.Add(2 * time.Hour)},
-		{ID: "TKT-002", State: ticket.State("todo"), Priority: 1, Title: "B", CreatedAt: now.Add(1 * time.Hour)},
-		{ID: "TKT-001", State: ticket.State("done"), Priority: 5, Title: "A", BlockedBy: []string{"TKT-999"}, CreatedAt: now},
+		{ID: "TKT-003", State: ticket.State("ready"), Priority: 2, Title: "C", CreatedAt: now.Add(2 * time.Hour)},
+		{ID: "TKT-002", State: ticket.State("ready"), Priority: 1, Title: "B", CreatedAt: now.Add(1 * time.Hour)},
+		{ID: "TKT-001", State: ticket.State("validated"), Priority: 5, Title: "A", BlockedBy: []string{"TKT-999"}, CreatedAt: now},
 	}
 
 	m.rebuildColumns("")
 
-	todoIdx := m.stateToColIdx["todo"]
+	todoIdx := m.stateToColIdx["ready"]
 	blockedIdx := m.blockedColIdx
 
 	if len(m.columns[todoIdx].tickets) != 2 {
-		t.Fatalf("todo column count = %d, want 2", len(m.columns[todoIdx].tickets))
+		t.Fatalf("ready column count = %d, want 2", len(m.columns[todoIdx].tickets))
 	}
 	if got := m.columns[todoIdx].tickets[0].ID; got != "TKT-002" {
-		t.Fatalf("todo first ticket = %s, want TKT-002", got)
+		t.Fatalf("ready first ticket = %s, want TKT-002", got)
 	}
 
 	if len(m.columns[blockedIdx].tickets) != 1 {
@@ -194,21 +193,21 @@ func TestRebuildColumnsBlockedAndSorted(t *testing.T) {
 func TestRebuildColumnsHonorsConfigForReviewBlockers(t *testing.T) {
 	now := time.Now().UTC()
 	cfg := ticket.DefaultConfig()
-	review := cfg.States["in-review"]
+	review := cfg.States["validated"]
 	review.BlocksDependents = false
-	cfg.States["in-review"] = review
+	cfg.States["validated"] = review
 
 	m := newBoardModelWithDefaultCfg(nil, "human:test")
 	m.cfg = cfg
 	m.allTickets = []*ticket.Ticket{
-		{ID: "TKT-001", State: ticket.State("in-review"), Priority: 1, Title: "Blocker", CreatedAt: now},
-		{ID: "TKT-002", State: ticket.State("todo"), Priority: 2, Title: "Dependent", BlockedBy: []string{"TKT-001"}, CreatedAt: now.Add(time.Minute)},
+		{ID: "TKT-001", State: ticket.State("validated"), Priority: 1, Title: "Blocker", CreatedAt: now},
+		{ID: "TKT-002", State: ticket.State("ready"), Priority: 2, Title: "Dependent", BlockedBy: []string{"TKT-001"}, CreatedAt: now.Add(time.Minute)},
 	}
 
 	m.rebuildColumns("")
 
 	if len(m.columns[m.blockedColIdx].tickets) != 0 {
-		t.Fatalf("expected no blocked tickets when in-review stops blocking, got %d", len(m.columns[m.blockedColIdx].tickets))
+		t.Fatalf("expected no blocked tickets when validated stops blocking, got %d", len(m.columns[m.blockedColIdx].tickets))
 	}
 }
 
@@ -217,7 +216,7 @@ func TestUpdateStateCmdPersistsUsingFullTicket(t *testing.T) {
 	now := time.Now().UTC().Add(-time.Hour)
 	b := newFakeBackend(&ticket.Ticket{
 		ID:          "TKT-001",
-		State:       ticket.State("backlog"),
+		State:       ticket.State("draft"),
 		Priority:    3,
 		Title:       "Title",
 		Labels:      []string{"bug"},
@@ -228,14 +227,14 @@ func TestUpdateStateCmdPersistsUsingFullTicket(t *testing.T) {
 		Description: "desc",
 	})
 
-	msg := updateStateCmd(b, "TKT-001", ticket.State("todo"), cfg)().(opMsg)
+	msg := updateStateCmd(b, "TKT-001", ticket.State("ready"), cfg)().(opMsg)
 	if msg.err != nil {
 		t.Fatalf("updateStateCmd err = %v", msg.err)
 	}
 
 	got := b.tickets["TKT-001"]
-	if got.State != ticket.State("todo") {
-		t.Fatalf("state = %s, want todo", got.State)
+	if got.State != ticket.State("ready") {
+		t.Fatalf("state = %s, want ready", got.State)
 	}
 	if len(got.Comments) != 1 {
 		t.Fatalf("comments length = %d, want 1", len(got.Comments))
@@ -248,8 +247,8 @@ func TestUpdateStateCmdPersistsUsingFullTicket(t *testing.T) {
 func TestSwapPriorityCmdSwapsBothTickets(t *testing.T) {
 	now := time.Now().UTC().Add(-time.Hour)
 	b := newFakeBackend(
-		&ticket.Ticket{ID: "TKT-001", Priority: 1, State: ticket.State("todo"), CreatedAt: now, UpdatedAt: now, CreatedBy: "human:x", Title: "A"},
-		&ticket.Ticket{ID: "TKT-002", Priority: 2, State: ticket.State("todo"), CreatedAt: now, UpdatedAt: now, CreatedBy: "human:x", Title: "B"},
+		&ticket.Ticket{ID: "TKT-001", Priority: 1, State: ticket.State("ready"), CreatedAt: now, UpdatedAt: now, CreatedBy: "human:x", Title: "A"},
+		&ticket.Ticket{ID: "TKT-002", Priority: 2, State: ticket.State("ready"), CreatedAt: now, UpdatedAt: now, CreatedBy: "human:x", Title: "B"},
 	)
 
 	msg := swapPriorityCmd(b, "TKT-001", "TKT-002")().(opMsg)
@@ -290,7 +289,7 @@ func TestCreateTicketCmdDefaults(t *testing.T) {
 func TestMoveAndReorderBlockedColumnErrors(t *testing.T) {
 	m := newBoardModelWithDefaultCfg(newFakeBackend(), "human:test")
 	blockedIdx := m.blockedColIdx
-	m.columns[blockedIdx].tickets = []*ticket.Ticket{{ID: "TKT-123", State: ticket.State("todo"), BlockedBy: []string{"TKT-001"}}}
+	m.columns[blockedIdx].tickets = []*ticket.Ticket{{ID: "TKT-123", State: ticket.State("ready"), BlockedBy: []string{"TKT-001"}}}
 	m.focusCol = blockedIdx
 	m.focusRow = 0
 
@@ -347,7 +346,7 @@ func TestCreateTitleInputFlow(t *testing.T) {
 
 func TestLoadDetailCmd(t *testing.T) {
 	now := time.Now().UTC()
-	b := newFakeBackend(&ticket.Ticket{ID: "TKT-001", State: ticket.State("todo"), Priority: 1, Title: "Hello", CreatedAt: now, UpdatedAt: now, CreatedBy: "human"})
+	b := newFakeBackend(&ticket.Ticket{ID: "TKT-001", State: ticket.State("ready"), Priority: 1, Title: "Hello", CreatedAt: now, UpdatedAt: now, CreatedBy: "human"})
 
 	msg := loadDetailCmd(b, "TKT-001")().(detailMsg)
 	if msg.err != nil {
@@ -370,17 +369,17 @@ func TestHelpers(t *testing.T) {
 func TestViewVariants(t *testing.T) {
 	now := time.Now().UTC()
 	b := newFakeBackend(
-		&ticket.Ticket{ID: "TKT-001", State: ticket.State("todo"), Priority: 1, Title: "One", CreatedAt: now, UpdatedAt: now, CreatedBy: "human"},
+		&ticket.Ticket{ID: "TKT-001", State: ticket.State("ready"), Priority: 1, Title: "One", CreatedAt: now, UpdatedAt: now, CreatedBy: "human"},
 	)
 
 	m := newBoardModelWithDefaultCfg(b, "human:test")
-	m.allTickets = []*ticket.Ticket{{ID: "TKT-001", State: ticket.State("todo"), Priority: 1, Title: "One", CreatedAt: now}}
+	m.allTickets = []*ticket.Ticket{{ID: "TKT-001", State: ticket.State("ready"), Priority: 1, Title: "One", CreatedAt: now}}
 	m.rebuildColumns("")
 	m.width = 120
 
 	board := m.View()
-	if !strings.Contains(board, "TO DO") {
-		t.Fatalf("board view missing TO DO column:\n%s", board)
+	if !strings.Contains(board, "READY") {
+		t.Fatalf("board view missing READY column:\n%s", board)
 	}
 
 	m.detailOpen = true

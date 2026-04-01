@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/spf13/cobra"
 )
@@ -45,7 +45,7 @@ func runHookWorktreeCheck(ticketID string) error {
 		return nil
 	}
 
-	ns := security.NewRepoNamespaceStore(docketHome)
+	ns := runstate.New(runtimeNamespaceRoot(repo))
 	run, ok, err := ns.GetRunManifest(repo, ticketID)
 	if err != nil {
 		return fmt.Errorf("read run manifest for %s: %w", ticketID, err)

@@ -25,12 +25,34 @@ type mockWorkflowRunner struct {
 	startPath    string
 }
 
+func mcpRunnableDescription() string {
+	return "Likely paths: internal/mcp/handlers.go and internal/mcp/server_test.go. Verify commands: go test ./internal/mcp -count=1. Out of scope: unrelated CLI runtime changes or security cleanup. This description supplies enough execution context to satisfy runnable-state validation during MCP workflow tests."
+}
+
+func mcpRunnableAC() []ticket.AcceptanceCriterion {
+	return []ticket.AcceptanceCriterion{
+		{Description: "A1"},
+		{Description: "A2"},
+	}
+}
+
+func mcpCompletedAC() []ticket.AcceptanceCriterion {
+	return []ticket.AcceptanceCriterion{
+		{Description: "A1", Done: true, Evidence: "ok"},
+		{Description: "A2", Done: true, Evidence: "ok"},
+	}
+}
+
+func mcpStructuredHandoff(state string) string {
+	return "**Current state:**\n" + state + "\n\n**Decisions made:**\nnone\n\n**Files touched:**\n- x\n\n**Remaining work:**\n- none\n\n**AC status:**\n- complete"
+}
+
 func (m *mockWorkflowRunner) StartTask(ctx context.Context, ticketID, agentID string, cfg *ticket.Config) (*ticket.Ticket, string, error) {
 	m.startCalls++
 	if m.startTicket != nil {
 		return m.startTicket, m.startPath, nil
 	}
-	return &ticket.Ticket{ID: ticketID, State: "in-progress"}, m.startPath, nil
+	return &ticket.Ticket{ID: ticketID, State: "running"}, m.startPath, nil
 }
 
 func (m *mockWorkflowRunner) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
@@ -38,7 +60,7 @@ func (m *mockWorkflowRunner) FinishTask(ctx context.Context, ticketID string, cf
 	if m.finishTicket != nil {
 		return m.finishTicket, nil
 	}
-	return &ticket.Ticket{ID: ticketID, State: "in-review"}, nil
+	return &ticket.Ticket{ID: ticketID, State: "validated"}, nil
 }
 
 type mockClaimLookup struct{}
@@ -55,7 +77,7 @@ func TestServeMCP_ListCreateAndUnknown(t *testing.T) {
 
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-099", Seq: 99, Title: "Existing", State: ticket.State("todo"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}}}); err != nil {
+	if err := s.CreateTicket(context.Background(), &ticket.Ticket{ID: "TKT-099", Seq: 99, Title: "Existing", State: ticket.State("draft"), Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}}}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
 	}
 
@@ -104,16 +126,16 @@ func TestServeMCP_ShowUpdateCommentAndInvalidTransition(t *testing.T) {
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("todo"), Priority: 1,
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("draft"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
 	}
 
 	in := strings.NewReader(`{"id":1,"action":"show","args":{"id":"TKT-001"}}
-{"id":2,"action":"update","args":{"id":"TKT-001","state":"done"}}
+{"id":2,"action":"update","args":{"id":"TKT-001","state":"validated"}}
 {"id":3,"action":"comment","args":{"id":"TKT-001","body":"hello"}}
-{"id":4,"action":"update","args":{"id":"TKT-001","state":"todo"}}
+{"id":4,"action":"update","args":{"id":"TKT-001","state":"ready"}}
 `)
 	var out bytes.Buffer
 	if err := ServeMCP(in, &out, repo); err != nil {
@@ -162,14 +184,14 @@ func TestServeMCPWithDeps_DelegatesStartTask(t *testing.T) {
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("todo"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("ready"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: mcpRunnableDescription(), AC: mcpRunnableAC(),
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
 	}
 
 	mockWF := &mockWorkflowRunner{
-		startTicket: &ticket.Ticket{ID: "TKT-001", State: "in-progress", Priority: 1},
+		startTicket: &ticket.Ticket{ID: "TKT-001", State: "running", Priority: 1},
 		startPath:   "/tmp/wt-TKT-001",
 	}
 	deps := &DispatchDeps{
@@ -180,7 +202,7 @@ func TestServeMCPWithDeps_DelegatesStartTask(t *testing.T) {
 		Config:   ticket.DefaultConfig(),
 	}
 
-	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"in-progress"}}` + "\n")
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"running"}}` + "\n")
 	var out bytes.Buffer
 	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
 		t.Fatalf("ServeMCPWithDeps failed: %v", err)
@@ -208,8 +230,8 @@ func TestServeMCPWithDeps_DelegatesFinishTaskOnReview(t *testing.T) {
 	s := local.New(repo)
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("in-progress"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("running"), Priority: 1,
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: mcpRunnableDescription(), AC: mcpCompletedAC(), Handoff: mcpStructuredHandoff("running"),
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
 	}
@@ -223,7 +245,7 @@ func TestServeMCPWithDeps_DelegatesFinishTaskOnReview(t *testing.T) {
 		Config:   ticket.DefaultConfig(),
 	}
 
-	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"in-review"}}` + "\n")
+	in := strings.NewReader(`{"id":1,"action":"update","args":{"id":"TKT-001","state":"validated"}}` + "\n")
 	var out bytes.Buffer
 	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
 		t.Fatalf("ServeMCPWithDeps failed: %v", err)
@@ -240,8 +262,8 @@ func TestServeMCPWithDeps_DelegatesFinishTaskOnReview(t *testing.T) {
 	if resp["ok"] != true {
 		t.Fatalf("response not ok: %v", resp)
 	}
-	if resp["result"].(map[string]interface{})["state"] != "in-review" {
-		t.Fatalf("expected response state in-review, got %v", resp["result"])
+	if resp["result"].(map[string]interface{})["state"] != "validated" {
+		t.Fatalf("expected response state validated, got %v", resp["result"])
 	}
 }
 
@@ -370,15 +392,18 @@ func TestServeMCPWithDeps_CompletedRoleSetsCompletedAt(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
 		ID: "TKT-001", Seq: 1, Title: "Existing", State: ticket.State("qa"), Priority: 1,
-		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
+		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: mcpRunnableDescription(), AC: mcpCompletedAC(), Handoff: mcpStructuredHandoff("qa"),
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
 	}
 
+	mockWF := &mockWorkflowRunner{
+		finishTicket: &ticket.Ticket{ID: "TKT-001", State: "shipped", Priority: 1, CompletedAt: now},
+	}
 	deps := &DispatchDeps{
 		RepoRoot: repo,
 		Store:    s,
-		Workflow: &mockWorkflowRunner{},
+		Workflow: mockWF,
 		Claimer:  &mockClaimLookup{},
 		Config:   cfg,
 	}
@@ -388,13 +413,18 @@ func TestServeMCPWithDeps_CompletedRoleSetsCompletedAt(t *testing.T) {
 	if err := ServeMCPWithDeps(in, &out, deps); err != nil {
 		t.Fatalf("ServeMCPWithDeps failed: %v", err)
 	}
-
-	got, err := s.GetTicket(context.Background(), "TKT-001")
-	if err != nil {
-		t.Fatalf("get ticket: %v", err)
+	if mockWF.finishCalls != 1 {
+		t.Fatalf("FinishTask calls = %d, want 1", mockWF.finishCalls)
 	}
-	if got.CompletedAt.IsZero() {
-		t.Fatal("expected completed_at to be set for configured completed state")
+	var resp map[string]interface{}
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp["ok"] != true {
+		t.Fatalf("response not ok: %v", resp)
+	}
+	if resp["result"].(map[string]interface{})["state"] != "shipped" {
+		t.Fatalf("expected response state shipped, got %v", resp["result"])
 	}
 }
 
@@ -672,7 +702,7 @@ func TestServeMCP_SkillDiscoveryAndInvoke(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	s := local.New(repo)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-964", Seq: 964, Title: "Learning replay target", State: ticket.State("todo"), Priority: 1,
+		ID: "TKT-964", Seq: 964, Title: "Learning replay target", State: ticket.State("draft"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)
@@ -753,7 +783,7 @@ func TestServeMCP_DiscoveryFlowsEndToEnd(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	s := local.New(repo)
 	if err := s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-120", Seq: 120, Title: "MCP discovery fixture", State: ticket.State("todo"), Priority: 1,
+		ID: "TKT-120", Seq: 120, Title: "MCP discovery fixture", State: ticket.State("draft"), Priority: 1,
 		CreatedAt: now, UpdatedAt: now, CreatedBy: "me", Description: "d", AC: []ticket.AcceptanceCriterion{{Description: "x"}},
 	}); err != nil {
 		t.Fatalf("seed ticket: %v", err)

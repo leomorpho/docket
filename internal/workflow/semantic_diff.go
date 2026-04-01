@@ -7,6 +7,18 @@ import (
 	"strings"
 )
 
+type workflowPolicyView struct {
+	States    map[string][]string `json:"states"`
+	Semantics *workflowSemantics  `json:"semantics,omitempty"`
+}
+
+type workflowSemantics struct {
+	Review           []string `json:"review,omitempty"`
+	Verification     []string `json:"verification,omitempty"`
+	Closure          []string `json:"closure,omitempty"`
+	HumanOnlyClosure bool     `json:"human_only_closure"`
+}
+
 type TransitionChange struct {
 	State   string   `json:"state"`
 	Added   []string `json:"added,omitempty"`
@@ -21,11 +33,11 @@ type SemanticPolicyDiff struct {
 }
 
 func DiffWorkflowPolicy(beforePolicy, afterPolicy json.RawMessage) (SemanticPolicyDiff, error) {
-	var before workflowProposal
+	var before workflowPolicyView
 	if err := json.Unmarshal(beforePolicy, &before); err != nil {
 		return SemanticPolicyDiff{}, fmt.Errorf("parse before policy: %w", err)
 	}
-	var after workflowProposal
+	var after workflowPolicyView
 	if err := json.Unmarshal(afterPolicy, &after); err != nil {
 		return SemanticPolicyDiff{}, fmt.Errorf("parse after policy: %w", err)
 	}
@@ -100,7 +112,7 @@ func RenderWorkflowPolicyDiffHuman(diff SemanticPolicyDiff) string {
 	return strings.Join(lines, "\n")
 }
 
-func semanticFieldChanges(before, after *proposalSemantics) []string {
+func semanticFieldChanges(before, after *workflowSemantics) []string {
 	lines := []string{}
 	switch {
 	case before == nil && after == nil:

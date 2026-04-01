@@ -13,7 +13,7 @@ import (
 	"github.com/leomorpho/docket/internal/agentrun"
 	runruntime "github.com/leomorpho/docket/internal/agentrun/runtime"
 	"github.com/leomorpho/docket/internal/claim"
-	"github.com/leomorpho/docket/internal/security"
+	"github.com/leomorpho/docket/internal/runstate"
 	"github.com/leomorpho/docket/internal/store/local"
 	"github.com/leomorpho/docket/internal/ticket"
 )
@@ -43,30 +43,18 @@ func TestSelectNextTicket(t *testing.T) {
 	s := local.New(tmpDir)
 	ctx := context.Background()
 
-	// 1. Setup config
 	cfg := ticket.DefaultConfig()
-	// Extend the default workflow example so backlog can transition directly
-	// into an active-role state during this test setup.
-	backlog := cfg.States["backlog"]
-	backlog.Next = append(backlog.Next, "in-progress")
-	cfg.States["backlog"] = backlog
 
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
 	// 2. Create some tickets
-	// T1: priority 10, backlog
-	// T2: priority 1, backlog (should be picked)
-	// T3: priority 1, backlog, blocked (should be skipped)
-	// T4: active-role state in default workflow example (should be skipped)
-	// T5: review-role state in default workflow example (should be skipped)
-
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "backlog", Priority: 10})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "backlog", Priority: 1})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "T3", State: "backlog", Priority: 1, BlockedBy: []string{"TKT-001"}})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Seq: 4, Title: "T4", State: "in-progress", Priority: 1})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-005", Seq: 5, Title: "T5", State: "in-review", Priority: 1})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "T1", State: "ready", Priority: 10, Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "T2", State: "ready", Priority: 1, Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-003", Seq: 3, Title: "T3", State: "ready", Priority: 1, BlockedBy: []string{"TKT-001"}, Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-004", Seq: 4, Title: "T4", State: "running", Priority: 1, Description: updateRunnableDescription(), AC: updateRunnableAC()})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-005", Seq: 5, Title: "T5", State: "validated", Priority: 1, Description: updateRunnableDescription(), AC: updateCompletedAC(), Handoff: updateStructuredHandoff("validated", "none")})
 
 	if err := s.SyncIndex(ctx); err != nil {
 		t.Fatalf("SyncIndex failed: %v", err)
@@ -92,19 +80,12 @@ func TestSelectNextTicket_HonorsConfigForReviewBlockers(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := ticket.DefaultConfig()
-	backlog := cfg.States["backlog"]
-	backlog.Next = append(backlog.Next, "in-progress")
-	cfg.States["backlog"] = backlog
-	review := cfg.States["in-review"]
-	review.BlocksDependents = false
-	cfg.States["in-review"] = review
-
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
 
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Reviewed blocker", State: "in-review", Priority: 1})
-	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "Dependent", State: "backlog", Priority: 1, BlockedBy: []string{"TKT-001"}})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-001", Seq: 1, Title: "Reviewed blocker", State: "validated", Priority: 1, Description: updateRunnableDescription(), AC: updateCompletedAC(), Handoff: updateStructuredHandoff("validated", "none")})
+	s.CreateTicket(ctx, &ticket.Ticket{ID: "TKT-002", Seq: 2, Title: "Dependent", State: "ready", Priority: 1, BlockedBy: []string{"TKT-001"}, Description: updateRunnableDescription(), AC: updateRunnableAC()})
 
 	if err := s.SyncIndex(ctx); err != nil {
 		t.Fatalf("SyncIndex failed: %v", err)
@@ -126,9 +107,6 @@ func TestSelectNextTicket_ReleasesStaleClaimForStartableTicket(t *testing.T) {
 	runGitSession(t, tmpDir, "init")
 
 	cfg := ticket.DefaultConfig()
-	backlog := cfg.States["backlog"]
-	backlog.Next = append(backlog.Next, "in-progress")
-	cfg.States["backlog"] = backlog
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -138,13 +116,13 @@ func TestSelectNextTicket_ReleasesStaleClaimForStartableTicket(t *testing.T) {
 		ID:          "TKT-030",
 		Seq:         30,
 		Title:       "Stale claim leaf",
-		State:       "backlog",
+		State:       "ready",
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -174,9 +152,6 @@ func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := ticket.DefaultConfig()
-	backlog := cfg.States["backlog"]
-	backlog.Next = append(backlog.Next, "in-progress")
-	cfg.States["backlog"] = backlog
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -186,7 +161,7 @@ func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 		ID:          "TKT-010",
 		Seq:         10,
 		Title:       "[Epic] Umbrella",
-		State:       "backlog",
+		State:       "draft",
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -201,13 +176,13 @@ func TestSelectNextTicket_SkipsEpics(t *testing.T) {
 		ID:          "TKT-011",
 		Seq:         11,
 		Title:       "Actionable",
-		State:       "backlog",
+		State:       "ready",
 		Priority:    2,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket actionable failed: %v", err)
 	}
@@ -233,9 +208,6 @@ func TestSelectNextTicket_SkipsCoordinationTickets(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := ticket.DefaultConfig()
-	backlog := cfg.States["backlog"]
-	backlog.Next = append(backlog.Next, "in-progress")
-	cfg.States["backlog"] = backlog
 	if err := ticket.SaveConfig(tmpDir, cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
 	}
@@ -245,7 +217,7 @@ func TestSelectNextTicket_SkipsCoordinationTickets(t *testing.T) {
 		ID:          "TKT-020",
 		Seq:         20,
 		Title:       "Program: Framework Beauty",
-		State:       "backlog",
+		State:       "draft",
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -260,7 +232,7 @@ func TestSelectNextTicket_SkipsCoordinationTickets(t *testing.T) {
 		ID:          "TKT-021",
 		Seq:         21,
 		Title:       "Epic: Starter Quality",
-		State:       "backlog",
+		State:       "draft",
 		Priority:    2,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -275,13 +247,13 @@ func TestSelectNextTicket_SkipsCoordinationTickets(t *testing.T) {
 		ID:          "TKT-022",
 		Seq:         22,
 		Title:       "Actionable leaf",
-		State:       "backlog",
+		State:       "ready",
 		Priority:    3,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 		Labels:      []string{"topo:leaf"},
 	}); err != nil {
 		t.Fatalf("CreateTicket leaf failed: %v", err)
@@ -363,8 +335,8 @@ func TestSelectNextTicket_UsesStartableStatesFromConfig(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -451,8 +423,8 @@ func TestSelectNextTicket_LegacyCanonicalMapConfigRemainsWorkable(t *testing.T) 
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -521,7 +493,7 @@ func TestStartCmd_LegacyMultiHopWorkableMatchesListSelection(t *testing.T) {
 		t.Fatalf("write config failed: %v", err)
 	}
 
-	h.seedTicket("TKT-188", 188, ticket.State("backlog"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-188", 188, ticket.State("backlog"), updateRunnableAC())
 
 	listOut, err := h.run("ls", "--format", "json")
 	if err != nil {
@@ -585,13 +557,13 @@ func TestSelectNextTicket_SkipsClaimedTickets(t *testing.T) {
 			ID:          tc.id,
 			Seq:         tc.priority,
 			Title:       tc.id,
-			State:       "todo",
+			State:       "ready",
 			Priority:    tc.priority,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "D",
-			AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		}); err != nil {
 			t.Fatalf("CreateTicket(%s) failed: %v", tc.id, err)
 		}
@@ -644,13 +616,13 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Implement feature",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "agent:test-agent",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -666,17 +638,17 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket failed: %v", err)
 	}
-	if got.State != ticket.State("in-progress") {
-		t.Fatalf("expected in-progress state, got %s", got.State)
+	if got.State != ticket.State("running") {
+		t.Fatalf("expected running state, got %s", got.State)
 	}
-	if !strings.Contains(b.String(), "Runtime policy: unsecured") {
-		t.Fatalf("expected unsecured runtime note in output, got: %s", b.String())
+	if strings.Contains(b.String(), "Runtime policy:") {
+		t.Fatalf("did not expect runtime policy messaging in start output, got: %s", b.String())
 	}
-	if !strings.Contains(b.String(), "Security enforcement: warning-only") {
-		t.Fatalf("expected warning-only enforcement note in output, got: %s", b.String())
+	if strings.Contains(b.String(), "Security enforcement:") {
+		t.Fatalf("did not expect security enforcement messaging in start output, got: %s", b.String())
 	}
 
-	ns := security.NewRepoNamespaceStore(tmpHome)
+	ns := runstate.New(tmpHome)
 	run, ok, err := ns.GetRunManifest(tmpRepo, "TKT-001")
 	if err != nil || !ok {
 		t.Fatalf("expected run manifest, ok=%v err=%v", ok, err)
@@ -692,7 +664,7 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 	}
 }
 
-func TestStartCmd_ReportsEnabledSecurityEnforcement(t *testing.T) {
+func TestStartCmd_OmitsSecurityMessagingEvenWhenEnforcementEnabled(t *testing.T) {
 	h := newFakeRepoHarness(t)
 	cfg, err := ticket.LoadConfig(h.repo)
 	if err != nil {
@@ -702,14 +674,14 @@ func TestStartCmd_ReportsEnabledSecurityEnforcement(t *testing.T) {
 	if err := ticket.SaveConfig(h.repo, cfg); err != nil {
 		t.Fatalf("save config failed: %v", err)
 	}
-	h.seedTicket("TKT-810", 810, ticket.State("todo"), []ticket.AcceptanceCriterion{{Description: "ac"}})
+	h.seedTicket("TKT-810", 810, ticket.State("ready"), updateRunnableAC())
 
 	out, err := h.run("start")
 	if err != nil {
 		t.Fatalf("start failed: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "Security enforcement: enabled") {
-		t.Fatalf("expected enabled enforcement note in output, got:\n%s", out)
+	if strings.Contains(out, "Security enforcement:") {
+		t.Fatalf("did not expect security enforcement note in output, got:\n%s", out)
 	}
 }
 
@@ -717,6 +689,7 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
@@ -724,6 +697,7 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
@@ -734,6 +708,7 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
+	runEnableReview = false
 	runDisableReview = false
 
 	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
@@ -745,13 +720,13 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 		ID:          "TKT-501",
 		Seq:         501,
 		Title:       "Managed start run",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -779,8 +754,8 @@ func TestStartRunDelegatesToManagedRunnerForNextTicket(t *testing.T) {
 	if gotTicket != "TKT-501" {
 		t.Fatalf("expected start --run to choose TKT-501, got %q", gotTicket)
 	}
-	if !gotReview {
-		t.Fatalf("expected review enabled by default")
+	if gotReview {
+		t.Fatalf("expected review disabled by default")
 	}
 	if got := out.String(); !strings.Contains(got, "TKT-501: done") {
 		t.Fatalf("unexpected output: %s", got)
@@ -791,6 +766,7 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
@@ -798,6 +774,7 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
@@ -807,6 +784,7 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
+	runEnableReview = false
 	runDisableReview = false
 	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -847,10 +825,11 @@ func TestStartRunAutoDelegatesToSerialRunner(t *testing.T) {
 	}
 }
 
-func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
+func TestStartRunReviewEnablesReviewerLoop(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
@@ -858,6 +837,7 @@ func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
@@ -868,6 +848,7 @@ func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
+	runEnableReview = false
 	runDisableReview = false
 
 	if err := ticket.SaveConfig(tmpRepo, ticket.DefaultConfig()); err != nil {
@@ -879,13 +860,13 @@ func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
 		ID:          "TKT-502",
 		Seq:         502,
 		Title:       "Managed start no review",
-		State:       ticket.State("todo"),
+		State:       ticket.State("ready"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		CreatedBy:   "human:test",
-		Description: "D",
-		AC:          []ticket.AcceptanceCriterion{{Description: "A"}},
+		Description: updateRunnableDescription(),
+		AC:          updateRunnableAC(),
 	}); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -903,12 +884,12 @@ func TestStartRunNoReviewDisablesReviewerLoop(t *testing.T) {
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"start", "--run", "--no-review"})
+	rootCmd.SetArgs([]string{"start", "--run", "--review"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("start --run --no-review failed: %v\n%s", err, out.String())
+		t.Fatalf("start --run --review failed: %v\n%s", err, out.String())
 	}
-	if gotReview {
-		t.Fatalf("expected --no-review to disable reviewer loop")
+	if !gotReview {
+		t.Fatalf("expected --review to enable reviewer loop")
 	}
 }
 
@@ -916,6 +897,7 @@ func TestStartRunAutoStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
@@ -923,6 +905,7 @@ func TestStartRunAutoStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
@@ -933,6 +916,7 @@ func TestStartRunAutoStreamsLiveTranscriptFromRuntimeFiles(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
+	runEnableReview = false
 	runDisableReview = false
 	if err := ticket.SaveConfig(repoRoot, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -992,6 +976,7 @@ func TestStartAutoImpliesManagedRun(t *testing.T) {
 	prev := newRunOrchestrator
 	prevStartRun := startRun
 	prevStartAuto := startAuto
+	prevReview := runEnableReview
 	prevNoReview := runDisableReview
 	prevRepo := repo
 	prevFormat := format
@@ -999,6 +984,7 @@ func TestStartAutoImpliesManagedRun(t *testing.T) {
 		newRunOrchestrator = prev
 		startRun = prevStartRun
 		startAuto = prevStartAuto
+		runEnableReview = prevReview
 		runDisableReview = prevNoReview
 		repo = prevRepo
 		format = prevFormat
@@ -1008,6 +994,7 @@ func TestStartAutoImpliesManagedRun(t *testing.T) {
 	format = "human"
 	startRun = false
 	startAuto = false
+	runEnableReview = false
 	runDisableReview = false
 	if err := ticket.SaveConfig(repo, ticket.DefaultConfig()); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -1096,26 +1083,26 @@ func TestStartCmd_EmptyWorkableSetExplainsBlockedBacklog(t *testing.T) {
 			ID:          "TKT-001",
 			Seq:         1,
 			Title:       "Active blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-002",
 			Seq:         2,
 			Title:       "Blocked backlog",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    2,
 			BlockedBy:   []string{"TKT-001"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "human:test",
-			Description: "desc",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 	} {
 		if err := s.CreateTicket(context.Background(), tk); err != nil {
@@ -1169,26 +1156,26 @@ func TestStartCmd_AutomationAutoHealsBlockedQueue(t *testing.T) {
 			ID:          "TKT-201",
 			Seq:         201,
 			Title:       "Current blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "agent:test",
-			Description: "blocking ticket",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-202",
 			Seq:         202,
 			Title:       "Blocked startable leaf",
-			State:       ticket.State("todo"),
+			State:       ticket.State("ready"),
 			Priority:    1,
 			BlockedBy:   []string{"TKT-201"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "agent:test",
-			Description: "blocked startable ticket",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 	} {
 		if err := s.CreateTicket(context.Background(), tk); err != nil {
@@ -1244,26 +1231,26 @@ func TestStartCmd_ResumesActiveTicketWhenNoWorkableStartable(t *testing.T) {
 			ID:          "TKT-399",
 			Seq:         399,
 			Title:       "Active blocker",
-			State:       ticket.State("in-progress"),
+			State:       ticket.State("running"),
 			Priority:    2,
 			CreatedAt:   now,
 			StartedAt:   now,
 			UpdatedAt:   now,
 			CreatedBy:   "human:test",
-			Description: "active ticket in progress",
-			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
+			Description: updateRunnableDescription(),
+			AC:          updateRunnableAC(),
 		},
 		{
 			ID:          "TKT-400",
 			Seq:         400,
 			Title:       "Blocked backlog",
-			State:       ticket.State("backlog"),
+			State:       ticket.State("draft"),
 			Priority:    3,
 			BlockedBy:   []string{"TKT-399"},
 			CreatedAt:   now.Add(time.Minute),
 			UpdatedAt:   now.Add(time.Minute),
 			CreatedBy:   "human:test",
-			Description: "blocked backlog ticket",
+			Description: "blocked draft ticket",
 			AC:          []ticket.AcceptanceCriterion{{Description: "ac"}},
 		},
 	} {

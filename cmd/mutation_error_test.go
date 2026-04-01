@@ -21,18 +21,18 @@ func TestBuildMutationErrorEnvelopeValidationTransitionAndStorage(t *testing.T) 
 		t.Fatalf("expected suggested fix for validation errors, got %+v", validation)
 	}
 
-	transition := buildMutationErrorEnvelope(errors.New("cannot transition from \"todo\" to \"done\""))
+	transition := buildMutationErrorEnvelope(errors.New("cannot transition from \"ready\" to \"validated\""))
 	if transition.ErrorCode != "transition_error" || transition.Field != "state" {
 		t.Fatalf("expected transition envelope with state field, got %+v", transition)
 	}
 	if transition.Retryable {
 		t.Fatalf("transition errors should be non-retryable, got %+v", transition)
 	}
-	if !strings.Contains(transition.SuggestedFix, "`in-review`") {
-		t.Fatalf("expected done transition fix to point agents at in-review, got %+v", transition)
+	if !strings.Contains(transition.SuggestedFix, "valid state transition") {
+		t.Fatalf("expected generic transition fix guidance, got %+v", transition)
 	}
 
-	humanOnly := buildMutationErrorEnvelope(errors.New("transition to the configured completed state (default `done`) is human-only. If you are an LLM agent, stop at the configured review state (default `in-review`) instead; that is enough to unblock yourself and hand off for human verification"))
+	humanOnly := buildMutationErrorEnvelope(errors.New("transition to the configured completed state is human-only. If you are an LLM agent, stop at the configured review state instead; that is enough to unblock yourself and hand off for human verification"))
 	if humanOnly.ErrorCode != "transition_error" || humanOnly.Field != "state" {
 		t.Fatalf("expected human-only transition envelope with state field, got %+v", humanOnly)
 	}

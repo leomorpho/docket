@@ -40,7 +40,7 @@ func TestFixCmd(t *testing.T) {
 		ID:          "TKT-001",
 		Seq:         1,
 		Title:       "Original Title",
-		State:       ticket.State("todo"),
+		State:       ticket.State("draft"),
 		Priority:    1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -125,11 +125,11 @@ func TestFixAll(t *testing.T) {
 	s := local.New(tmpDir)
 	now := time.Now().UTC().Truncate(time.Second)
 	s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 	s.CreateTicket(context.Background(), &ticket.Ticket{
-		ID: "TKT-002", Seq: 2, Title: "T2", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-002", Seq: 2, Title: "T2", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "D", AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	})
 

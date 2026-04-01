@@ -64,8 +64,8 @@ func (p *GitProvider) CommitAll(ctx context.Context, worktreePath, message strin
 	return git.CommitAll(worktreePath, message)
 }
 
-func (p *GitProvider) MergeBranch(ctx context.Context, branch string) error {
-	return git.MergeBranch(p.sharedRoot, branch)
+func (p *GitProvider) MergeBranch(ctx context.Context, branch, message string) error {
+	return git.MergeBranch(p.sharedRoot, branch, message)
 }
 
 func (p *GitProvider) DeleteBranch(ctx context.Context, branch string) error {

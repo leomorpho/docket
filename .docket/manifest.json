@@ -3,2128 +3,2128 @@
   "tickets": {
     "TKT-001": {
       "title": "Bootstrap docket to track itself",
-      "state": "done",
+      "state": "validated",
       "priority": 23
     },
     "TKT-002": {
       "title": "Project scaffolding",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-003": {
       "title": "Core data types",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-004": {
       "title": "Sequential ID generation",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-005": {
       "title": "Backend interface + local markdown store",
-      "state": "done",
+      "state": "validated",
       "priority": 4
     },
     "TKT-006": {
       "title": "Schema validator (`docket validate`)",
-      "state": "done",
+      "state": "validated",
       "priority": 5
     },
     "TKT-007": {
       "title": "`docket init` command",
-      "state": "done",
+      "state": "validated",
       "priority": 6
     },
     "TKT-008": {
       "title": "`docket create` command",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-009": {
       "title": "`docket list` command",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-010": {
       "title": "`docket show` command",
-      "state": "done",
+      "state": "validated",
       "priority": 9
     },
     "TKT-011": {
       "title": "`docket update` command",
-      "state": "done",
+      "state": "validated",
       "priority": 10
     },
     "TKT-012": {
       "title": "`docket comment` command",
-      "state": "done",
+      "state": "validated",
       "priority": 11
     },
     "TKT-013": {
       "title": "SQLite index cache",
-      "state": "done",
+      "state": "validated",
       "priority": 12
     },
     "TKT-014": {
       "title": "`docket board` — bubbletea TUI kanban",
-      "state": "done",
+      "state": "validated",
       "priority": 13
     },
     "TKT-015": {
       "title": "Git blame integration",
-      "state": "done",
+      "state": "validated",
       "priority": 14
     },
     "TKT-016": {
       "title": "Inline annotation scan + refs",
-      "state": "done",
+      "state": "validated",
       "priority": 15
     },
     "TKT-017": {
       "title": "`docket context` command",
-      "state": "done",
+      "state": "validated",
       "priority": 16
     },
     "TKT-018": {
       "title": "Session management",
-      "state": "done",
+      "state": "validated",
       "priority": 17
     },
     "TKT-019": {
       "title": "Acceptance criteria commands",
-      "state": "done",
+      "state": "validated",
       "priority": 18
     },
     "TKT-020": {
       "title": "`docket check` — staleness and consistency",
-      "state": "done",
+      "state": "validated",
       "priority": 19
     },
     "TKT-021": {
       "title": "`docket help-json` — machine-readable manifest",
-      "state": "done",
+      "state": "validated",
       "priority": 20
     },
     "TKT-022": {
       "title": "MCP server",
-      "state": "done",
+      "state": "validated",
       "priority": 21
     },
     "TKT-023": {
       "title": "lefthook config + CLAUDE.md template",
-      "state": "done",
+      "state": "validated",
       "priority": 22
     },
     "TKT-024": {
       "title": "`docket check --fix` skips other rules after autofix",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-025": {
       "title": "MCP update must enforce state transitions",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-026": {
       "title": "Comments and linked commits should bump updated_at",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-027": {
       "title": "Validate handoff structure for in-review and done tickets",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-028": {
       "title": "Limit default `docket check` scope to open tickets",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-029": {
       "title": "Suppress Cobra usage text on expected quality-gate failures",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-030": {
       "title": "Update README to match markdown ticket architecture",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-031": {
       "title": "Increase coverage on high-risk TUI and MCP paths",
-      "state": "done",
+      "state": "validated",
       "priority": 4
     },
     "TKT-032": {
       "title": "Add semantic config keys to the config model",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-033": {
       "title": "Add semantic config defaults",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-034": {
       "title": "Add semantic config environment overrides",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-035": {
       "title": "Add semantic provider interface",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-036": {
       "title": "Add semantic provider registry",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-037": {
       "title": "Add uv provider skeleton",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-038": {
       "title": "Define Python embedding input schema",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-039": {
       "title": "Define Python embedding output schema",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-040": {
       "title": "Add Python bridge script file",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-041": {
       "title": "Add uv invocation wrapper",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-042": {
       "title": "Add uv availability check",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-043": {
       "title": "Add provider cache environment wiring",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-044": {
       "title": "Add sentence-transformers dependency pinning",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-045": {
       "title": "Add model name plumbing",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-046": {
       "title": "Add real embedding call in Python bridge",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-047": {
       "title": "Add provider timeout handling",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-048": {
       "title": "Add provider stderr and error parsing",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-049": {
       "title": "Define semantic ticket chunk types",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-050": {
       "title": "Define semantic chunk ID format",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-051": {
       "title": "Define semantic chunk hash format",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-052": {
       "title": "Implement semantic ticket chunker",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-053": {
       "title": "Add semantic chunker unit tests",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-054": {
       "title": "Add semantic metadata store schema",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-055": {
       "title": "Add semantic metadata store read and write",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-056": {
       "title": "Add chromem-go dependency",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-057": {
       "title": "Add vector collection initialization",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-058": {
       "title": "Add vector upsert operation",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-059": {
       "title": "Add vector delete operation",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-060": {
       "title": "Add vector query operation",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-061": {
       "title": "Add semantic index path configuration",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-062": {
       "title": "Add semantic gitignore entries",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-063": {
       "title": "Add full-scan ticket enumerator",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-064": {
       "title": "Add incremental semantic diff detector",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-065": {
       "title": "Add incremental semantic indexer",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-066": {
       "title": "Add full semantic rebuild path",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-067": {
       "title": "Add semantic index version tracking",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-068": {
       "title": "Add semantic freshness check",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-069": {
       "title": "Add semantic status command shell",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-070": {
       "title": "Add provider details to semantic status",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-071": {
       "title": "Add cache paths to semantic status",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-072": {
       "title": "Add index stats to semantic status",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-073": {
       "title": "Add semantic rebuild command shell",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-074": {
       "title": "Add incremental rebuild execution",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-075": {
       "title": "Add full rebuild flag",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-076": {
       "title": "Add lexical scorer extraction",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-077": {
       "title": "Add vector scorer",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-078": {
       "title": "Add hybrid score combiner",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-079": {
       "title": "Add field weighting rules",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-080": {
       "title": "Add graph boost input model",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-081": {
       "title": "Add graph boost calculation",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-082": {
       "title": "Add related command shell",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-083": {
       "title": "Add semantic mode flag handling",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-084": {
       "title": "Add related lexical-only execution",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-085": {
       "title": "Add related hybrid execution",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-086": {
       "title": "Add related unavailable-provider behavior",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-087": {
       "title": "Add semantic warnings in CLI output",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-088": {
       "title": "Add semantic config docs",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-089": {
       "title": "Add local cache docs",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-090": {
       "title": "Add uv requirement docs",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-091": {
       "title": "Add semantic rebuild workflow docs",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-092": {
       "title": "Add provider unit tests",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-093": {
       "title": "Add metadata-store unit tests",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-094": {
       "title": "Add vector-store unit tests",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-095": {
       "title": "Add semantic status CLI tests",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-096": {
       "title": "Add semantic rebuild CLI tests",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-097": {
       "title": "Add related command CLI tests",
-      "state": "done",
+      "state": "validated",
       "priority": 8
     },
     "TKT-098": {
       "title": "Add semantic ranking tests",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-099": {
       "title": "Add end-to-end semantic indexing test with fake provider",
-      "state": "done",
+      "state": "validated",
       "priority": 7
     },
     "TKT-100": {
       "title": "Redesign config schema: rich state objects with transitions, column order, and open classification",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-101": {
       "title": "Remove hardcoded state constants and ValidStates slice; derive from config",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-102": {
       "title": "Make state transition rules config-driven; remove hardcoded validTransitions map",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-103": {
       "title": "Make board columns config-driven: order, labels, and column assignment from config",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-104": {
       "title": "Make --state open filter and list defaults config-driven",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-105": {
       "title": "Make default_state and default_priority config-driven in create command and board",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-106": {
       "title": "Make handoff section structure config-driven with template support",
-      "state": "done",
+      "state": "validated",
       "priority": 4
     },
     "TKT-107": {
       "title": "Add parent/child ticket relationships (epics)",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-108": {
       "title": "Read-only Svelte board UI for docket",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-109": {
       "title": "Scaffold SvelteKit app in web/ hidden from user repos",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-110": {
       "title": "Board view with config-driven columns and ticket cards",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-111": {
       "title": "Ticket detail slide-in panel with markdown rendering",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-112": {
       "title": "Filter bar and list view toggle",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-113": {
       "title": "docket ui command to launch dev server",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-114": {
       "title": "Front-load CLI query instructions in CLAUDE.md",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-115": {
       "title": "Add reason-based explanation for CLI-over-files in CLAUDE.md",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-116": {
       "title": "Add README.md inside .docket/tickets/ as a deterrent",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-117": {
       "title": "Add docket hook to warn on direct ticket file reads",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-118": {
       "title": "Smarter direct-edit validation: accept valid, reject+educate invalid",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-119": {
       "title": "Expand help-json agent_instructions with ticket-writing guide",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-120": {
       "title": "docket create quality validation: enforce description and AC minimums",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-121": {
       "title": "docket validate quality checks: AC count, desc length, reasoning trail",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-122": {
       "title": "Version update notifications: detect and surface new docket releases",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-123": {
       "title": "UI DX: default browser prompt accepts Enter as yes",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-124": {
       "title": "UI server bridge: execute whitelisted docket update commands",
-      "state": "done",
+      "state": "archived",
       "priority": 1
     },
     "TKT-125": {
       "title": "UI: move ticket state from board/list using docket update",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-126": {
       "title": "UI: edit ticket title from detail panel via docket update",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-127": {
       "title": "UI: edit ticket description/body from detail panel via docket update",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-128": {
       "title": "UI mutation UX: consistent loading, error, and refresh behavior",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-129": {
       "title": "Verification: cover UI prompt and browser-driven ticket mutations",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-130": {
       "title": "CLI hardening: ensure docket update supports non-interactive UI mutation needs",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-131": {
       "title": "docket install — git hook infrastructure",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-132": {
       "title": "docket upgrade — versioned artifact management",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-133": {
       "title": "Runnable verification commands on AC items",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-134": {
       "title": "Smart defaults by stack — auto-inject AC on ticket creation",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-135": {
       "title": "Human interactive AC prompt in pre-commit hook",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-136": {
       "title": "Scope locking — file claim tracking per ticket",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-137": {
       "title": "Worktree conflict detection + mutual exclusivity declarations",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-138": {
       "title": "AC templates — named composable acceptance criteria sets",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-139": {
       "title": "Session continuity checkpoints — auto-snapshot on AC completion",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-140": {
       "title": "docket ac update and ac remove commands",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-141": {
       "title": "Spike: multi-repo support in docket ui via shared port and project selector",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-142": {
       "title": "Core: Implement cross-worktree claiming in shared .git directory",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-143": {
       "title": "Invisible Coordination: Trigger ticket claims on state transition",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-144": {
       "title": "Implement `docket install --skill` for Gemini CLI integration",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-145": {
       "title": "Expand docket install to support Cursor and VS Code",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-146": {
       "title": "Optimize MCP tools for large payloads via temporary files",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-147": {
       "title": "Force MCP Usage: Implement signature-based write protection",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-173"
     },
     "TKT-148": {
       "title": "Implement `docket fix` to repair ticket signatures and teach agents",
-      "state": "done",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-173"
     },
     "TKT-149": {
       "title": "Enhance pre-commit validation with 'Tutor' feedback",
-      "state": "done",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-173"
     },
     "TKT-150": {
       "title": "Transparent Isolation: Automatically create Git worktrees for agents",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-151": {
       "title": "Transparent Integration: Merge-back and cleanup on ticket completion",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-152": {
       "title": "Deprecate and hide the TUI Kanban board",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-153": {
       "title": "Divergent Work Prevention: Force agents to check for existing tickets",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-154": {
       "title": "Ecosystem Analytics: Track and visualize ticket lead time",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-155": {
       "title": "Enforcement: Implement DOCKET_AGENT_MODE for contextual validation",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-156": {
       "title": "Observability: Implement docket ps to track active worktrees and claims",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-157": {
       "title": "Continuity: Implement docket resume for seamless context handover",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-158": {
       "title": "DX: Implement common command aliases (ls, st, up, cr)",
-      "state": "done",
+      "state": "validated",
       "priority": 3
     },
     "TKT-159": {
       "title": "Infrastructure: Implement a robust integration testing rig for Git/Process coordination",
-      "state": "done",
+      "state": "validated",
       "priority": 1
     },
     "TKT-160": {
       "title": "Signature Test",
-      "state": "backlog",
+      "state": "draft",
       "priority": 10
     },
     "TKT-161": {
       "title": "Fixed Title",
-      "state": "backlog",
+      "state": "draft",
       "priority": 11
     },
     "TKT-162": {
       "title": "[Epic] Refactor Architecture for Agent-First Workflow",
-      "state": "todo",
+      "state": "draft",
       "priority": 10
     },
     "TKT-163": {
       "title": "Extract WorkflowManager Domain Service",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-162"
     },
     "TKT-164": {
       "title": "Abstract Git Operations into vcs.Provider Interface",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-165": {
       "title": "Abstract Claims into claim.Manager Interface",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-166": {
       "title": "Refactor MCP Handlers for Dependency Injection",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-167": {
       "title": "Implement Command Pattern for Ticket Mutations",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-168": {
       "title": "Dependency Injection Wiring in CLI",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-169": {
       "title": "Improve DX: Add shorthand command aliases (ls, st, bd)",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-162"
     },
     "TKT-170": {
       "title": "Add authoring-time guidance and templates that help tickets satisfy the Ready Contract",
-      "state": "done",
+      "state": "validated",
       "priority": 10,
       "parent": "TKT-177"
     },
     "TKT-171": {
       "title": "Implement docket start: Autonomous Agentic Workflow",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-162"
     },
     "TKT-172": {
       "title": "[Epic] Harden local trust, workflow governance, and agent execution",
-      "state": "todo",
+      "state": "draft",
       "priority": 1
     },
     "TKT-173": {
       "title": "[Epic] Build the local trust anchor and secure mode",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-174": {
       "title": "[Epic] Govern workflow policy and privileged state transitions",
-      "state": "todo",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-175": {
       "title": "[Epic] Add repo-native signed state and rollback recovery",
-      "state": "todo",
+      "state": "draft",
       "priority": 3,
       "parent": "TKT-172"
     },
     "TKT-176": {
       "title": "[Epic] Enforce agent worktrees and execution traceability",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-172"
     },
     "TKT-177": {
       "title": "[Epic] Improve AI orchestration, context discipline, and docs",
-      "state": "todo",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-172"
     },
     "TKT-178": {
       "title": "Require DOCKET_HOME and define the Docket home contract",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-173"
     },
     "TKT-179": {
       "title": "Add a keystore provider interface with an encrypted file backend",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-173"
     },
     "TKT-180": {
       "title": "Add password-based secure mode with TTL and explicit privileged confirmations",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-173"
     },
     "TKT-181": {
       "title": "Namespace per-repo trust anchors under stable repo IDs in DOCKET_HOME",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-173"
     },
     "TKT-182": {
       "title": "Add key enrollment, rotation, and recovery primitives for local-first identities",
-      "state": "done",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-173"
     },
     "TKT-183": {
       "title": "Add a signed workflow.lock format for approved runtime policy",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-184": {
       "title": "Gate workflow activation behind secure mode and pin runs to approved lock hashes",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-185": {
       "title": "Split docket into agent-safe and secure/admin capability surfaces",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-186": {
       "title": "Enforce human-only done and other privileged state transitions",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-187": {
       "title": "Add reserved workflow semantics for review verification and terminal states",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-188": {
       "title": "Extend ticket acceptance criteria for human verification preserved behavior and applicability",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-189": {
       "title": "Move privileged UI mutations onto the secure or admin surface",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-190": {
       "title": "Build semantic diff views for workflow and state transitions",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-191": {
       "title": "Define a signed event ledger format and append rules for privileged runtime events",
-      "state": "done",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-175"
     },
     "TKT-192": {
       "title": "Verify ledger chain integrity and signatures on privileged mutations",
-      "state": "in-review",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-175"
     },
     "TKT-193": {
       "title": "Store the trusted ledger head outside the repo and detect rollback",
-      "state": "done",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-175"
     },
     "TKT-194": {
       "title": "Build repair and re-anchor tooling from Git history and valid signed events",
-      "state": "backlog",
+      "state": "draft",
       "priority": 3,
       "parent": "TKT-175"
     },
     "TKT-195": {
       "title": "Audit why existing automatic worktree behavior is not visible in normal agent flows",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-176"
     },
     "TKT-196": {
       "title": "Require Docket-created worktrees for agent-managed runs and fail closed without fallback",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-176"
     },
     "TKT-197": {
       "title": "Add run manifests that bind ticket actor worktree and workflow hash",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-176"
     },
     "TKT-198": {
       "title": "Enforce commit-to-ticket linkage for Docket-managed runs before review or QA",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-176"
     },
     "TKT-199": {
       "title": "Add Docket-native enforcement hooks for worktree review QA and privileged gates",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-176"
     },
     "TKT-200": {
       "title": "Add capability-tier model routing and a provider adapter contract",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-201": {
       "title": "Map provider models to tiers and route work by task size risk and failure count",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-202": {
       "title": "Reset context on ticket worktree and run boundaries and persist structured resume artifacts",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-203": {
       "title": "Generate Docket-managed instruction packs from approved workflow policy",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-204": {
       "title": "Phase 2: Add human-approval and scoped-replay controls atop baseline learning engine",
-      "state": "backlog",
+      "state": "draft",
       "priority": 3,
       "parent": "TKT-177"
     },
     "TKT-205": {
       "title": "Document the security model DOCKET_HOME setup workflow governance and recovery",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-206": {
       "title": "Evaluate modes versus specialized agents after hooks and instruction packs land",
-      "state": "backlog",
+      "state": "draft",
       "priority": 3,
       "parent": "TKT-177"
     },
     "TKT-207": {
       "title": "Spike: design a ticket-scope security audit hook and artifact",
-      "state": "backlog",
+      "state": "draft",
       "priority": 3,
       "parent": "TKT-177"
     },
     "TKT-208": {
       "title": "Fix docket ui project registration 404s",
-      "state": "done",
+      "state": "validated",
       "priority": 10
     },
     "TKT-209": {
       "title": "Epic: Cross-platform agent capability foundation for Codex, Claude Code, and Gemini",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1
     },
     "TKT-210": {
       "title": "Define capabilities contract v1 for workflow, hooks, and skills",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-211": {
       "title": "Implement adapter interface and registry for Codex, Claude Code, and Gemini",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-212": {
       "title": "Add adapter auto-detection with explicit override and ambiguity handling",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-213": {
       "title": "Create idempotent docket bootstrap command with cross-link to docket start",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-214": {
       "title": "Implement Codex adapter for bootstrap, status, and doctor",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-215": {
       "title": "Implement Claude Code adapter for bootstrap, status, and doctor",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-216": {
       "title": "Implement Gemini adapter for bootstrap, status, and doctor",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-217": {
       "title": "Upgrade docket start with capability digest, status strip, and bootstrap remediation",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-218": {
       "title": "Add docket capabilities command with md and json outputs",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-219": {
       "title": "Implement docket doctor health checks for MCP, skills, hooks, and contract state",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-220": {
       "title": "Eliminate interactive AC or hook prompts and enforce deterministic non-blocking flow",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-221": {
       "title": "Implement minimal lifecycle event set with stable payload schema",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-222": {
       "title": "Generate minimal cross-platform skill pack v1 from canonical contract",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-223": {
       "title": "Implement learning capture parser and storage for LEARN rules",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-224": {
       "title": "Add learning replay in docket start with top 3 relevant rules",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-225": {
       "title": "Expand unit test coverage for contract, bootstrap, start, doctor, and learning modules",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-226": {
       "title": "Create fake-repo integration harness simulating LLM goal-driven runs",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-227": {
       "title": "Add adapter matrix integration tests for Codex, Claude Code, and Gemini",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-228": {
       "title": "Epic: LLM-friendly ticket authoring and automation surface",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1
     },
     "TKT-229": {
       "title": "Define ticket and backlog apply spec schema with validator",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-230": {
       "title": "Implement transactional docket ticket apply command",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-231": {
       "title": "Implement transactional docket backlog apply command",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-232": {
       "title": "Add global automation mode for non-interactive deterministic CLI behavior",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-233": {
       "title": "Harden sqlite write paths with busy timeout and bounded retry policy",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-234": {
       "title": "Add machine-readable error envelope for mutating commands",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-235": {
       "title": "Add scaffold commands for ticket and backlog spec templates",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-236": {
       "title": "Update help-json, start, and capabilities with LLM quick-path guidance",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-237": {
       "title": "Add fake-repo integration suite for LLM ticket authoring reliability",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-238": {
       "title": "Harden ticket parser so nested markdown headings do not break Description parsing",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-239": {
       "title": "Epic: Screenshot Proof Evidence Pipeline for Ducca Tickets",
-      "state": "done",
+      "state": "validated",
       "priority": 2
     },
     "TKT-240": {
       "title": "Define screenshot proof metadata schema (`proof_title` + `note`) and durable storage",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-241": {
       "title": "Implement `docket proof` CLI (`add/list/remove`) with `proof_title` and `note`",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-242": {
       "title": "Expose screenshot proof metadata in `show`, `context`, and JSON ticket outputs",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-243": {
       "title": "Render screenshot proof evidence in Ducca ticket UI",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-244": {
       "title": "Add end-to-end screenshot proof integration suite and quick-path guidance",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-245": {
       "title": "Implement content-addressed in-repo proof blob storage policy",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-246": {
       "title": "Harden proof intake: MIME sniffing, format allowlist, and filesystem safety",
-      "state": "done",
+      "state": "archived",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-247": {
       "title": "Define proof remove semantics and add garbage collection for unreferenced blobs",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-248": {
       "title": "Record proof add/remove lifecycle events for integrity and auditability",
-      "state": "done",
+      "state": "archived",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-249": {
       "title": "Add proof query and filter ergonomics for automation and UI consumption",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-250": {
       "title": "Add lazy-loading and scalable rendering for screenshot proofs in Ducca UI",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-239"
     },
     "TKT-251": {
       "title": "Investigate and fix `update --state done` behavior across warning-only and enforced modes",
-      "state": "in-review",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-252": {
       "title": "Auto-transition review-ready tickets out of in-progress",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-253": {
       "title": "Define Docket skill and hook capability namespaces",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-254": {
       "title": "Add docket skill commands for capability discovery and invocation",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-255": {
       "title": "Add docket hook commands for hook introspection and status",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-256": {
       "title": "Expose Docket skills through MCP",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-257": {
       "title": "Expose Docket hook metadata and status through MCP",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-258": {
       "title": "Expose Docket capability discovery through MCP",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-259": {
       "title": "Add MCP tests for skill, hook, and capability discovery flows",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-260": {
       "title": "Add an Agent Quickstart block to docket start",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-261": {
       "title": "Add Docket discovery hints to common entry commands",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-262": {
       "title": "Document intro reminder behavior in CLI code comments",
-      "state": "done",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-177"
     },
     "TKT-263": {
       "title": "Clarify the UX split between docket status and docket doctor",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-264": {
       "title": "Show hook readiness and active hook events in status surfaces",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-265": {
       "title": "Add CLI commands to inspect and search stored learnings",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-266": {
       "title": "Add an explicit learning replay command for the current ticket",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-267": {
       "title": "Add an explicit learn-rule capture command",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-268": {
       "title": "Polish session handoff generation and resume continuity",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-269": {
       "title": "Add a wrap-up command for end-of-session workflow checks",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-270": {
       "title": "Add a context-optimizer command for compact LLM task briefs",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-271": {
       "title": "Add a smart-commit command tied to ticket context and review readiness",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-272": {
       "title": "Expand adapter installation with a portable-first fallback model",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-273": {
       "title": "Add native Claude Code skill and hook installation support",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-274": {
       "title": "Add native Gemini skill installation support",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-275": {
       "title": "Improve Codex adapter installation around AGENTS and MCP discovery",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-276": {
       "title": "Add capability discovery guidance to adapter-installed instruction files",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-277": {
       "title": "Add shell-safe groomed ticket creation flow for multi-line descriptions and ACs",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-278": {
       "title": "Add bulk roadmap-to-tickets authoring flow for one-line worklists",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-279": {
       "title": "Allow tickets in todo or in-progress to move back to backlog",
-      "state": "done",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-228"
     },
     "TKT-280": {
       "title": "Add first-class skill definitions and metadata for Docket capability surfaces",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-281": {
       "title": "Add hook event telemetry with CLI and MCP history surfaces",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-282": {
       "title": "Add adapter-aware skill guidance to docket start and discovery surfaces",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-177"
     },
     "TKT-283": {
       "title": "Add a synchronized capability snapshot shared by CLI, MCP, and adapter docs",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-284": {
       "title": "Add native slash-command and command-alias installation where supported",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-285": {
       "title": "Add standard Agent Skills artifact generation for Docket capabilities",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-286": {
       "title": "Add unified Agent Skills installer for project-local and user-global directories",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-209"
     },
     "TKT-287": {
       "title": "Add canonical Docket skill pack and starter bundle for supported agents",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-288": {
       "title": "Add self-describing Docket skill export surface for installer and agent discovery",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-289": {
       "title": "Add cross-agent skill sync from canonical Docket skill directory",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-209"
     },
     "TKT-290": {
       "title": "[Epic] Segregate Docket local artifacts and preserve backward compatibility",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1
     },
     "TKT-291": {
       "title": "Define tracked-vs-local artifact policy and canonical .docket/local layout",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-292": {
       "title": "Implement backward-compatible artifact path resolution with legacy read fallback",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-293": {
       "title": "Add upgrade migration and idempotent .gitignore management for local artifacts",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-294": {
       "title": "Enforce tracked-required and local-forbidden artifact rules in pre-commit",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-295": {
       "title": "Document rollout and add regression matrix for legacy, mixed, and migrated repositories",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-296": {
       "title": "Phase 2: Remove legacy artifact path fallback after migration window",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-297": {
       "title": "Harden local artifact migration for crash, retry, and concurrency safety",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-298": {
       "title": "Add doctor/check diagnostics for legacy-new artifact layout drift",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-299": {
       "title": "Add cross-version compatibility matrix for artifact layout rollout",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-300": {
       "title": "Add canonical Docket artifact registry to prevent path/policy drift",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-301": {
       "title": "Auto-heal Docket ignore policy from init/bootstrap/install entrypoints",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-302": {
       "title": "Add migration rollback and recovery workflow for partial .docket/local failures",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-303": {
       "title": "Add CI artifact policy drift checks for local-vs-tracked invariants",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-304": {
       "title": "Split migration engine from ignore reconciliation in rollout execution",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-305": {
       "title": "Implement dedicated .gitignore reconciliation unit for Docket local artifacts",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-306": {
       "title": "Split pre-commit tracked-required artifact enforcement into dedicated policy unit",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-307": {
       "title": "Split pre-commit local-only artifact rejection into dedicated policy unit",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-290"
     },
     "TKT-308": {
       "title": "Split compatibility matrix harness implementation from docs/policy guidance",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-309": {
       "title": "Document support-window and failure-mode policy for artifact layout compatibility",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-290"
     },
     "TKT-310": {
       "title": "[Epic] Make workflow graph config-defined with fixed semantic roles",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-311": {
       "title": "[Epic] Secure approval and activation of editable workflow policy",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-312": {
       "title": "[Epic] Unify workflow-driven readiness across CLI, MCP, and UI surfaces",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-313": {
       "title": "Define workflow config v1 schema for semantic roles, per-state behavior, and presentation metadata",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-314": {
       "title": "Ship a default workflow config that matches current Docket behavior",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-315": {
       "title": "Implement a shared workflow evaluator that resolves transitions, roles, startability, and dependency blocking from config",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-316": {
       "title": "Add parity and multi-state-per-role workflow fixtures for default and custom graphs",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-317": {
       "title": "Refactor ticket transition validation to use the shared workflow evaluator",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-318": {
       "title": "Refactor blocked and unblocked readiness to evaluate blocker state semantics from config",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-319": {
       "title": "Refactor docket start to use config-defined startable states and evaluator-based readiness",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-320": {
       "title": "Refactor list, wrap-up, smart-commit, and board readiness surfaces to use the shared workflow evaluator",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-321": {
       "title": "Refactor MCP and machine-facing workflow surfaces to use the shared workflow evaluator",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-322": {
       "title": "Refactor epic and parent ticket handling to use config-backed workflow semantics instead of ad hoc special cases",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-312"
     },
     "TKT-323": {
       "title": "Update indexed ticket readiness to derive blocked status from workflow policy semantics",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-312"
     },
     "TKT-324": {
       "title": "Remove remaining hardcoded workflow graph and state-name assumptions after config-backed evaluation is authoritative",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-325": {
       "title": "Persist approved workflow-config identity in the secure area as the active policy reference",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-311"
     },
     "TKT-326": {
       "title": "Define and implement the relationship between repo workflow config, secure approval metadata, and workflow lock artifacts",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-311"
     },
     "TKT-327": {
       "title": "Add fallback behavior for repositories missing explicit workflow config",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-311"
     },
     "TKT-328": {
       "title": "Document human-editable workflow config, semantic state roles, dependency semantics, and secure approval",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-311"
     },
     "TKT-329": {
       "title": "Refactor ticket-apply and backlog-apply validation to accept config-defined workflow states",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-330": {
       "title": "Write and refresh the default workflow config artifact from init, bootstrap, and install entrypoints",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-311"
     },
     "TKT-331": {
       "title": "Add an explicit operator command flow to approve and activate workflow policy changes",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-311"
     },
     "TKT-332": {
       "title": "Add doctor and status diagnostics for workflow config validity, approval status, active-policy mismatch, and enforcement mode",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-311"
     },
     "TKT-333": {
       "title": "Invalidate caches and indexed readiness when workflow config changes",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-334": {
       "title": "Add a compatibility matrix for old repos, default workflow config, and custom workflow config",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-311"
     },
     "TKT-335": {
       "title": "Update start, help, and user guidance surfaces to describe workflow roles instead of hardcoded state names",
-      "state": "backlog",
+      "state": "draft",
       "priority": 2,
       "parent": "TKT-312"
     },
     "TKT-336": {
       "title": "Fix pre-commit ticket AC checks to read the pending commit message instead of the previous commit",
-      "state": "done",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-312"
     },
     "TKT-337": {
       "title": "[Epic] Experimental phase 2 local secure-storage improvements",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-172"
     },
     "TKT-338": {
       "title": "Define wrapped-key keystore format and protector abstraction",
-      "state": "in-review",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-339": {
       "title": "Refactor file keystore to use a generated data key with password-backed protector fallback",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-340": {
       "title": "Persist keystore protector metadata and provider selection under DOCKET_HOME",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-341": {
       "title": "Implement macOS Keychain protector for wrapped keystore data keys",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-342": {
       "title": "Add first-run secure unlock setup UX with Keychain-first macOS flow and password fallback",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-343": {
       "title": "Route existing secure unlock UX through the configured protector without unnecessary password prompts",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-344": {
       "title": "Report protector type, warning-only versus enabled enforcement, and secure-storage availability in status surfaces",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-345": {
       "title": "Add explicit local secure reset flow with identity-continuity warnings",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-346": {
       "title": "Preserve identity export and recovery compatibility across password-backed and keychain-backed keystores",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-347": {
       "title": "Add migration from legacy password-derived keystores to wrapped-key protector format",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-348": {
       "title": "Add cross-platform and macOS-gated test coverage for protector selection, unlock UX, and migration",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-349": {
       "title": "Document wrapped-key protectors, platform behavior, reset semantics, multi-human identity, and opt-in enforcement rollout",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-337"
     },
     "TKT-350": {
       "title": "Add simple opt-in security enforcement switch with warning-only-by-default behavior",
-      "state": "in-review",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-351": {
       "title": "Default experimental security enforcement to warning-only behavior until explicitly enabled",
-      "state": "in-review",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-352": {
       "title": "Make privileged transitions and workflow-policy commands respect the opt-in enforcement switch consistently",
-      "state": "in-review",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-353": {
       "title": "Surface whether secure enforcement is warning-only or enabled in start, status, doctor, and secure setup UX",
-      "state": "in-review",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-354": {
       "title": "Document experimental opt-in security enforcement and warning-only developer workflow",
-      "state": "backlog",
+      "state": "archived",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-355": {
       "title": "Add structured warning signals to JSON and MCP mutation surfaces when enforcement is not enabled",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-356": {
       "title": "Update web and TUI surfaces to display whether secure enforcement is warning-only or enabled",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-357": {
       "title": "Set brand-new repos to ask about experimental secure mode and fall back to warning-only when declined",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-358": {
       "title": "Add backward-compatible upgrade behavior for existing repos moving to warning-only-by-default security enforcement",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-359": {
       "title": "Record and surface warning-mode privileged events in visible human and LLM-readable history surfaces",
-      "state": "backlog",
+      "state": "archived",
       "priority": 3,
       "parent": "TKT-174"
     },
     "TKT-360": {
       "title": "Document when teams should stay warning-only versus enable secure enforcement",
-      "state": "backlog",
+      "state": "archived",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-361": {
       "title": "Define the repo-shared enforcement setting and where it is stored",
-      "state": "in-review",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-362": {
       "title": "Make warning-only secure messaging concise, deduplicated, and actionable",
-      "state": "backlog",
+      "state": "archived",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-363": {
       "title": "Standardize public security and enforcement vocabulary across CLI, config, docs, tickets, and code comments",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-364": {
       "title": "Define stable exit-code and structured-warning semantics for warning-only secure behavior",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-365": {
       "title": "Add simple `docket secure enable` and `docket secure disable` commands for existing repos",
-      "state": "backlog",
+      "state": "archived",
       "priority": 2,
       "parent": "TKT-174"
     },
     "TKT-366": {
       "title": "Allow web and TUI ticket completion actions to move tickets to done under warning-only or enforced behavior",
-      "state": "backlog",
+      "state": "archived",
       "priority": 1,
       "parent": "TKT-174"
     },
     "TKT-367": {
       "title": "Refactor workflow service start and finish transitions to resolve active and review targets from config roles",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-368": {
       "title": "Refactor update command lifecycle side effects to use config-defined active review and completed roles",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-369": {
       "title": "Refactor validation quality rules to derive handoff and activity expectations from workflow roles",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-310"
     },
     "TKT-370": {
       "title": "Refactor check status and lock surfaces to derive active-work semantics from workflow roles",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-371": {
       "title": "Refactor wrap-up and auto-review guidance to use config-defined workflow roles and target commands",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-372": {
       "title": "Keep scaffold JSON output pure when global human skill hints are enabled",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-228"
     },
     "TKT-373": {
       "title": "Clean up workflow docs and generated templates for role-based semantics",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-310"
     },
     "TKT-374": {
       "title": "Clean up workflow comments, tests, and examples that imply fixed state names",
-      "state": "in-review",
+      "state": "validated",
       "priority": 3,
       "parent": "TKT-310"
     },
     "TKT-375": {
       "title": "Add one optional reviewer pass with a single capped fix-review loop for completed ticket runs",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-379"
     },
     "TKT-376": {
       "title": "Implement run-next as a serial loop that selects the next runnable ticket and repeats until exhausted",
-      "state": "in-review",
+      "state": "validated",
       "priority": 2,
       "parent": "TKT-379"
     },
     "TKT-377": {
       "title": "Gate successful agent runs on final validation, clean repo state, and ticket transitions",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-378": {
       "title": "Define the run contract, lifecycle states, and machine-readable result format for agent ticket runs",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-379": {
       "title": "[Epic] Build serial Codex ticket execution with fresh sessions and a bounded review loop",
-      "state": "backlog",
+      "state": "draft",
       "priority": 1,
       "parent": "TKT-177"
     },
     "TKT-380": {
       "title": "Implement a one-ticket Codex runner that creates a fresh worktree and launches a fresh session",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-381": {
       "title": "Add run monitoring, RESULT parsing, and timeout handling for Codex-managed ticket runs",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-379"
     },
     "TKT-382": {
       "title": "Define modular agent-run package boundaries and interfaces before orchestration implementation",
-      "state": "in-review",
+      "state": "validated",
       "priority": 1,
       "parent": "TKT-379"
     }

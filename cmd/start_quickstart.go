@@ -25,11 +25,11 @@ type startAgentQuickstart struct {
 
 func buildStartAgentQuickstart(repoRoot, managedBranch, managedWorktree string) startAgentQuickstart {
 	// Defaults are only fallback examples when config cannot be loaded.
-	workState := "in-progress"
-	reviewState := "in-review"
+	workState := "running"
+	finishState := "validated"
 	if cfg, err := ticket.LoadConfig(repoRoot); err == nil {
 		workState = preferredStateForRole(cfg, "active", workState)
-		reviewState = preferredStateForRole(cfg, "review", reviewState)
+		finishState = completedWorkflowState(cfg)
 	}
 	// Intentionally repeated every start run: reminder fatigue is preferable to
 	// missed workflow guardrails when agents resume mid-stream or skip onboarding docs.
@@ -50,7 +50,7 @@ func buildStartAgentQuickstart(repoRoot, managedBranch, managedWorktree string) 
 		},
 	}
 	if strings.TrimSpace(managedBranch) != "" && strings.TrimSpace(managedWorktree) != "" {
-		out.ManagedRunBinding = "Stay on branch `" + managedBranch + "` and do the work in `" + managedWorktree + "`. If a ticket commit lands elsewhere, repair the managed branch before moving to `" + reviewState + "`."
+		out.ManagedRunBinding = "Stay on branch `" + managedBranch + "` and do the work in `" + managedWorktree + "`. If a ticket commit lands elsewhere, repair the managed branch before moving to `" + finishState + "`."
 	}
 	if payload, err := loadSkillListPayload(repoRoot); err == nil {
 		out.Skills = make([]startQuickstartSkill, 0, len(payload.Skills))

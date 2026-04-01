@@ -22,7 +22,7 @@ func TestDetectTampering(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	tkt := &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "This is a long description so it passes validation.",
 		AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	}
@@ -72,7 +72,7 @@ func TestReconcileTampering(t *testing.T) {
 	
 	// Create a ticket
 	tkt := &ticket.Ticket{
-		ID: "TKT-001", Seq: 1, Title: "T1", State: "todo", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
+		ID: "TKT-001", Seq: 1, Title: "T1", State: "draft", Priority: 1, CreatedAt: now, UpdatedAt: now, CreatedBy: "me",
 		Description: "This is a long description so it passes validation.",
 		AC: []ticket.AcceptanceCriterion{{Description: "A"}},
 	}
@@ -97,7 +97,7 @@ func TestReconcileTampering(t *testing.T) {
 
 	// 2. Mutate to invalid state
 	raw, _ = os.ReadFile(p)
-	edited = strings.Replace(string(raw), "state: todo", "state: junk", 1)
+	edited = strings.Replace(string(raw), "state: draft", "state: junk", 1)
 	os.WriteFile(p, []byte(edited), 0644)
 
 	results, err = s.ReconcileTampering(ctx)

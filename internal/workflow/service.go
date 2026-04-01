@@ -100,9 +100,18 @@ func (m *WorkflowManager) StartTask(ctx context.Context, ticketID, agentID strin
 	return t, claimedPath, nil
 }
 
-// FinishTask moves a ticket to the configured review state and releases the claim.
-// If the ticket was in a separate worktree, it commits changes and merges back.
+// FinishTask moves a ticket to the configured machine-owned success state and
+// releases the claim. If the ticket was in a separate worktree, it commits
+// changes and merges back.
 func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *ticket.Config) (*ticket.Ticket, error) {
+	return m.finishTask(ctx, ticketID, cfg, "")
+}
+
+func (m *WorkflowManager) FinishTaskWithSummary(ctx context.Context, ticketID string, cfg *ticket.Config, mergeCommitMessage string) (*ticket.Ticket, error) {
+	return m.finishTask(ctx, ticketID, cfg, mergeCommitMessage)
+}
+
+func (m *WorkflowManager) finishTask(ctx context.Context, ticketID string, cfg *ticket.Config, mergeCommitMessage string) (*ticket.Ticket, error) {
 	t, err := m.store.GetTicket(ctx, ticketID)
 	if err != nil {
 		return nil, fmt.Errorf("getting ticket: %w", err)
@@ -134,7 +143,7 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 		_ = m.vcs.CommitAll(ctx, cl.Worktree, fmt.Sprintf("Auto-commit for %s completion", t.ID))
 
 		// Merge back
-		if err := m.vcs.MergeBranch(ctx, branch); err != nil {
+		if err := m.vcs.MergeBranch(ctx, branch, mergeCommitMessage); err != nil {
 			if !isMissingMergeRefError(err) {
 				return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", err, cl.Worktree)
 			}
@@ -142,7 +151,7 @@ func (m *WorkflowManager) FinishTask(ctx context.Context, ticketID string, cfg *
 			if refErr != nil {
 				return nil, fmt.Errorf("merge conflict: %w. Fallback merge from %s HEAD failed: %v", err, cl.Worktree, refErr)
 			}
-			if retryErr := m.vcs.MergeBranch(ctx, mergeRef); retryErr != nil {
+			if retryErr := m.vcs.MergeBranch(ctx, mergeRef, mergeCommitMessage); retryErr != nil {
 				return nil, fmt.Errorf("merge conflict: %w. Resolve it in %s", retryErr, cl.Worktree)
 			}
 			mergedFromFallbackRef = true
@@ -212,13 +221,44 @@ func buildFinishStateCmd(t *ticket.Ticket, cfg *ticket.Config) (UpdateStateCmd, 
 	if cfg == nil {
 		return UpdateStateCmd{}, fmt.Errorf("config is required")
 	}
-	for _, next := range cfg.TransitionTargetsWithRole(string(t.State), "review") {
-		reviewCmd := UpdateStateCmd{To: ticket.State(next)}
-		if err := reviewCmd.Validate(t, cfg); err == nil {
-			return reviewCmd, nil
+	completedState, err := resolveFinishState(t.State, cfg)
+	if err != nil {
+		return UpdateStateCmd{}, err
+	}
+	return UpdateStateCmd{To: completedState, SetCompletedAt: true}, nil
+}
+
+func resolveFinishState(from ticket.State, cfg *ticket.Config) (ticket.State, error) {
+	if cfg == nil {
+		return "", fmt.Errorf("config is required")
+	}
+	start := strings.TrimSpace(string(from))
+	if start == "" {
+		return "", fmt.Errorf("current state is required")
+	}
+
+	queue := []string{start}
+	visited := map[string]bool{start: true}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if cfg.StateHasRole(current, "completed") {
+			return ticket.State(current), nil
+		}
+		stateCfg, ok := cfg.States[current]
+		if !ok {
+			continue
+		}
+		for _, next := range stateCfg.Next {
+			next = strings.TrimSpace(next)
+			if next == "" || visited[next] {
+				continue
+			}
+			visited[next] = true
+			queue = append(queue, next)
 		}
 	}
-	return UpdateStateCmd{}, fmt.Errorf("cannot transition %s from %s to a configured review state", t.ID, t.State)
+	return "", fmt.Errorf("cannot transition from %s to a configured completed state", from)
 }
 
 func resolveStartState(t *ticket.Ticket, cfg *ticket.Config) (ticket.State, error) {

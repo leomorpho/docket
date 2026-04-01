@@ -67,7 +67,6 @@ func TestParseTicketSpecValidationErrors(t *testing.T) {
 	assertHasError(t, report, "ticket.title", CodeTypeMismatch)
 	assertHasError(t, report, "ticket.description", CodeRequired)
 	assertHasError(t, report, "ticket.priority", CodeInvalidValue)
-	assertHasError(t, report, "ticket.state", CodeInvalidValue)
 	assertHasError(t, report, "ticket.labels[1]", CodeRequired)
 	assertHasError(t, report, "ticket.blocked_by[0]", CodeInvalidRelation)
 	assertHasError(t, report, "ticket.ac[1]", CodeRequired)

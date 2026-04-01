@@ -72,6 +72,7 @@ func renderCapabilitiesMarkdown(view capabilitiesView) string {
 		}
 		lines = append(lines, fmt.Sprintf("- `%s` (%s)", event.Name, mode))
 	}
+	lines = append(lines, "", "_Note: legacy secure/admin hook surfaces may still appear here as implementation details._")
 	lines = append(lines, "", "## Skills")
 	lines = append(lines,
 		fmt.Sprintf("- Namespace: `%s`", view.Contract.Skills.Namespace),
