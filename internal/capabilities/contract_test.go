@@ -283,6 +283,19 @@ func TestWriteRuntimeContractBackfillsSkillMetadataDefaults(t *testing.T) {
 	}
 }
 
+func TestCanonicalContractOmitsDefaultReviewAndQAEvents(t *testing.T) {
+	contract := CanonicalContractV1()
+
+	if len(contract.Hooks.Events) == 0 {
+		t.Fatal("expected canonical contract to include at least one default hook event")
+	}
+	for _, event := range contract.Hooks.Events {
+		if event.Name == "ticket.review" || event.Name == "ticket.qa" {
+			t.Fatalf("canonical contract should not expose %q as a default lifecycle hook event", event.Name)
+		}
+	}
+}
+
 func validContract() Contract {
 	return Contract{
 		Version: ContractVersion,

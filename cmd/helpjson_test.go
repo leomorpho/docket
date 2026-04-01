@@ -197,3 +197,71 @@ func TestHelpJSONStatusManifestOmitsParallelFlag(t *testing.T) {
 	}
 	t.Fatal("status command missing from manifest")
 }
+
+func TestHelpJSONAndRunHelpOmitDefaultReviewAndQAContract(t *testing.T) {
+	b := new(bytes.Buffer)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs([]string{"help-json"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("help-json failed: %v", err)
+	}
+
+	var manifest map[string]any
+	if err := json.Unmarshal(b.Bytes(), &manifest); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+
+	commands, ok := manifest["commands"].([]any)
+	if !ok {
+		t.Fatalf("commands missing from manifest")
+	}
+
+	for _, c := range commands {
+		entry := c.(map[string]any)
+		name := entry["name"].(string)
+		switch name {
+		case "hook show":
+			examples, ok := entry["examples"].([]any)
+			if !ok || len(examples) == 0 {
+				t.Fatalf("hook show examples missing from help manifest")
+			}
+			for _, raw := range examples {
+				example := raw.(string)
+				if strings.Contains(example, "ticket.review") || strings.Contains(example, "ticket.qa") {
+					t.Fatalf("hook show manifest should not advertise retired review/QA events, got %q", example)
+				}
+			}
+		case "start", "run-next", "run-ticket":
+			flags, ok := entry["flags"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s flags missing from help manifest", name)
+			}
+			if _, exists := flags["--review"]; exists {
+				t.Fatalf("%s manifest should not expose --review once reviewer behavior is opt-in only", name)
+			}
+			if _, exists := flags["--no-review"]; exists {
+				t.Fatalf("%s manifest should not expose --no-review compatibility flag", name)
+			}
+			description := strings.ToLower(entry["description"].(string))
+			if strings.Contains(description, "review") || strings.Contains(description, "qa") {
+				t.Fatalf("%s description should not frame review/QA as default lifecycle semantics, got %q", name, entry["description"])
+			}
+		}
+	}
+
+	h := newFakeRepoHarness(t)
+	for _, args := range [][]string{
+		{"start", "--help"},
+		{"run-next", "--help"},
+		{"run-ticket", "--help"},
+	} {
+		out, err := h.run(args...)
+		if err != nil {
+			t.Fatalf("%s failed: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		lower := strings.ToLower(out)
+		if strings.Contains(lower, "--review") || strings.Contains(lower, "--no-review") {
+			t.Fatalf("%s should not expose default review flags, got:\n%s", strings.Join(args, " "), out)
+		}
+	}
+}

@@ -87,3 +87,34 @@ func TestHookStatusReportsDegradedAndReadyStates(t *testing.T) {
 		t.Fatalf("expected hook invocation %q, got %#v", capabilities.HookInvocationSystem, after["invocation"])
 	}
 }
+
+func TestDefaultHookSurfacesOmitReviewAndQAEvents(t *testing.T) {
+	h := newFakeRepoHarness(t)
+
+	listOut, err := h.run("hook", "list", "--format", "json")
+	if err != nil {
+		t.Fatalf("hook list failed: %v\n%s", err, listOut)
+	}
+	var list map[string]any
+	if err := json.Unmarshal([]byte(listOut), &list); err != nil {
+		t.Fatalf("unmarshal hook list json failed: %v\n%s", err, listOut)
+	}
+	events, ok := list["events"].([]any)
+	if !ok {
+		t.Fatalf("expected hook events array, got %#v", list["events"])
+	}
+	for _, raw := range events {
+		event := raw.(map[string]any)["name"].(string)
+		if event == "ticket.review" || event == "ticket.qa" {
+			t.Fatalf("default hook list should not expose retired lifecycle event %q", event)
+		}
+	}
+
+	showOut, err := h.run("hook", "show", "ticket.review")
+	if err == nil {
+		t.Fatalf("hook show ticket.review should fail once review hooks are removed from the default surface, got:\n%s", showOut)
+	}
+	if !strings.Contains(strings.ToLower(showOut), "not found") {
+		t.Fatalf("expected missing-event message for retired review hook, got:\n%s", showOut)
+	}
+}
