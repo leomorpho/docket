@@ -649,7 +649,7 @@ func TestStartCmd_AllowsUnsecuredManagedRun(t *testing.T) {
 		t.Fatalf("did not expect security enforcement messaging in start output, got: %s", b.String())
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpRepo))
 	run, ok, err := ns.GetRunManifest(tmpRepo, "TKT-001")
 	if err != nil || !ok {
 		t.Fatalf("expected run manifest, ok=%v err=%v", ok, err)
@@ -1351,7 +1351,7 @@ func TestStartLifecycleUsesRuntimeNamingForRunManifestFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrCreateRepoID failed: %v", err)
 	}
-	blockedNamespaceRoot := t.TempDir()
+	blockedNamespaceRoot := defaultRuntimeNamespaceRoot(h.repo)
 	repoNamespaceDir := filepath.Join(blockedNamespaceRoot, "repos", repoID)
 	if err := os.MkdirAll(repoNamespaceDir, 0o755); err != nil {
 		t.Fatalf("mkdir blocked namespace dir failed: %v", err)
@@ -1359,7 +1359,6 @@ func TestStartLifecycleUsesRuntimeNamingForRunManifestFailures(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repoNamespaceDir, "runs"), []byte("not a directory\n"), 0o644); err != nil {
 		t.Fatalf("write blocked runs path failed: %v", err)
 	}
-	t.Setenv("DOCKET_HOME", blockedNamespaceRoot)
 	docketHome = ""
 
 	out, err := h.run("start")

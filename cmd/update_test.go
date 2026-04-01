@@ -727,7 +727,7 @@ func TestUpdateCmd_ManagedRunRequiresCommitLinkage(t *testing.T) {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	worktreePath := filepath.Join(tmpDir, "wt", "TKT-198")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("mkdir worktree path failed: %v", err)
@@ -797,7 +797,7 @@ func TestUpdateCmd_ManagedRunLinkageWarningOnlyByDefault(t *testing.T) {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	worktreePath := filepath.Join(tmpDir, "wt", "TKT-198B")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("mkdir worktree path failed: %v", err)
@@ -865,7 +865,7 @@ func TestUpdateCmd_ManagedRunAutoRepairsBoundBranchDrift(t *testing.T) {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	if err := ns.RecordRunStart(tmpDir, "TKT-287", "agent:test", worktreePath, "docket/TKT-287", "hash-287"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -936,7 +936,7 @@ func TestUpdateCmd_ManagedRunValidatedPassesFromBoundWorktree(t *testing.T) {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	if err := ns.RecordRunStart(tmpDir, "TKT-270", "agent:test-agent", worktreePath, "docket/TKT-270", "hash-270"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1019,7 +1019,7 @@ func TestUpdateCmd_ManagedRunValidatedRecoversWhenManifestBranchMissing(t *testi
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	if err := ns.RecordRunStart(tmpDir, "TKT-496", "agent:test-agent", worktreePath, "docket/TKT-496", "hash-496"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1108,7 +1108,7 @@ func TestUpdateCmd_ManagedRunValidatedAutostashesDirtyMainCheckout(t *testing.T)
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	if err := ns.RecordRunStart(tmpDir, "TKT-271", "agent:test-agent", worktreePath, "docket/TKT-271", "hash-271"); err != nil {
 		t.Fatalf("RecordRunStart failed: %v", err)
 	}
@@ -1202,7 +1202,7 @@ func TestUpdateCmd_ManagedRunWarnsOnStaleRunManifestByDefault(t *testing.T) {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
-	ns := runstate.New(tmpHome)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(tmpDir))
 	worktreePath := filepath.Join(tmpDir, "wt", "TKT-209")
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
 		t.Fatalf("mkdir worktree path failed: %v", err)

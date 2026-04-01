@@ -27,7 +27,7 @@ func TestHookWorktreeCheckAcceptsBoundDedicatedWorktree(t *testing.T) {
 	wtPath := filepath.Join(t.TempDir(), "wt-TKT-911")
 	runGitSession(t, h.repo, "worktree", "add", "-b", "docket/TKT-911-test", wtPath)
 
-	ns := runstate.New(h.home)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(h.repo))
 	if err := ns.RecordRunStart(h.repo, "TKT-911", "human:test", wtPath, "docket/TKT-911-test", ""); err != nil {
 		t.Fatalf("record run manifest failed: %v", err)
 	}

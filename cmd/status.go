@@ -19,14 +19,12 @@ var statusCmd = &cobra.Command{
 	Aliases: []string{"st"},
 	Short:   "Show runtime ticket state and runnable queue status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		securityMode, _ := securityEnforcementSurface(repo)
 		fmt.Fprintln(cmd.OutOrStdout(), "Runtime status: focused on active ticket/workflow state.")
 		queueLine, err := buildQueueStatusLine(context.Background(), repo)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), queueLine)
-		fmt.Fprintf(cmd.OutOrStdout(), "Security enforcement: %s\n", securityMode)
 		renderHookStatusSurface(cmd.OutOrStdout())
 		return nil
 	},

@@ -238,7 +238,7 @@ func TestFakeRepoHarnessHappyPathIntegration(t *testing.T) {
 		t.Fatalf("unmarshal doctor json failed: %v\n%s", err, doctorOut)
 	}
 
-	ns := runstate.New(h.home)
+	ns := runstate.New(defaultRuntimeNamespaceRoot(h.repo))
 	run, ok, err := ns.GetRunManifest(h.repo, "TKT-902")
 	if err != nil || !ok {
 		t.Fatalf("expected run manifest for TKT-902, ok=%v err=%v", ok, err)
@@ -492,7 +492,7 @@ func TestAdapterMatrixIntegration(t *testing.T) {
 			t.Fatalf("%s: expected hooks PASS after bootstrap", fixture.AdapterID)
 		}
 
-		ns := runstate.New(h.home)
+		ns := runstate.New(defaultRuntimeNamespaceRoot(h.repo))
 		run, ok, err := ns.GetRunManifest(h.repo, ticketID)
 		if err != nil || !ok {
 			t.Fatalf("%s: expected run manifest for %s, ok=%v err=%v", fixture.AdapterID, ticketID, ok, err)

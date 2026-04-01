@@ -28,8 +28,8 @@ func TestStatusIncludesQuietHookReadinessWhenHealthy(t *testing.T) {
 	if strings.Contains(out, "Hook remediation:") {
 		t.Fatalf("healthy status should not print remediation, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Security enforcement: warning-only") {
-		t.Fatalf("expected warning-only enforcement note, got:\n%s", out)
+	if strings.Contains(out, "Security enforcement:") {
+		t.Fatalf("runtime status should omit legacy security framing, got:\n%s", out)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestStatusIncludesHookPolicyAndRecentBlockingEventsWhenDegraded(t *testing.
 	}
 }
 
-func TestStatusReportsEnabledSecurityEnforcement(t *testing.T) {
+func TestStatusOmitsSecurityEnforcementEvenWhenEnabled(t *testing.T) {
 	h := newFakeRepoHarness(t)
 	cfg, err := ticket.LoadConfig(h.repo)
 	if err != nil {
@@ -83,7 +83,7 @@ func TestStatusReportsEnabledSecurityEnforcement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status failed: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "Security enforcement: enabled") {
-		t.Fatalf("expected enabled enforcement note, got:\n%s", out)
+	if strings.Contains(out, "Security enforcement:") {
+		t.Fatalf("runtime status should omit security framing even when enforcement is enabled, got:\n%s", out)
 	}
 }

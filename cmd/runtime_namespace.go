@@ -14,17 +14,7 @@ import (
 var docketHome string
 
 func runtimeNamespaceRoot(repoRoot string) string {
-	if strings.TrimSpace(docketHome) != "" {
-		return docketHome
-	}
-	if env := strings.TrimSpace(os.Getenv("DOCKET_HOME")); env != "" {
-		if abs, err := filepath.Abs(env); err == nil {
-			return abs
-		}
-		return env
-	}
-	root := ticketRepoRoot(repoRoot)
-	return filepath.Join(root, ".docket", "local", "namespace")
+	return defaultRuntimeNamespaceRoot(repoRoot)
 }
 
 func securityEnforcementSurface(repoRoot string) (mode, note string) {

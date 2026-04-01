@@ -189,7 +189,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				return failStart("hooks.run_start", fmt.Errorf("start hook failed: %w", hookErr))
 			}
 			if err := ns.RecordRunStart(repo, t.ID, actor, worktreePath, "docket/"+t.ID, activeWorkflowHash); err != nil {
-				return failStart("security.record_run_start", fmt.Errorf("recording run manifest: %w", err))
+				return failStart("runtime.record_run_start", fmt.Errorf("recording run manifest: %w", err))
 			}
 		}
 		tokenEstimate, risk, failureCount := routingInputs(t)
@@ -204,7 +204,7 @@ In --auto mode, it runs the managed ticket flow and continues to the next ticket
 				// Resumed active tickets may come from legacy/manual states without a managed run manifest.
 				// Keep start usable by continuing without routing metadata persistence.
 			} else {
-				return failStart("security.record_run_routing", fmt.Errorf("recording run routing metadata: %w", err))
+				return failStart("runtime.record_run_routing", fmt.Errorf("recording run routing metadata: %w", err))
 			}
 		}
 		lifecyclePhaseEnd(cmd.ErrOrStderr(), recorder, lifecyclePhaseStartWorkflow, lifecycle.StatusOK)
