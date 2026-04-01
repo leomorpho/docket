@@ -32,12 +32,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./cmd ./internal/agentrun/selector ./internal/workable -count=1`.
   Note: Default `status` now reports queue truth from the same selector/workable path as `start` and `doctor`, and targeted regressions cover the single-runnable-leaf case plus a custom startable workflow state in selector tests.
 
-- [ ] NS-04 — Add a failing command test suite for an explicit readiness-check command: write red tests for a new CLI path that evaluates one ticket against the ready contract and reports every missing field clearly enough for an agent to repair it.  
+- [x] NS-04 — Add a failing command test suite for an explicit readiness-check command: write red tests for a new CLI path that evaluates one ticket against the ready contract and reports every missing field clearly enough for an agent to repair it.  
   Code paths: new command under `cmd/`, `internal/store/local/ready_contract.go`, existing mutation/help helpers in `cmd/`.  
   TDD: tests only in this task; do not implement the command yet.  
   Tests must cover: missing description/outcome; missing AC; missing verification; missing out-of-scope; non-leaf rejection; already-ready ticket recheck; machine-readable output if JSON is supported.  
   Acceptance criteria: there is a failing test contract for a first-class readiness-check flow, separate from generic state updates.  
   Verify with `go test ./cmd ./internal/store/local -count=1`.
+  Note: Added red tests in `cmd/ready_check_test.go` for a new non-mutating `ready` CLI path, covering human and JSON reporting, non-leaf rejection, and ready-ticket rechecks. Targeted `go test ./cmd -run 'TestReadyCheckCommand' -count=1` now fails on `unknown command "ready"`, while `go test ./internal/store/local -count=1` still passes.
 
 - [ ] NS-05 — Implement the readiness-check command on top of the existing ready-contract logic: build the command specified in `NS-04` so a draft ticket can be evaluated without changing state and the missing fields are reported deterministically.  
   Code paths: new command under `cmd/`, `internal/store/local/ready_contract.go`, `cmd/mutation_error.go`, command registration/help wiring.  
