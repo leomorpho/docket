@@ -450,6 +450,53 @@ func TestRunStatusCmdFallsBackToPersistedRunBrief(t *testing.T) {
 	}
 }
 
+func TestRunStatusCmdShowsDurableSuccessBriefAfterRuntimeCleanup(t *testing.T) {
+	repoRoot := t.TempDir()
+	store := runruntime.New(repoRoot)
+	record := agentrun.RunRecord{TicketID: "TKT-379", Role: agentrun.RoleImplementer, RepoRoot: repoRoot, WorktreePath: repoRoot, Branch: "docket/TKT-379", SessionID: "session-379"}
+	if err := store.Init(record, "prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteBrief(runruntime.RunBrief{
+		TicketID:          "TKT-379",
+		Outcome:           "done",
+		Summary:           "Managed run validated successfully and advanced the ticket.",
+		CommitSHA:         "abc123",
+		CloseoutCommitSHA: "def456",
+		Tests:             "passed",
+		ResumeNext:        "Archive the ticket or reopen it only if follow-up work is still required.",
+		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if err := store.Cleanup("TKT-379"); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	repo = repoRoot
+	format = "human"
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"run-status", "TKT-379"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run-status failed: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TKT-379: no active run",
+		"Last outcome: done",
+		"Ticket: TKT-379",
+		"Validation: passed",
+		"Closeout commit: def456",
+		"Resume next: Archive the ticket or reopen it only if follow-up work is still required.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestTuiRunLogCmdRendersVisibleTranscript(t *testing.T) {
 	originalLocal := time.Local
 	time.Local = time.FixedZone("PDT", -7*60*60)

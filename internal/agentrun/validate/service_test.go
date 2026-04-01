@@ -230,6 +230,47 @@ func TestServiceFinalizeAdvancesDoneRunToValidatedAndRecordsHandoff(t *testing.T
 	}
 }
 
+func TestServiceFinalizeWritesCompactDurableCommitSummaryBlock(t *testing.T) {
+	t.Parallel()
+
+	env := buildValidationEnv(t)
+	sha := commitWorktreeChange(t, env.worktreePath, "feature.txt", "ok\n")
+
+	result, err := env.service.Finalize(context.Background(), agentrun.ValidationInput{
+		TicketID:     "TKT-377",
+		SessionID:    "session-377",
+		RepoRoot:     env.repoRoot,
+		WorktreePath: env.worktreePath,
+		Branch:       "docket/TKT-377",
+		Result: agentrun.Result{
+			Status:    agentrun.StatusDone,
+			TicketID:  "TKT-377",
+			Role:      agentrun.RoleImplementer,
+			CommitSHA: sha,
+			Tests:     "passed",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Finalize() error = %v", err)
+	}
+	if !result.Accepted {
+		t.Fatalf("expected accepted finalize result, got %#v", result)
+	}
+
+	commitBody := runGitOutput(t, env.repoRoot, "log", "-1", "--format=%B")
+	for _, want := range []string{
+		"Docket-Run-Summary:",
+		"  ticket: TKT-377",
+		"  outcome: done",
+		"  validation: passed",
+		"  next: Archive the ticket or reopen it only if follow-up work is still required.",
+	} {
+		if !strings.Contains(commitBody, want) {
+			t.Fatalf("expected durable run summary block %q in closeout commit:\n%s", want, commitBody)
+		}
+	}
+}
+
 func TestServiceFinalizeRecordsStuckRunWithoutAdvancingTicket(t *testing.T) {
 	t.Parallel()
 

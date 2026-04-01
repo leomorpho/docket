@@ -176,12 +176,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Acceptance criteria: the repo can be brought to a clean runtime baseline before dogfooding autorun.  
   Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
 
-- [ ] NS-24 — Add failing tests for durable success-path run briefs and commit summaries: write red tests proving that a successful managed run must leave both a repo-local brief and a compact commit summary block that survives ephemeral runtime cleanup.  
+- [x] NS-24 — Add failing tests for durable success-path run briefs and commit summaries: write red tests proving that a successful managed run must leave both a repo-local brief and a compact commit summary block that survives ephemeral runtime cleanup.  
   Code paths: `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `internal/vcs/git_provider.go`, `internal/git/merge.go`, `cmd/run_ticket.go`.  
   TDD: tests only in this task.  
   Tests must cover: successful run brief persistence; commit message summary block; `run-status` after runtime cleanup; brief contents include outcome, ticket, validation, and next step.  
   Acceptance criteria: the success-path durability contract is captured in failing tests before more runtime changes are made.  
   Verify with `go test ./internal/agentrun/... ./internal/vcs ./internal/git ./cmd -count=1`.
+  Note: Added red durability regressions in `internal/agentrun/validate/service_test.go` and `cmd/run_ticket_test.go` that require a compact closeout summary block in the validated merge commit and richer success-brief rendering after runtime cleanup; these tests fail against the current implementation and leave `NS-25` as the production follow-up.
 
 - [ ] NS-25 — Implement durable success-path run briefs and commit-summary closeout: complete the production wiring required by `NS-24`.  
   Code paths: `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `internal/vcs/git_provider.go`, `internal/git/merge.go`, `cmd/run_ticket.go`.  
