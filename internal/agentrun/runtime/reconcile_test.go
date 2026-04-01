@@ -93,6 +93,116 @@ func TestStoreScanReconciliationIssuesDetectsRuntimeDamage(t *testing.T) {
 	}
 }
 
+func TestStoreApplyReconciliationRepairsRuntimeArtifacts(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	namespace := runstate.New(filepath.Join(repoRoot, ".docket", "local", "namespace"))
+	now := time.Now().UTC()
+
+	orphanRecord := agentrun.RunRecord{
+		TicketID:     "TKT-611",
+		Role:         agentrun.RoleImplementer,
+		RepoRoot:     repoRoot,
+		WorktreePath: filepath.Join(repoRoot, "wt", "TKT-611"),
+		Branch:       "docket/TKT-611",
+		SessionID:    "session-TKT-611",
+	}
+	if err := store.Init(orphanRecord, "orphan prompt", 10*time.Minute); err != nil {
+		t.Fatalf("Init(orphan) error = %v", err)
+	}
+	if err := store.WriteStatus(StatusSnapshot{
+		TicketID:         orphanRecord.TicketID,
+		SessionID:        orphanRecord.SessionID,
+		Active:           false,
+		LastResultStatus: string(agentrun.StatusFailed),
+		LastEventAt:      now.Add(-12 * time.Hour).Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatalf("WriteStatus(orphan) error = %v", err)
+	}
+
+	if err := seedManagedRuntimeArtifactForScanTest(repoRoot, namespace, store, "TKT-612", StatusSnapshot{
+		TicketID:         "TKT-612",
+		SessionID:        "session-TKT-612",
+		Active:           false,
+		Hung:             true,
+		LastResultStatus: string(agentrun.StatusFailed),
+		LastEventAt:      now.Add(-72 * time.Hour).Format(time.RFC3339Nano),
+		LastVisibleAt:    now.Add(-72 * time.Hour).Format(time.RFC3339Nano),
+	}, true); err != nil {
+		t.Fatalf("seed stale runtime artifact: %v", err)
+	}
+
+	if err := seedManagedRuntimeArtifactForScanTest(repoRoot, namespace, store, "TKT-613", StatusSnapshot{
+		TicketID:         "TKT-613",
+		SessionID:        "session-TKT-613",
+		Active:           false,
+		LastResultStatus: string(agentrun.StatusStuck),
+		LastEventAt:      now.Format(time.RFC3339Nano),
+	}, false); err != nil {
+		t.Fatalf("seed missing brief artifact: %v", err)
+	}
+
+	checkpointPath := filepath.Join(repoRoot, ".docket", "checkpoints", "TKT-614-legacy.json")
+	if err := writeLegacyCheckpointForScanTest(repoRoot, "TKT-614", "done"); err != nil {
+		t.Fatalf("write legacy checkpoint: %v", err)
+	}
+
+	result, err := store.ApplyReconciliation(namespace, now)
+	if err != nil {
+		t.Fatalf("ApplyReconciliation() error = %v", err)
+	}
+	if !result.Applied {
+		t.Fatalf("expected apply result to report applied=true, got %#v", result)
+	}
+	if result.MutationCount != 4 {
+		t.Fatalf("expected 4 reconciliation mutations, got %#v", result)
+	}
+	if len(result.Issues) < 4 {
+		t.Fatalf("expected issues to echo repaired runtime damage, got %#v", result.Issues)
+	}
+
+	for _, ticketID := range []string{"TKT-611", "TKT-612", "TKT-613"} {
+		if _, err := os.Stat(store.RunDir(ticketID)); !os.IsNotExist(err) {
+			t.Fatalf("expected run dir for %s to be removed, err=%v", ticketID, err)
+		}
+	}
+	if _, ok, err := namespace.GetRunManifest(repoRoot, "TKT-612"); err != nil {
+		t.Fatalf("GetRunManifest(TKT-612) error = %v", err)
+	} else if ok {
+		t.Fatal("expected run manifest for TKT-612 to be removed")
+	}
+	if _, ok, err := namespace.GetRunManifest(repoRoot, "TKT-613"); err != nil {
+		t.Fatalf("GetRunManifest(TKT-613) error = %v", err)
+	} else if ok {
+		t.Fatal("expected run manifest for TKT-613 to be removed")
+	}
+
+	data, err := os.ReadFile(checkpointPath)
+	if err != nil {
+		t.Fatalf("read repaired checkpoint: %v", err)
+	}
+	var snapshot checkpointSnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		t.Fatalf("unmarshal repaired checkpoint: %v", err)
+	}
+	if snapshot.TicketState != "validated" {
+		t.Fatalf("expected repaired checkpoint state validated, got %#v", snapshot.TicketState)
+	}
+
+	second, err := store.ApplyReconciliation(namespace, now)
+	if err != nil {
+		t.Fatalf("second ApplyReconciliation() error = %v", err)
+	}
+	if second.Applied {
+		t.Fatalf("expected second apply to be a no-op, got %#v", second)
+	}
+	if second.MutationCount != 0 || len(second.Issues) != 0 {
+		t.Fatalf("expected second apply to report a clean baseline, got %#v", second)
+	}
+}
+
 func seedManagedRuntimeArtifactForScanTest(repoRoot string, namespace *runstate.Store, store *Store, ticketID string, status StatusSnapshot, writeBrief bool) error {
 	worktreePath := filepath.Join(repoRoot, "wt", ticketID)
 	if err := os.MkdirAll(worktreePath, 0o755); err != nil {

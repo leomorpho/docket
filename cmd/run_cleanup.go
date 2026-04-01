@@ -24,11 +24,15 @@ var runCleanupCmd = &cobra.Command{
 	Use:   "run-cleanup",
 	Short: "Scan repo-local runtime artifacts and report stale or missing managed-run state",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if runCleanupApply && runCleanupDryRun {
+		apply := runCleanupApply
+		dryRun := runCleanupDryRun
+		defer resetRunCleanupFlags(cmd)
+
+		if apply && dryRun {
 			return fmt.Errorf("choose either --apply or --dry-run")
 		}
 
-		report, err := buildRunCleanupReport(repo, runCleanupApply, time.Now().UTC())
+		report, err := buildRunCleanupReport(repo, apply, time.Now().UTC())
 		if err != nil {
 			return err
 		}
@@ -45,14 +49,27 @@ var runCleanupCmd = &cobra.Command{
 func buildRunCleanupReport(repoRoot string, apply bool, now time.Time) (runCleanupReport, error) {
 	runtimeStore := runruntime.New(repoRoot)
 	namespaceStore := runstate.New(runtimeNamespaceRoot(repoRoot))
-	issues, err := runtimeStore.ScanReconciliationIssues(namespaceStore, now)
-	if err != nil {
-		return runCleanupReport{}, err
-	}
-
 	mode := "dry-run"
 	if apply {
 		mode = "apply"
+	}
+
+	if apply {
+		result, err := runtimeStore.ApplyReconciliation(namespaceStore, now)
+		if err != nil {
+			return runCleanupReport{}, err
+		}
+		return runCleanupReport{
+			Mode:          mode,
+			Applied:       result.Applied,
+			MutationCount: result.MutationCount,
+			Issues:        result.Issues,
+		}, nil
+	}
+
+	issues, err := runtimeStore.ScanReconciliationIssues(namespaceStore, now)
+	if err != nil {
+		return runCleanupReport{}, err
 	}
 	return runCleanupReport{
 		Mode:          mode,
@@ -80,6 +97,8 @@ func renderRunCleanupHuman(cmd *cobra.Command, report runCleanupReport) {
 	}
 	if report.MutationCount == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No mutations applied.")
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Applied %d cleanup changes.\n", report.MutationCount)
 	}
 	if report.Mode != "apply" {
 		fmt.Fprintln(cmd.OutOrStdout(), "Apply with: docket run-cleanup --apply")
@@ -112,4 +131,15 @@ func init() {
 	runCleanupCmd.Flags().BoolVar(&runCleanupApply, "apply", false, "scan runtime artifacts in preparation for cleanup repair")
 	runCleanupCmd.Flags().BoolVar(&runCleanupDryRun, "dry-run", false, "report runtime artifact issues without mutating files")
 	rootCmd.AddCommand(runCleanupCmd)
+}
+
+func resetRunCleanupFlags(cmd *cobra.Command) {
+	runCleanupApply = false
+	runCleanupDryRun = false
+	for _, name := range []string{"apply", "dry-run"} {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			_ = f.Value.Set("false")
+			f.Changed = false
+		}
+	}
 }

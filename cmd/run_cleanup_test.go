@@ -141,6 +141,84 @@ func TestRunCleanupDryRunJSONReportsStructuredIssuesWithoutMutation(t *testing.T
 	}
 }
 
+func TestRunCleanupApplyRepairsRuntimeArtifactsIdempotently(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	t.Setenv("DOCKET_HOME", "")
+	docketHome = ""
+
+	fixture := seedRunCleanupFixture(t, h)
+
+	out, err := h.run("run-cleanup", "--apply")
+	if err != nil {
+		t.Fatalf("run-cleanup --apply failed: %v\n%s", err, out)
+	}
+
+	for _, want := range []string{
+		"Runtime cleanup apply.",
+		fixture.orphanTicketID,
+		fixture.staleRecoverableTicketID,
+		fixture.missingBriefTicketID,
+		fixture.legacyCheckpointTicketID,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected apply output to contain %q, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "No mutations applied.") {
+		t.Fatalf("expected apply mode to report mutations, got:\n%s", out)
+	}
+
+	assertRunCleanupRepairedFixture(t, h.repo, fixture)
+
+	secondOut, secondErr := h.run("run-cleanup", "--apply")
+	if secondErr != nil {
+		t.Fatalf("second run-cleanup --apply failed: %v\n%s", secondErr, secondOut)
+	}
+	for _, want := range []string{
+		"Runtime cleanup apply.",
+		"No runtime artifact issues found.",
+		"No mutations applied.",
+	} {
+		if !strings.Contains(secondOut, want) {
+			t.Fatalf("expected idempotent apply output to contain %q, got:\n%s", want, secondOut)
+		}
+	}
+}
+
+func TestRunCleanupApplyJSONReportsMutations(t *testing.T) {
+	h := newFakeRepoHarness(t)
+	t.Setenv("DOCKET_HOME", "")
+	docketHome = ""
+
+	fixture := seedRunCleanupFixture(t, h)
+
+	out, err := h.run("--format", "json", "run-cleanup", "--apply")
+	if err != nil {
+		t.Fatalf("run-cleanup --apply --format json failed: %v\n%s", err, out)
+	}
+
+	jsonOut, extractErr := extractFirstJSONObject(out)
+	if extractErr != nil {
+		t.Fatalf("extract json failed: %v\n%s", extractErr, out)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("unmarshal cleanup json failed: %v\n%s", err, out)
+	}
+	if payload["mode"] != "apply" {
+		t.Fatalf("expected mode=apply, got %#v", payload["mode"])
+	}
+	if payload["applied"] != true {
+		t.Fatalf("expected applied=true, got %#v", payload["applied"])
+	}
+	if payload["mutation_count"] != float64(4) {
+		t.Fatalf("expected mutation_count=4, got %#v", payload["mutation_count"])
+	}
+
+	assertRunCleanupRepairedFixture(t, h.repo, fixture)
+}
+
 func seedRunCleanupFixture(t *testing.T, h *fakeRepoHarness) runCleanupFixture {
 	t.Helper()
 
@@ -274,6 +352,43 @@ func writeLegacyCheckpointFixture(t *testing.T, repoRoot, ticketID, legacyState 
 		t.Fatalf("write legacy checkpoint: %v", err)
 	}
 	return path
+}
+
+func assertRunCleanupRepairedFixture(t *testing.T, repoRoot string, fixture runCleanupFixture) {
+	t.Helper()
+
+	for _, path := range []string{
+		filepath.Join(fixture.runtimeRoot, "agent-runs", fixture.orphanTicketID),
+		filepath.Join(fixture.runtimeRoot, "agent-runs", fixture.staleRecoverableTicketID),
+		filepath.Join(fixture.runtimeRoot, "agent-runs", fixture.missingBriefTicketID),
+		filepath.Join(fixture.runtimeRoot, "briefs", fixture.missingBriefTicketID+".json"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("expected repaired runtime artifact %s to be removed, err=%v", path, err)
+		}
+	}
+
+	namespaceStore := runstate.New(fixture.namespaceRoot)
+	for _, ticketID := range []string{fixture.staleRecoverableTicketID, fixture.missingBriefTicketID} {
+		if _, ok, err := namespaceStore.GetRunManifest(repoRoot, ticketID); err != nil {
+			t.Fatalf("GetRunManifest(%s) error = %v", ticketID, err)
+		} else if ok {
+			t.Fatalf("expected run manifest for %s to be removed during repair", ticketID)
+		}
+	}
+
+	checkpointPath := filepath.Join(fixture.checkpointsRoot, fixture.legacyCheckpointTicketID+"-20260331T120000Z.json")
+	data, err := os.ReadFile(checkpointPath)
+	if err != nil {
+		t.Fatalf("read repaired checkpoint: %v", err)
+	}
+	var payload checkpoint
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal repaired checkpoint: %v", err)
+	}
+	if payload.TicketState != "validated" {
+		t.Fatalf("expected legacy checkpoint state to be rewritten to validated, got %#v", payload.TicketState)
+	}
 }
 
 func snapshotRuntimeTrees(t *testing.T, roots ...string) map[string]runtimeTreeEntry {

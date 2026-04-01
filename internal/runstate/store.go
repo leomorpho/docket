@@ -230,6 +230,21 @@ func (s *Store) GetRunManifest(repoRoot, ticketID string) (RunManifest, bool, er
 	return rec, true, nil
 }
 
+func (s *Store) DeleteRunManifest(repoRoot, ticketID string) error {
+	if strings.TrimSpace(ticketID) == "" {
+		return fmt.Errorf("ticket ID is required")
+	}
+	repoID, err := GetOrCreateRepoID(repoRoot)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(s.repoNamespaceDir(repoID), "runs", ticketID+".json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) ListRunManifests() ([]RunManifest, error) {
 	if strings.TrimSpace(s.root) == "" {
 		return nil, nil

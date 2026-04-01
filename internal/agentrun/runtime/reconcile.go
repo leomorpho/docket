@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,12 @@ type ReconciliationIssue struct {
 	SessionID   string `json:"session_id,omitempty"`
 	LastEventAt string `json:"last_event_at,omitempty"`
 	LegacyState string `json:"legacy_state,omitempty"`
+}
+
+type ReconciliationResult struct {
+	Applied       bool                  `json:"applied"`
+	MutationCount int                   `json:"mutation_count"`
+	Issues        []ReconciliationIssue `json:"issues,omitempty"`
 }
 
 type checkpointSnapshot struct {
@@ -110,6 +117,30 @@ func (s *Store) ScanReconciliationIssues(namespace *runstate.Store, now time.Tim
 		return issues[i].Path < issues[j].Path
 	})
 	return issues, nil
+}
+
+func (s *Store) ApplyReconciliation(namespace *runstate.Store, now time.Time) (ReconciliationResult, error) {
+	issues, err := s.ScanReconciliationIssues(namespace, now)
+	if err != nil {
+		return ReconciliationResult{}, err
+	}
+
+	result := ReconciliationResult{
+		Applied:       false,
+		MutationCount: 0,
+		Issues:        issues,
+	}
+	for _, issue := range issues {
+		changed, err := s.applyReconciliationIssue(namespace, issue)
+		if err != nil {
+			return ReconciliationResult{}, err
+		}
+		if changed {
+			result.Applied = true
+			result.MutationCount++
+		}
+	}
+	return result, nil
 }
 
 func scanManifestTickets(namespace *runstate.Store) (map[string]struct{}, error) {
@@ -214,4 +245,114 @@ func (s *Store) scanLegacyCheckpointIssues() ([]ReconciliationIssue, error) {
 		})
 	}
 	return issues, nil
+}
+
+func (s *Store) applyReconciliationIssue(namespace *runstate.Store, issue ReconciliationIssue) (bool, error) {
+	switch issue.Kind {
+	case "orphan_run_dir":
+		return removePathIfExists(issue.Path)
+	case "stale_recoverable_status":
+		changed, err := s.cleanupManagedRuntime(namespace, issue.TicketID)
+		if err != nil {
+			return false, err
+		}
+		return changed, nil
+	case "missing_brief":
+		changed, err := s.cleanupManagedRuntime(namespace, issue.TicketID)
+		if err != nil {
+			return false, err
+		}
+		return changed, nil
+	case "legacy_checkpoint":
+		return rewriteLegacyCheckpoint(issue.Path)
+	default:
+		return false, nil
+	}
+}
+
+func (s *Store) cleanupManagedRuntime(namespace *runstate.Store, ticketID string) (bool, error) {
+	changed := false
+
+	runRemoved, err := removePathIfExists(s.RunDir(ticketID))
+	if err != nil {
+		return false, err
+	}
+	changed = changed || runRemoved
+
+	if namespace != nil {
+		manifestRemoved, err := removeRunManifestIfExists(namespace, s.repoRoot, ticketID)
+		if err != nil {
+			return false, err
+		}
+		changed = changed || manifestRemoved
+	}
+	return changed, nil
+}
+
+func removeRunManifestIfExists(namespace *runstate.Store, repoRoot, ticketID string) (bool, error) {
+	_, ok, err := namespace.GetRunManifest(repoRoot, ticketID)
+	if err != nil {
+		if errors.Is(err, runstate.ErrRunManifestInvalid) {
+			if removeErr := namespace.DeleteRunManifest(repoRoot, ticketID); removeErr != nil {
+				return false, removeErr
+			}
+			return true, nil
+		}
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	if err := namespace.DeleteRunManifest(repoRoot, ticketID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func rewriteLegacyCheckpoint(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return false, err
+	}
+	rawState, _ := payload["ticket_state"].(string)
+	legacyState := strings.TrimSpace(rawState)
+	if legacyState == "" {
+		return false, nil
+	}
+	nextState := ticket.MigrateWorkflowStateName(legacyState)
+	if nextState == legacyState {
+		return false, nil
+	}
+	payload["ticket_state"] = nextState
+	rewritten, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(path, append(rewritten, '\n'), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func removePathIfExists(path string) (bool, error) {
+	if strings.TrimSpace(path) == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return false, err
+	}
+	return true, nil
 }
