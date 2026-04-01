@@ -1,9 +1,7 @@
 # Documentation Index
 
-This directory collects product and implementation reference material for Docket.
+This directory documents Docket as an executable backlog runtime. Start here when you need the product direction, the repo cutover order, or the current gap between shipped behavior and the intended serial runtime.
 
-The primary entry point is now `north-star.md`, which captures the intended product direction: Docket as a ticketing + orchestration runtime for agentic development, with serial autorun, compact run artifacts, and validation as the main focus.
-
-- [`north-star.md`](north-star.md): Product thesis, principles, intended workflow model, scheduler stance, memory stance, and explicit non-goals.
-- [`recommended-order.md`](recommended-order.md): Concrete execution order for the repo so work lands in the right sequence instead of drifting across too many fronts.
-- [`worktree-flow-gap-report.md`](worktree-flow-gap-report.md): Gap analysis for the current worktree automation path versus the intended runtime behavior.
+- [`north-star.md`](north-star.md): Product thesis, operating model, ready/validation stance, and the non-goals that keep the runtime focused.
+- [`recommended-order.md`](recommended-order.md): Concrete execution order for the north-star cutover so backlog, queue health, and autorun land in the right sequence.
+- [`worktree-flow-gap-report.md`](worktree-flow-gap-report.md): Gap analysis for the current worktree automation path versus the intended bounded-run and durable-artifact model.

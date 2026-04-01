@@ -5,7 +5,7 @@ This document defines the intended product direction for Docket.
 The point is to remove ambiguity. The repo has drifted between several identities:
 
 - ticket tracker
-- security/governance system
+- approval-heavy control surface
 - orchestration runtime
 - agent UI surface
 
@@ -64,7 +64,7 @@ Docket is not:
 - a dashboard-first orchestration product
 - a generic multi-agent research sandbox
 - a transcript archive disguised as memory
-- a security/governance platform in the current phase
+- an approval-centric control platform in the current phase
 
 ## The User Experience We Are Optimizing For
 
@@ -87,7 +87,7 @@ The target experience is this:
 That is the product.
 
 Not a Kanban board.
-Not a security approval flow.
+Not an approval gate around every change.
 Not a colorful monitor for multiple LLMs.
 
 ## Core Principles
@@ -346,18 +346,18 @@ That means:
 
 This is important because mandatory review states create artificial blocking in a system whose goal is unattended execution.
 
-## Security And Governance Stance
+## Approval And Policy Stance
 
-Security/governance is not a current product pillar.
+Approval-heavy controls are not a current product pillar.
 
-That does not mean it is permanently unimportant. It means it should not define the product while Docket is still proving the core runtime.
+That does not mean they are permanently unimportant. It means they should not define the product while Docket is still proving the core runtime.
 
 For now, product direction should not be driven by:
 
-- secure mode
+- approval-centric modes
 - privileged transition systems
-- approval locks
-- governance-heavy workflow semantics
+- workflow gates that do not improve validation
+- policy-heavy workflow semantics
 
 Those concerns can be revisited later, ideally as isolated subsystems rather than as the repo's conceptual center.
 
@@ -370,7 +370,7 @@ These are not near-term product goals:
 - transcript-heavy memory systems
 - merge-conflict learning systems
 - workflow approval bureaucracy
-- security/governance as the main story
+- policy-heavy controls as the main story
 - dashboard-first orchestration
 - replacing grooming discipline with smarter prompting
 
@@ -415,7 +415,7 @@ Directionally, the repo should optimize for:
 - compact artifacts
 - leaf-ticket execution discipline
 
-Legacy security/governance code may remain in the tree for a while, but it should not define the strategic direction.
+Legacy approval and policy code may remain in the tree for a while, but it should not define the strategic direction.
 
 ## Near-Term Doctrine
 

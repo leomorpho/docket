@@ -4,9 +4,9 @@ This document turns the current product direction into an execution order for th
 
 The sequence is intentionally conservative. The aim is to get to a trustworthy serial autorun loop before adding broader memory or parallelism features.
 
-## 1. Freeze Security/Governance Expansion
+## 1. Freeze Approval-Heavy Workflow Expansion
 
-Stop investing in new secure-mode, workflow-lock, approval, or privileged-transition work for now.
+Stop investing in new approval-centric modes, workflow gates, or privileged-transition work for now.
 
 Why:
 
