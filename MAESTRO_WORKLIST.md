@@ -160,12 +160,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Acceptance criteria: the CLI is honest about being serial-first today.  
   Verify with `go test ./cmd ./internal/store/local ./internal/ticket -count=1`.
 
-- [ ] NS-21 — Add failing tests for runtime artifact scanning and dry-run reporting: write red tests for a new cleanup or doctor path that detects orphan run directories, stale recoverable statuses, missing briefs, and legacy checkpoints without mutating anything in dry-run mode.  
+- [x] NS-21 — Add failing tests for runtime artifact scanning and dry-run reporting: write red tests for a new cleanup or doctor path that detects orphan run directories, stale recoverable statuses, missing briefs, and legacy checkpoints without mutating anything in dry-run mode.  
   Code paths: `.docket/local/runtime/`, `.docket/checkpoints/`, `internal/runstate/`, `internal/agentrun/runtime/store.go`, `cmd/doctor.go` or a new maintenance command.  
   TDD: tests only in this task.  
   Tests must cover: orphan run directories; stale recoverable statuses; missing run briefs; checkpoints still carrying legacy states; dry-run output with zero mutations.  
   Acceptance criteria: there is an executable test contract for runtime artifact reconciliation before implementation begins.  
   Verify with `go test ./cmd ./internal/runstate ./internal/agentrun/runtime -count=1`.
+  Note: Added red dry-run reconciliation coverage in `cmd/run_cleanup_test.go` for a future `run-cleanup --dry-run` command, covering human and JSON reporting for orphan run dirs, stale recoverable statuses, missing durable briefs, and legacy `done` checkpoints while snapshotting runtime/checkpoint trees to prove zero mutation in dry-run mode. Scoped `go test ./cmd -run 'TestRunCleanupDryRun' -count=1` now fails on the missing `run-cleanup` command as intended, while `go test ./internal/runstate ./internal/agentrun/runtime -count=1` passes; the broader combined `cmd` verify lane still hangs in the pre-existing long-running `cmd` suite.
 
 - [ ] NS-22 — Implement runtime artifact reconciliation reporting and dry-run output: build the non-mutating scan/report behavior defined in `NS-21`.  
   Code paths: `internal/runstate/`, `internal/agentrun/runtime/store.go`, `cmd/doctor.go` or new maintenance command.  
