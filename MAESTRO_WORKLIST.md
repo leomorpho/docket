@@ -104,12 +104,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go run . list --state draft --format table`, `go run . show TKT-310`, `go run . show TKT-329`, and `go run . validate`.
   Note: Closed already-landed workflow tickets `TKT-317`, `TKT-319`, `TKT-327`, and `TKT-329` as completed backlog items, detached `TKT-312` from archived security epic `TKT-174`, and rewrote `TKT-310`, `TKT-312`, and `TKT-332` so the remaining draft workflow backlog describes residual diagnostics/parity work instead of shipped behavior.
 
-- [ ] NS-13 — Promote the first two runnable leaf tickets into `ready` and prove the queue becomes non-empty: use the readiness flow to groom and promote two concrete leaf tickets, fixing ticket content where needed so they satisfy the ready contract.  
+- [x] NS-13 — Promote the first two runnable leaf tickets into `ready` and prove the queue becomes non-empty: use the readiness flow to groom and promote two concrete leaf tickets, fixing ticket content where needed so they satisfy the ready contract.  
   Code paths: `.docket/tickets/`, `.docket/manifest.json`, readiness command from `NS-05` to `NS-07`.  
   TDD: if grooming exposes tooling bugs, add failing tests in the owning package before fixing them; otherwise treat this as backlog execution setup.  
   Tests must cover: both promoted tickets are leaves; both satisfy the ready contract; at least one is immediately runnable; queue health surfaces agree after promotion.  
   Acceptance criteria: the repo stops having zero ready work; there is a first real runnable queue entry.  
   Verify with `go run . list --state ready --format context`, `go run . doctor`, and `go run . status`.
+  Note: Groomed and promoted `TKT-281` and `TKT-283`, the first draft leaf tickets whose blockers were already in terminal states. Added the missing `Likely paths`, `Verify commands`, and `Out of scope` sections through `ticket apply`, then promoted both with `ready --promote`. Verification now shows five ready tickets total, `go run . doctor` reports `PASS queue_invariant`, and `go run . status` reports `TKT-281` as the next runnable ticket with two runnable leaves available.
 
 - [x] NS-14 — Expand the ready queue to at least five groomed serial leaf tickets: continue grooming and promotion until there is a small ordered ready queue suitable for dogfooding serial autorun.  
   Code paths: `.docket/tickets/`, `.docket/manifest.json`, readiness tooling.  

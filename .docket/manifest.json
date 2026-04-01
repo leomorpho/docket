@@ -1518,7 +1518,7 @@
     },
     "TKT-281": {
       "title": "Add hook event telemetry with CLI and MCP history surfaces",
-      "state": "draft",
+      "state": "ready",
       "priority": 1,
       "parent": "TKT-209"
     },
@@ -1530,7 +1530,7 @@
     },
     "TKT-283": {
       "title": "Add a synchronized capability snapshot shared by CLI, MCP, and adapter docs",
-      "state": "draft",
+      "state": "ready",
       "priority": 1,
       "parent": "TKT-209"
     },
