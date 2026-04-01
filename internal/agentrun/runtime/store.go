@@ -287,6 +287,14 @@ func (s *Store) LoadBrief(ticketID string) (RunBrief, bool, error) {
 	return brief, true, nil
 }
 
+func (s *Store) LoadRecoverableStatus(ticketID string) (StatusSnapshot, bool, error) {
+	brief, ok, err := s.LoadBrief(ticketID)
+	if err != nil || !ok {
+		return StatusSnapshot{}, ok, err
+	}
+	return recoverableStatusFromBrief(ticketID, brief)
+}
+
 func (s *Store) Cleanup(ticketID string) error {
 	return os.RemoveAll(s.RunDir(ticketID))
 }
@@ -559,4 +567,33 @@ func containsString(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func recoverableStatusFromBrief(ticketID string, brief RunBrief) (StatusSnapshot, bool, error) {
+	sessionID := strings.TrimSpace(brief.SessionID)
+	if sessionID == "" {
+		return StatusSnapshot{}, false, nil
+	}
+	outcome := strings.TrimSpace(brief.Outcome)
+	switch outcome {
+	case string(agentrun.StatusFailed), string(agentrun.StatusStuck):
+	default:
+		return StatusSnapshot{}, false, nil
+	}
+	if strings.TrimSpace(ticketID) == "" {
+		ticketID = strings.TrimSpace(brief.TicketID)
+	}
+	status := StatusSnapshot{
+		TicketID:         ticketID,
+		SessionID:        sessionID,
+		Active:           false,
+		Hung:             false,
+		LastResultStatus: outcome,
+		LastVisibleText:  strings.TrimSpace(brief.Summary),
+	}
+	if updatedAt := strings.TrimSpace(brief.UpdatedAt); updatedAt != "" {
+		status.LastEventAt = updatedAt
+		status.LastVisibleAt = updatedAt
+	}
+	return status, true, nil
 }

@@ -206,12 +206,13 @@ Use this document while the live Docket backlog is being repaired and re-groomed
   Verify with `go test ./internal/agentrun/... ./cmd -count=1`.
   Note: Added red regressions in `internal/agentrun/orchestrate/service_test.go` and `cmd/run_ticket_test.go` that require validation failures to persist a durable post-cleanup brief, require stuck runs to remain resumable after runtime cleanup, and require `run-status` to surface session/recovery metadata from the surviving durable artifact. Focused `go test` runs fail on those new assertions; the broader `go test ./internal/agentrun/... ./cmd -count=1` sweep surfaces the new orchestrate failures and then stalls in the long-running pre-existing `cmd` lane.
 
-- [ ] NS-27 — Implement durable failure-path and stuck-run artifacts so resume flows are honest after cleanup: complete the production changes required by `NS-26`.  
+- [x] NS-27 — Implement durable failure-path and stuck-run artifacts so resume flows are honest after cleanup: complete the production changes required by `NS-26`.  
   Code paths: `internal/agentrun/orchestrate/service.go`, `internal/agentrun/validate/service.go`, `internal/agentrun/runtime/store.go`, `cmd/run_ticket.go`.  
   TDD: implement against the red tests from `NS-26`; add narrower unit tests if the status/brief schema changes.  
   Tests must cover: validation rejection artifact; stuck-run artifact; resume guidance shown through status; no regression to success-path artifacts.  
   Acceptance criteria: hours later, a user can understand a failed or stuck run without reopening transient agent logs.  
   Verify with `go test ./internal/agentrun/... ./cmd -count=1`.
+  Note: `RunTicket` now persists the missing validation-failure brief, `runtime.Store` can synthesize a recoverable durable status from a persisted failed/stuck brief after runtime cleanup, and both `run-resume` and `run-status` use that fallback so session/resume guidance survives cleanup. Scoped regressions in `internal/agentrun/orchestrate`, `internal/agentrun/runtime`, and `cmd/run_ticket` pass; the exact broad verify command still hangs in the longstanding `cmd` lane after the `internal/agentrun/...` packages report green.
 
 - [x] NS-28 — Add failing tests for root/help copy that still presents Docket as a generic git-native tracker with historical extras: write red tests for root help and help JSON before changing product-facing copy.  
   Code paths: `cmd/root.go`, `cmd/helpjson.go`.  

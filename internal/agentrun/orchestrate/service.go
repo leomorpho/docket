@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -205,6 +206,7 @@ func (s *Service) RunTicket(ctx context.Context, ticketID string) (agentrun.Tick
 	}
 	if !validation.Accepted {
 		_ = s.markRuntimeRecoverable(ticketID, started.Record.SessionID, agentrun.StatusFailed, strings.Join(validation.Reasons, "; "))
+		_ = s.persistValidationFailureBrief(validationInput, validation)
 		return failedOrRawSummary(ticketID, agentrun.StatusFailed, strings.Join(validation.Reasons, "; "), validation), nil
 	}
 	if s.reviewer != nil {
@@ -337,12 +339,21 @@ func (s *Service) ResumeTicket(ctx context.Context, ticketID string) (agentrun.T
 	if err != nil {
 		return agentrun.TicketRunSummary{}, err
 	}
+	if !ok {
+		status, ok, err = s.runtime.LoadRecoverableStatus(ticketID)
+		if err != nil {
+			return agentrun.TicketRunSummary{}, err
+		}
+	}
 	if !ok || !isRecoverableManagedRunStatus(status) {
 		return agentrun.TicketRunSummary{}, fmt.Errorf("ticket %s does not have a recoverable managed run", ticketID)
 	}
 	prompt, err := s.runtime.LoadPrompt(ticketID)
 	if err != nil {
-		return agentrun.TicketRunSummary{}, err
+		if !os.IsNotExist(err) {
+			return agentrun.TicketRunSummary{}, err
+		}
+		prompt = ""
 	}
 	transcript, err := s.runtime.LoadTranscript(ticketID)
 	if err != nil {
@@ -795,6 +806,23 @@ func (s *Service) cleanupRuntime(ticketID string) error {
 	return s.runtime.Cleanup(ticketID)
 }
 
+func (s *Service) persistValidationFailureBrief(input agentrun.ValidationInput, validation agentrun.ValidationResult) error {
+	if s.runtime == nil || validation.Accepted {
+		return nil
+	}
+	return s.runtime.WriteBrief(runruntime.RunBrief{
+		TicketID:         input.TicketID,
+		Outcome:          string(agentrun.StatusFailed),
+		Summary:          "Managed run failed validation before closeout.",
+		SessionID:        strings.TrimSpace(input.SessionID),
+		CommitSHA:        strings.TrimSpace(input.Result.CommitSHA),
+		Tests:            strings.TrimSpace(input.Result.Tests),
+		ValidationErrors: append([]string(nil), validation.Reasons...),
+		ResumeNext:       "Inspect the validation failures, repair the worktree, and rerun the ticket.",
+		UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
 func buildResumePrompt(originalPrompt string, tkt *ticket.Ticket, transcript []runruntime.TranscriptEntry, status runruntime.StatusSnapshot) string {
 	start := 0
 	if len(transcript) > 8 {
@@ -819,7 +847,20 @@ func buildResumePrompt(originalPrompt string, tkt *ticket.Ticket, transcript []r
 	if status.CurrentStepTitle != "" {
 		step = fmt.Sprintf("%d/%d %s", status.CurrentStep, status.PlannedSteps, status.CurrentStepTitle)
 	}
-	return strings.TrimSpace(originalPrompt) + "\n\nPrevious run hung before completion.\nContinue from the current worktree state instead of restarting.\nTicket: " + ticketID + "\nTitle: " + title + "\nLast known progress: " + step + "\nRecent visible transcript:\n" + strings.Join(lines, "\n")
+	parts := make([]string, 0, 3)
+	if original := strings.TrimSpace(originalPrompt); original != "" {
+		parts = append(parts, original)
+	}
+	parts = append(parts, strings.Join([]string{
+		"Previous run hung before completion.",
+		"Continue from the current worktree state instead of restarting.",
+		"Ticket: " + ticketID,
+		"Title: " + title,
+		"Last known progress: " + step,
+		"Recent visible transcript:",
+		strings.Join(lines, "\n"),
+	}, "\n"))
+	return strings.Join(parts, "\n\n")
 }
 
 func buildPingPrompt(ticketID string, status runruntime.StatusSnapshot) string {

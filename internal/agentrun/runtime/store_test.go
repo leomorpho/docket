@@ -144,6 +144,61 @@ func TestStoreInitAppendSnapshotAndCleanup(t *testing.T) {
 	}
 }
 
+func TestStoreLoadRecoverableStatusUsesDurableBriefAfterCleanup(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	store := New(repoRoot)
+	record := agentrun.RunRecord{
+		TicketID:     "TKT-390R",
+		Role:         agentrun.RoleImplementer,
+		Adapter:      "codex-session",
+		RepoRoot:     repoRoot,
+		WorktreePath: filepath.Join(repoRoot, "wt"),
+		Branch:       "docket/TKT-390R",
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:    "session-390R",
+	}
+
+	if err := store.Init(record, "prompt body", 10*time.Minute); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := store.WriteBrief(RunBrief{
+		TicketID:   record.TicketID,
+		Outcome:    string(agentrun.StatusFailed),
+		Summary:    "Managed run failed validation before closeout.",
+		SessionID:  record.SessionID,
+		ResumeNext: "Inspect the validation failures, repair the worktree, and rerun the ticket.",
+		UpdatedAt:  time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if err := store.Cleanup(record.TicketID); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+
+	status, ok, err := store.LoadRecoverableStatus(record.TicketID)
+	if err != nil || !ok {
+		t.Fatalf("LoadRecoverableStatus() ok=%v err=%v", ok, err)
+	}
+	if status.SessionID != record.SessionID || status.LastResultStatus != string(agentrun.StatusFailed) {
+		t.Fatalf("unexpected durable recoverable status: %#v", status)
+	}
+
+	if err := store.WriteBrief(RunBrief{
+		TicketID:  "TKT-390S",
+		Outcome:   string(agentrun.StatusDone),
+		Summary:   "Managed run validated successfully and advanced the ticket.",
+		SessionID: "session-390S",
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("WriteBrief() error = %v", err)
+	}
+	if _, ok, err := store.LoadRecoverableStatus("TKT-390S"); err != nil || ok {
+		t.Fatalf("expected success brief to stay non-recoverable, ok=%v err=%v", ok, err)
+	}
+}
+
 func TestStoreInitResetsPreviousActiveRunArtifacts(t *testing.T) {
 	t.Parallel()
 

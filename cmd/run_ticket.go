@@ -312,6 +312,10 @@ var runStatusCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		durableStatus, durableOK, err := store.LoadRecoverableStatus(args[0])
+		if err != nil {
+			return err
+		}
 		status, ok, err := store.LoadStatus(args[0])
 		if err != nil {
 			return err
@@ -319,6 +323,12 @@ var runStatusCmd = &cobra.Command{
 		if !ok {
 			if format == "json" {
 				payload := map[string]any{"ticket_id": args[0], "active": false}
+				if durableOK {
+					payload["session_id"] = durableStatus.SessionID
+					payload["last_result_status"] = durableStatus.LastResultStatus
+					payload["recoverable"] = true
+					payload["resume_command"] = "docket run-resume " + args[0]
+				}
 				if briefOK {
 					payload["brief"] = brief
 				}
@@ -328,6 +338,9 @@ var runStatusCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: no active run\n", args[0])
 			if briefOK {
 				renderRunBriefHuman(cmd, brief)
+			}
+			if durableOK {
+				renderRecoverableBriefHintHuman(cmd, args[0], durableStatus)
 			}
 			return nil
 		}
@@ -1019,6 +1032,14 @@ func renderRunBriefHuman(cmd *cobra.Command, brief runruntime.RunBrief) {
 	if strings.TrimSpace(brief.ResumeNext) != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Resume next: %s\n", brief.ResumeNext)
 	}
+}
+
+func renderRecoverableBriefHintHuman(cmd *cobra.Command, ticketID string, status runruntime.StatusSnapshot) {
+	if strings.TrimSpace(status.SessionID) != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Session: %s\n", status.SessionID)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "Recoverable: true")
+	fmt.Fprintf(cmd.OutOrStdout(), "Resume with: docket run-resume %s\n", ticketID)
 }
 
 func healManagedRuntime(repoRoot string) {
